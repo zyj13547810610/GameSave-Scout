@@ -122,3 +122,10 @@ rules:
     all:
       - { op: path_exists, path: nscript.dat, weight: 0.55 }
       - { op: glob_exists, path: "*.nsa", weight: 0.45 }
+  - { id: qlie, label: QLIE, experimental: true, threshold: 0.80, all: [{ op: edge_contains, path: data.pack, value: FilePackVer3.0, weight: 1.0 }] }
+  - { id: majiro, label: Majiro, experimental: true, threshold: 0.80, all: [{ op: magic_at, path: data.arc, value: MajiroArcV3.000, weight: 1.0 }] }
+  - { id: malie, label: Malie, experimental: true, threshold: 0.80, all: [{ op: magic_at, path: data.lib, value: LIBP, weight: 1.0 }] }
+  - { id: shiina_rio, label: ShiinaRio, experimental: true, threshold: 0.80, all: [{ op: magic_at, path: data.war, value: WARC, weight: 1.0 }] }
+  - { id: softpal_amusecraft, label: SoftPal/AmuseCraft, experimental: true, threshold: 0.80, all: [{ op: magic_at, path: data.pac, value: "PAC ", weight: 1.0 }] }
+  - { id: entis, label: Entis/ERI/NOA, experimental: true, threshold: 0.80, all: [{ op: magic_at, path: data.noa, value: "hex:456e7469731a", weight: 1.0 }] }
+  - { id: nitroplus, label: Nitroplus, experimental: true, threshold: 0.80, all: [{ op: magic_at, path: data.npa, value: "hex:4e504101", weight: 1.0 }] }
