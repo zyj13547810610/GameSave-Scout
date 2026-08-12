@@ -76,3 +76,49 @@ rules:
       - op: path_exists
         path: package.json
         weight: 0.4
+  - id: artemis
+    label: Artemis
+    threshold: 0.70
+    all:
+      - { op: magic_at, path: data.pfs, value: "hex:70660000", weight: 0.55 }
+      - { op: magic_at, path: movie.mja, value: MJA0, weight: 0.45 }
+  - id: reallive
+    label: RealLive
+    variant: RealLive
+    threshold: 0.70
+    all:
+      - { op: path_exists, path: Gameexe.ini, weight: 0.45 }
+      - { op: magic_at, path: seen.txt, value: PACL, weight: 0.55 }
+  - id: siglus
+    label: SiglusEngine
+    variant: SiglusEngine
+    threshold: 0.70
+    all:
+      - { op: pe_field_contains, path: SiglusEngine.exe, field: product_name, value: Siglus, weight: 0.6 }
+      - { op: path_exists, path: Scene.pck, weight: 0.4 }
+  - id: bgi_ethornell
+    label: BGI/Ethornell
+    threshold: 0.70
+    all:
+      - { op: magic_at, path: data.arc, value: "PackFile    ", weight: 0.7 }
+    any:
+      - { op: glob_exists, path: "*.bss", weight: 0.3 }
+      - { op: glob_exists, path: "*.arc", weight: 0.3 }
+  - id: catsystem2
+    label: CatSystem2
+    threshold: 0.70
+    all:
+      - { op: magic_at, path: data.dat, value: CsPack2, weight: 0.6 }
+      - { op: glob_exists, path: "*.cst", weight: 0.4 }
+  - id: yuris
+    label: YU-RIS
+    threshold: 0.70
+    all:
+      - { op: magic_at, path: data.ypf, value: "hex:59504600", weight: 0.6 }
+      - { op: glob_exists, path: "*.ybn", weight: 0.4 }
+  - id: nscripter
+    label: NScripter/ONScripter
+    threshold: 0.70
+    all:
+      - { op: path_exists, path: nscript.dat, weight: 0.55 }
+      - { op: glob_exists, path: "*.nsa", weight: 0.45 }
