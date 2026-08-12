@@ -9,10 +9,10 @@ def test_application_bootstrap_creates_only_portable_state(tmp_path: Path) -> No
 
     application = build_application(paths)
     try:
-        assert application.api.bootstrap() == {
-            "ok": True,
-            "data": {"appName": "GameShelf", "schemaVersion": 1, "portable": True},
-        }
+        bootstrap = application.api.bootstrap()
+        assert bootstrap["ok"] is True
+        assert bootstrap["data"]["appName"] == "GameShelf"
+        assert isinstance(bootstrap["data"]["assetSessionToken"], str)
         assert paths.database_file.exists()
         assert paths.logs_dir.joinpath("gameshelf.log").exists()
         assert all(

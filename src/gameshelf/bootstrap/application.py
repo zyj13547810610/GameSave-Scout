@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from pathlib import Path
 from threading import Lock
 
 from gameshelf.bootstrap.logging import configure_logging
@@ -19,6 +20,7 @@ from gameshelf.library.service import LibraryService
 from gameshelf.platform.windows.processes import WindowsProcessLauncher
 from gameshelf.platform.windows.shell import WindowsShell
 from gameshelf.scanning.service import ScanService
+from gameshelf.web.asset_server import AssetServer, AssetServerAddress
 
 
 @dataclass
@@ -30,6 +32,8 @@ class Application:
     tasks: TaskRegistry
     logger: logging.Logger
     schema_version: int
+    asset_server: AssetServer
+    asset_address: AssetServerAddress
     _close_lock: Lock = field(default_factory=Lock, repr=False)
     _closed: bool = field(default=False, init=False, repr=False)
 
@@ -39,6 +43,7 @@ class Application:
                 return
             self._closed = True
         self.tasks.close()
+        self.asset_server.stop()
         self.writer.close()
         for handler in tuple(self.logger.handlers):
             handler.flush()
@@ -58,6 +63,22 @@ def build_application(paths: AppPaths) -> Application:
     launcher = GameLauncher(
         repository, writer, WindowsProcessLauncher(), WindowsShell()
     )
+    def cover_lookup(game_id: str, variant: str) -> Path | None:
+        column = "cover_original_relpath" if variant == "original" else "cover_thumb_relpath"
+        with database.connect(readonly=True) as connection:
+            row = connection.execute(
+                f"SELECT {column} FROM games WHERE id = ?", (game_id,)
+            ).fetchone()
+        if row is None or row[0] is None:
+            return None
+        return paths.data_dir.joinpath(*str(row[0]).split("/"))
+
+    asset_server = AssetServer(
+        paths.app_root / "resources" / "ui",
+        cover_lookup,
+        managed_cover_roots=(paths.covers_original_dir, paths.covers_thumbs_dir),
+    )
+    asset_address = asset_server.start()
     api = BridgeApi(
         paths,
         tasks,
@@ -65,6 +86,7 @@ def build_application(paths: AppPaths) -> Application:
         library=library,
         scanner=scanner,
         launcher=launcher,
+        asset_session_token=asset_address.session_token,
     )
     return Application(
         paths=paths,
@@ -74,4 +96,6 @@ def build_application(paths: AppPaths) -> Application:
         tasks=tasks,
         logger=logger,
         schema_version=schema_version,
+        asset_server=asset_server,
+        asset_address=asset_address,
     )

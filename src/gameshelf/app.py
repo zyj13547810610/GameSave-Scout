@@ -31,10 +31,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 def _run_desktop(application: Application) -> int:
     import webview
 
-    ui_path = application.paths.app_root / "resources" / "ui" / "index.html"
     dev_url = os.environ.get("GAMESHELF_DEV_SERVER_URL")
     is_frozen = bool(getattr(sys, "frozen", False))
-    url = dev_url if dev_url and not is_frozen else str(ui_path)
+    url = dev_url if dev_url and not is_frozen else application.asset_address.ui_url
     window = webview.create_window(
         "GameShelf",
         url,

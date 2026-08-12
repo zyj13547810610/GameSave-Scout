@@ -41,6 +41,7 @@ class BridgeApi:
         library: LibraryService | None = None,
         scanner: ScanService | None = None,
         launcher: GameLauncher | None = None,
+        asset_session_token: str | None = None,
     ) -> None:
         self._paths = paths
         self._tasks = tasks
@@ -48,6 +49,7 @@ class BridgeApi:
         self._library = library
         self._scanner = scanner
         self._launcher = launcher
+        self._asset_session_token = asset_session_token
         self._window: Any | None = None
 
     def attach_window(self, window: object) -> None:
@@ -55,13 +57,14 @@ class BridgeApi:
         self._window = window
 
     def bootstrap(self) -> ApiResult:
-        return success(
-            {
-                "appName": "GameShelf",
-                "schemaVersion": self._schema_version,
-                "portable": True,
-            }
-        )
+        state: dict[str, JSONValue] = {
+            "appName": "GameShelf",
+            "schemaVersion": self._schema_version,
+            "portable": True,
+        }
+        if self._asset_session_token is not None:
+            state["assetSessionToken"] = self._asset_session_token
+        return success(state)
 
     def list_roots(self) -> ApiResult:
         library = self._require_library()
