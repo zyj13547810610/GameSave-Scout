@@ -10,6 +10,10 @@ export const useLibraryStore = defineStore('library', {
     scanTasks: {} as Record<string, string>,
     taskSnapshots: {} as Record<string, TaskSnapshot>,
     moveSuggestions: [] as MoveSuggestion[],
+    selectedGameId: null as string | null,
+    query: '',
+    statusFilter: 'all' as 'all' | Game['status'],
+    engineFilter: 'all' as string,
   }),
   actions: {
     async load(bridge: GameShelfBridge) {

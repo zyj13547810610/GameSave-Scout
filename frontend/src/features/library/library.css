@@ -1,0 +1,18 @@
+.library-toolbar { display: grid; grid-template-columns: minmax(180px, 1fr) 150px 160px; gap: 10px; margin-bottom: 16px; }
+.library-toolbar select { border: 1px solid #393641; border-radius: 8px; padding: 9px; color: #eceaf2; background: #17151e; }
+.cover-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 16px; }
+.cover-card { display: grid; gap: 9px; border: 0; padding: 0; text-align: left; background: transparent; }
+.cover-card strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cover-frame { position: relative; overflow: hidden; aspect-ratio: 2 / 3; border: 1px solid #35313e; border-radius: 10px; background: #1b1822; }
+.cover-frame img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 50%; }
+.cover-frame .cover-placeholder { height: 100%; }
+.card-badge { position: absolute; left: 7px; bottom: 7px; border-radius: 999px; padding: 3px 7px; background: rgb(12 11 16 / 82%); font-size: 11px; }
+.card-badge.no-exe { right: 7px; left: auto; color: #f7ce82; }
+.game-drawer { position: fixed; z-index: 20; top: 0; right: 0; overflow-y: auto; width: min(420px, 92vw); height: 100vh; border-left: 1px solid #393641; padding: 24px; background: #15131a; box-shadow: -20px 0 60px rgb(0 0 0 / 40%); }
+.drawer-close { position: absolute; z-index: 2; top: 12px; right: 12px; }
+.detail-cover-frame { display: grid; width: 100%; height: 360px; place-items: center; border-radius: 12px; background: #0e0d12; }
+.detail-cover-frame img { width: 100%; height: 100%; object-fit: contain; }
+.detail-cover-frame .cover-placeholder { width: 240px; height: 100%; }
+.detail-meta { color: #9893a4; }
+.game-drawer .settings-panel { min-height: auto; border: 0; padding: 0; background: transparent; }
+@media (max-width: 700px) { .library-toolbar { grid-template-columns: 1fr; } }

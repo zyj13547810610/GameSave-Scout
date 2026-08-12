@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import { createPinia, getActivePinia, storeToRefs } from 'pinia'
-import { inject, nextTick, onMounted, ref } from 'vue'
+import { computed, inject, nextTick, onMounted, ref } from 'vue'
 import { bridgeKey, createBridge } from './api/bridge'
-import type { Game } from './api/contracts'
-import GamePlaceholderGrid from './features/library/GamePlaceholderGrid.vue'
-import GameSettingsPanel from './features/library/GameSettingsPanel.vue'
+import GameGrid from './features/library/GameGrid.vue'
+import LibraryToolbar from './features/library/LibraryToolbar.vue'
+import { filterGames } from './features/library/libraryFilters'
 import { useLibraryStore } from './features/library/libraryStore'
 import MoveSuggestionPanel from './features/library/MoveSuggestionPanel.vue'
 import ScanRootDialog from './features/scan-roots/ScanRootDialog.vue'
 import ScanRootList from './features/scan-roots/ScanRootList.vue'
+import './features/library/library.css'
 
 const bridge = inject(bridgeKey, createBridge())
 const store = useLibraryStore(getActivePinia() ?? createPinia())
@@ -16,7 +17,12 @@ const { roots, games, error, scanTasks, moveSuggestions } = storeToRefs(store)
 const state = ref<'connecting' | 'ready' | 'failed'>('connecting')
 const errorMessage = ref('')
 const showAddRoot = ref(false)
-const selected = ref<Game | null>(null)
+const filteredGames = computed(() => filterGames(games.value, {
+  query: store.query,
+  status: store.statusFilter,
+  engine: store.engineFilter,
+}))
+const engines = computed(() => [...new Set(games.value.map((game) => game.engineId).filter((value): value is string => Boolean(value)))].sort())
 
 async function bootstrap() {
   state.value = 'connecting'
@@ -43,11 +49,6 @@ async function scan(rootId: string) {
   await store.scan(bridge, rootId, 'full')
 }
 
-function updateSelected(game: Game) {
-  store.updateGame(game)
-  selected.value = game
-}
-
 onMounted(bootstrap)
 </script>
 
@@ -69,9 +70,12 @@ onMounted(bootstrap)
           <div class="content-heading"><h2>我的游戏 <span>{{ games.length }}</span></h2></div>
           <MoveSuggestionPanel :suggestions="moveSuggestions" :games="games" @confirm="store.confirmMove(bridge, $event)" />
           <div v-if="games.length === 0" class="empty-state compact"><h2 id="empty-title">还没有添加游戏目录</h2><p>添加一个或多个本地目录后，游戏会显示在这里。</p><button type="button" @click="showAddRoot = true">添加第一个目录</button></div>
-          <GamePlaceholderGrid v-else :games="games" :selected-id="selected?.id" @select="selected = $event" />
+          <template v-else>
+            <LibraryToolbar v-model:query="store.query" v-model:status="store.statusFilter" v-model:engine="store.engineFilter" :engines="engines" />
+            <div v-if="filteredGames.length === 0" class="empty-state compact"><h2>没有符合筛选条件的游戏</h2><p>请调整搜索词或筛选条件。</p></div>
+            <GameGrid v-else :games="filteredGames" :bridge="bridge" @updated="store.updateGame" />
+          </template>
         </section>
-        <GameSettingsPanel v-if="selected" :game="selected" :bridge="bridge" @updated="updateSelected" @close="selected = null" />
       </div>
       <div v-if="showAddRoot" class="dialog-backdrop" @click.self="showAddRoot = false"><ScanRootDialog :bridge="bridge" @saved="rootSaved" @close="showAddRoot = false" /></div>
     </template>

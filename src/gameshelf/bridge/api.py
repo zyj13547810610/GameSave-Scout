@@ -356,6 +356,8 @@ class BridgeApi:
             "installPath": install_path,
             "title": game.title,
             "status": game.status,
+            "engineId": game.engine_id,
+            "engineVariant": game.engine_variant,
             "mainExeRelpath": game.main_exe_relpath,
             "mainExeIsManual": game.main_exe_is_manual,
             "workingDirRelpath": game.working_dir_relpath,

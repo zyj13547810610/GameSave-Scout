@@ -32,6 +32,8 @@ export type Game = {
   installPath: string | null
   title: string
   status: 'installed' | 'missing' | 'save_only'
+  engineId: string | null
+  engineVariant: string | null
   mainExeRelpath: string | null
   mainExeIsManual: boolean
   workingDirRelpath: string | null

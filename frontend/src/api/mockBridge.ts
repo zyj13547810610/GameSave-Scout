@@ -29,6 +29,8 @@ export function fixtureGame(overrides: Partial<Game> = {}): Game {
     installPath: 'D:\\Games\\Alice',
     title: 'Alice',
     status: 'installed',
+    engineId: null,
+    engineVariant: null,
     mainExeRelpath: null,
     mainExeIsManual: false,
     workingDirRelpath: null,

@@ -34,6 +34,8 @@ class Game:
     install_path_key: str | None
     title: str
     status: GameStatus
+    engine_id: str | None
+    engine_variant: str | None
     main_exe_relpath: str | None
     main_exe_is_manual: bool
     working_dir_relpath: str | None
