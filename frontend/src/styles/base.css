@@ -335,6 +335,11 @@ label {
 }
 
 @media (max-width: 1000px) {
+  .app-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
   .library-layout {
     grid-template-columns: 13.125rem minmax(0, 1fr);
   }
