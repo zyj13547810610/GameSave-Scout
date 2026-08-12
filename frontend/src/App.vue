@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { createPinia, getActivePinia, storeToRefs } from 'pinia'
-import { computed, inject, nextTick, onMounted, ref } from 'vue'
+import { computed, inject, nextTick, onMounted, ref, watch } from 'vue'
 import { bridgeKey, createBridge } from './api/bridge'
 import GameGrid from './features/library/GameGrid.vue'
 import LibraryToolbar from './features/library/LibraryToolbar.vue'
 import { filterGames } from './features/library/libraryFilters'
 import { useLibraryStore } from './features/library/libraryStore'
 import MoveSuggestionPanel from './features/library/MoveSuggestionPanel.vue'
+import UiScaleControl from './features/preferences/UiScaleControl.vue'
+import { applyUiScale, readUiScale, saveUiScale } from './features/preferences/uiScale'
 import ScanRootDialog from './features/scan-roots/ScanRootDialog.vue'
 import ScanRootList from './features/scan-roots/ScanRootList.vue'
 import './features/library/library.css'
@@ -17,12 +19,18 @@ const { roots, games, error, scanTasks, moveSuggestions } = storeToRefs(store)
 const state = ref<'connecting' | 'ready' | 'failed'>('connecting')
 const errorMessage = ref('')
 const showAddRoot = ref(false)
+const uiScale = ref(readUiScale(window.localStorage))
 const filteredGames = computed(() => filterGames(games.value, {
   query: store.query,
   status: store.statusFilter,
   engine: store.engineFilter,
 }))
 const engines = computed(() => [...new Set(games.value.map((game) => game.engineId).filter((value): value is string => Boolean(value)))].sort())
+
+watch(uiScale, (scale) => {
+  applyUiScale(scale, document.documentElement)
+  saveUiScale(scale, window.localStorage)
+}, { immediate: true })
 
 async function bootstrap() {
   state.value = 'connecting'
@@ -56,7 +64,10 @@ onMounted(bootstrap)
   <main class="app-shell">
     <header class="app-header">
       <div><h1>GameShelf</h1><p>便携游戏库与存档管理器</p></div>
-      <button v-if="state === 'ready'" type="button" @click="showAddRoot = true">＋ 添加游戏目录</button>
+      <div class="app-actions">
+        <UiScaleControl v-model="uiScale" />
+        <button v-if="state === 'ready'" type="button" @click="showAddRoot = true">＋ 添加游戏目录</button>
+      </div>
     </header>
 
     <section v-if="state === 'connecting'" class="empty-state" aria-live="polite"><h2>正在连接本地数据库…</h2></section>

@@ -1,6 +1,8 @@
 :root {
+  --ui-scale: 1;
   color: #eceaf2;
   background: #111017;
+  font-size: calc(16px * var(--ui-scale));
   font-family:
     Inter, "Segoe UI", "Microsoft YaHei UI", sans-serif;
   font-synthesis: none;
@@ -19,15 +21,16 @@ body {
 
 button,
 input,
-textarea {
+textarea,
+select {
   font: inherit;
 }
 
 button {
-  min-height: 44px;
+  min-height: 2.75rem;
   border: 1px solid #7257d8;
-  border-radius: 8px;
-  padding: 8px 12px;
+  border-radius: .5rem;
+  padding: .5rem .75rem;
   color: white;
   background: #6548d1;
   cursor: pointer;
@@ -51,27 +54,27 @@ input,
 textarea {
   width: 100%;
   border: 1px solid #393641;
-  border-radius: 8px;
-  padding: 9px 10px;
+  border-radius: .5rem;
+  padding: .5625rem .625rem;
   color: #eceaf2;
   background: #17151e;
 }
 
 label {
   display: block;
-  margin: 14px 0 6px;
+  margin: .875rem 0 .375rem;
   color: #bbb7c7;
-  font-size: 13px;
+  font-size: .8125rem;
 }
 
 .app-shell {
   min-height: 100vh;
-  padding: 24px;
+  padding: 1.5rem;
 }
 
 .app-shell h1 {
   margin: 0;
-  font-size: 24px;
+  font-size: 1.5rem;
 }
 
 .app-header,
@@ -83,53 +86,80 @@ label {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: .625rem;
 }
 
 .app-header {
-  margin-bottom: 22px;
+  flex-wrap: wrap;
+  margin-bottom: 1.375rem;
+}
+
+.app-actions,
+.ui-scale-control {
+  display: flex;
+  align-items: center;
+  gap: .625rem;
+}
+
+.app-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.ui-scale-control {
+  margin: 0;
+  color: #bbb7c7;
+  font-size: .8125rem;
+}
+
+.ui-scale-control select {
+  border: 1px solid #393641;
+  border-radius: .5rem;
+  padding: .5625rem;
+  color: #eceaf2;
+  background: #17151e;
 }
 
 .app-header p,
 .muted {
-  margin: 4px 0 0;
+  margin: .25rem 0 0;
   color: #8d899a;
-  font-size: 13px;
+  font-size: .8125rem;
 }
 
 .library-layout {
   display: grid;
-  grid-template-columns: 250px minmax(0, 1fr);
-  gap: 20px;
+  grid-template-columns: 15.625rem minmax(0, 1fr);
+  gap: 1.25rem;
 }
 
 .library-layout:has(.settings-panel) {
-  grid-template-columns: 230px minmax(0, 1fr) 330px;
+  grid-template-columns: 14.375rem minmax(0, 1fr) 20.625rem;
 }
 
 .root-panel,
 .settings-panel {
-  min-height: calc(100vh - 115px);
+  min-height: calc(100vh - 7.1875rem);
   border: 1px solid #2d2a35;
-  border-radius: 14px;
-  padding: 16px;
+  border-radius: .875rem;
+  padding: 1rem;
   background: #17151e;
 }
 
 .root-panel h2,
 .settings-panel h2,
 .content-heading h2 {
-  margin: 0 0 14px;
-  font-size: 17px;
+  margin: 0 0 .875rem;
+  font-size: 1.0625rem;
 }
 
 .root-item {
   display: grid;
-  gap: 7px;
-  margin-top: 12px;
+  gap: .4375rem;
+  margin-top: .75rem;
   border-top: 1px solid #2d2a35;
-  padding-top: 12px;
-  font-size: 12px;
+  padding-top: .75rem;
+  font-size: .75rem;
 }
 
 .root-item strong {
@@ -139,13 +169,13 @@ label {
 }
 
 .compact-actions button {
-  padding: 5px 7px;
-  font-size: 11px;
+  padding: .3125rem .4375rem;
+  font-size: .6875rem;
 }
 
 .secondary,
 .icon-button {
-  min-width: 44px;
+  min-width: 2.75rem;
   border-color: #45414f;
   background: #25222d;
 }
@@ -158,15 +188,15 @@ label {
 
 .game-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(9.375rem, 1fr));
+  gap: .875rem;
 }
 
 .game-card {
   display: grid;
-  gap: 6px;
+  gap: .375rem;
   border-color: #2d2a35;
-  padding: 10px;
+  padding: .625rem;
   text-align: left;
   background: #17151e;
 }
@@ -184,52 +214,52 @@ label {
   display: grid;
   aspect-ratio: 3 / 4;
   place-items: center;
-  border-radius: 7px;
+  border-radius: .4375rem;
   color: #c7bbff;
   background: linear-gradient(145deg, #2f2850, #1f1c29);
-  font-size: 42px;
+  font-size: 2.625rem;
 }
 
 .settings-panel dl {
   overflow-wrap: anywhere;
-  font-size: 12px;
+  font-size: .75rem;
 }
 
 .settings-panel dt {
-  margin-top: 10px;
+  margin-top: .625rem;
   color: #8d899a;
 }
 
 .settings-panel dd {
-  margin: 3px 0;
+  margin: .1875rem 0;
 }
 
 .settings-panel details {
-  margin-top: 18px;
+  margin-top: 1.125rem;
 }
 
 .dialog-backdrop {
   position: fixed;
   inset: 0;
   display: grid;
-  padding: 24px;
+  padding: 1.5rem;
   place-items: center;
   background: rgb(0 0 0 / 65%);
 }
 
 .dialog-card {
-  width: min(560px, 100%);
+  width: min(35rem, 100%);
   border: 1px solid #3b3745;
-  border-radius: 16px;
-  padding: 20px;
+  border-radius: 1rem;
+  padding: 1.25rem;
   background: #1c1923;
-  box-shadow: 0 24px 70px rgb(0 0 0 / 45%);
+  box-shadow: 0 1.5rem 4.375rem rgb(0 0 0 / 45%);
 }
 
 .check-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: .5rem;
 }
 
 .check-row input {
@@ -242,45 +272,45 @@ label {
 }
 
 .move-panel {
-  margin-bottom: 16px;
+  margin-bottom: 1rem;
   border: 1px solid #5d5131;
-  border-radius: 12px;
-  padding: 14px;
+  border-radius: .75rem;
+  padding: .875rem;
   background: #292417;
 }
 
 .move-panel h2 {
-  margin: 0 0 10px;
-  font-size: 15px;
+  margin: 0 0 .625rem;
+  font-size: .9375rem;
 }
 
 .move-panel article {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: .75rem;
   justify-content: space-between;
   color: #c9c0a1;
-  font-size: 12px;
+  font-size: .75rem;
 }
 
 .dialog-actions {
   justify-content: flex-end;
-  margin-top: 18px;
+  margin-top: 1.125rem;
 }
 
 .error-banner {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 14px;
+  margin-bottom: .875rem;
   border: 1px solid #673541;
-  border-radius: 10px;
-  padding: 10px;
+  border-radius: .625rem;
+  padding: .625rem;
   background: #301b22;
 }
 
 .empty-state {
   display: grid;
-  min-height: calc(100vh - 120px);
+  min-height: calc(100vh - 7.5rem);
   place-content: center;
   text-align: center;
 }
@@ -290,7 +320,7 @@ label {
 }
 
 .empty-state h2 {
-  margin-bottom: 8px;
+  margin-bottom: .5rem;
 }
 
 .empty-state p {
@@ -301,7 +331,7 @@ label {
 @media (max-width: 1000px) {
   .library-layout,
   .library-layout:has(.settings-panel) {
-    grid-template-columns: 210px minmax(0, 1fr);
+    grid-template-columns: 13.125rem minmax(0, 1fr);
   }
 
   .settings-panel {
