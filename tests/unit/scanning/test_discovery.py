@@ -67,13 +67,13 @@ def test_unavailable_child_warns_and_scan_continues(
     tmp_path: Path,
     task_context: TaskContext,
     monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
     root_path = tmp_path / "games"
     blocked = root_path / "Blocked"
     blocked.mkdir(parents=True)
     (root_path / "Visible").mkdir()
     original_scandir = os.scandir
+    warnings: list[str] = []
 
     def fake_scandir(path: os.PathLike[str] | str):  # type: ignore[no-untyped-def]
         if Path(path) == blocked:
@@ -81,12 +81,16 @@ def test_unavailable_child_warns_and_scan_continues(
         return original_scandir(path)
 
     monkeypatch.setattr("gameshelf.scanning.discovery.os.scandir", fake_scandir)
+    monkeypatch.setattr(
+        "gameshelf.scanning.discovery.logger.warning",
+        lambda message, path, _error: warnings.append(message % (path, _error)),
+    )
     root = make_root(root_path, mode="children", depth=1)
 
     assert [item.relative_dir for item in enumerate_candidates(root, task_context)] == [
         "Visible"
     ]
-    assert "Blocked" in caplog.text
+    assert any("Blocked" in warning for warning in warnings)
 
 
 def test_link_or_reparse_directory_is_skipped(

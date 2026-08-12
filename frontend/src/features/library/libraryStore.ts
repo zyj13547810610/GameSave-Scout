@@ -70,6 +70,11 @@ export const useLibraryStore = defineStore('library', {
         const scan = result.data.result as ScanResult
         this.moveSuggestions = scan.moveSuggestions.map((item) => ({ ...item, sessionId: scan.sessionId }))
         await this.load(bridge)
+        if (scan.status === 'unavailable') {
+          this.fail('根目录暂时无法访问，已有游戏状态未改变')
+        }
+      } else if (result.data.status === 'failed') {
+        this.fail(result.data.error?.message ?? '扫描失败，已有游戏状态未改变')
       }
     },
     async cancelScan(bridge: GameShelfBridge, rootId: string) {

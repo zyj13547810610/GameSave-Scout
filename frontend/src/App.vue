@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { createPinia, getActivePinia, storeToRefs } from 'pinia'
-import { inject, onMounted, ref } from 'vue'
+import { inject, nextTick, onMounted, ref } from 'vue'
 import { bridgeKey, createBridge } from './api/bridge'
 import type { Game } from './api/contracts'
 import GamePlaceholderGrid from './features/library/GamePlaceholderGrid.vue'
@@ -28,6 +28,10 @@ async function bootstrap() {
   }
   await store.load(bridge)
   state.value = 'ready'
+  await nextTick()
+  for (const root of roots.value.filter((item) => item.enabled)) {
+    await store.scan(bridge, root.id, 'quick')
+  }
 }
 
 async function rootSaved() {

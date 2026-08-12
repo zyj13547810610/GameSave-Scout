@@ -27,10 +27,18 @@ npm --prefix frontend run type-check
 npm --prefix frontend run build
 ```
 
-构建后的前端文件复制到 `resources/ui` 后，可以在不打开窗口的情况下验证便携路径与数据库：
+前端生产构建会直接更新 `resources/ui`。随后可以在不打开窗口的情况下验证便携路径与数据库：
 
 ```powershell
 python -m gameshelf --smoke-test
 ```
 
 正常开发启动使用 `python -m gameshelf`。可通过 `GAMESHELF_DEV_SERVER_URL` 指向本地 Vite 开发服务器；冻结版会忽略该变量并只加载随包 UI。
+
+## 当前游戏库能力
+
+- 可配置多个根目录，每个目录可选择“直接子目录”或 1–8 层递归扫描，并拥有独立排除规则；
+- 启动时先显示 SQLite 中的缓存游戏，再在后台执行快速扫描；递归根目录的快速扫描只核验已知游戏；
+- 完整扫描成功后才会把消失的游戏标记为失效，取消、错误或盘符暂时不可用不会改变原状态；
+- 支持编辑标题、选择主 EXE、工作目录、参数数组和环境变量，并以 `shell=False` 启动；
+- 配置与游戏库数据库位于程序旁的 `data` 目录，可随整个程序目录迁移。
