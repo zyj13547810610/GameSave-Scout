@@ -1,0 +1,553 @@
+# GameShelf 界面缩放与详情侧栏 Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** 增加可持久化的整体界面缩放，并把游戏详情改为只有一个关闭按钮、背景不可滚动、侧栏独立滚动的右侧模态层。
+
+**Architecture:** 使用独立的 `uiScale` 模块校验、读取、保存和应用缩放值，由 `UiScaleControl` 提供五档选择并在 `App` 中初始化。详情组件负责覆盖层、全局 Escape 监听和页面滚动锁，游戏网格继续负责选中状态与关闭后的焦点恢复。
+
+**Tech Stack:** Vue 3、TypeScript、Vite、Vitest、Vue Test Utils、CSS Grid、Web Storage
+
+## Global Constraints
+
+- 界面缩放只允许 `90%`、`100%`、`110%`、`120%`、`130%`，默认 `100%`。
+- 缩放整个 Web 界面，不改变 pywebview 原生窗口尺寸及现有 `min_size=(960, 640)`。
+- 缩放设置存放在当前 WebView 的 `localStorage`；pywebview 已将其目录配置为程序旁的 `data/webview`。
+- 详情覆盖主界面，不重新排列游戏卡片。
+- 详情打开时主页面不能滚动，右侧详情是唯一可滚动区域。
+- 详情只显示右上角一个关闭按钮，同时支持点击左侧遮罩和 `Esc` 关闭。
+- 不引入新的前端依赖，不修改游戏扫描、封面或存档识别逻辑。
+
+---
+
+### Task 1: 缩放值领域模块
+
+**Files:**
+- Create: `frontend/src/features/preferences/uiScale.ts`
+- Test: `frontend/tests/uiScale.spec.ts`
+
+**Interfaces:**
+- Produces: `UiScale`、`UI_SCALE_OPTIONS`、`UI_SCALE_STORAGE_KEY`、`readUiScale(storage)`、`applyUiScale(scale, root)`、`saveUiScale(scale, storage)`。
+- Consumes: 浏览器 `Storage` 和 `HTMLElement`，不依赖 Vue 组件。
+
+- [ ] **Step 1: 编写缩放读取和应用的失败测试**
+
+```ts
+import { beforeEach, describe, expect, it } from 'vitest'
+import {
+  UI_SCALE_STORAGE_KEY,
+  applyUiScale,
+  readUiScale,
+  saveUiScale,
+} from '../src/features/preferences/uiScale'
+
+describe('uiScale', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    document.documentElement.style.removeProperty('--ui-scale')
+  })
+
+  it('defaults to 100% and rejects unsupported stored values', () => {
+    expect(readUiScale(localStorage)).toBe(1)
+    localStorage.setItem(UI_SCALE_STORAGE_KEY, '1.25')
+    expect(readUiScale(localStorage)).toBe(1)
+  })
+
+  it('restores, applies, and saves an allowed scale', () => {
+    localStorage.setItem(UI_SCALE_STORAGE_KEY, '1.2')
+    const scale = readUiScale(localStorage)
+    applyUiScale(scale, document.documentElement)
+    saveUiScale(1.3, localStorage)
+
+    expect(scale).toBe(1.2)
+    expect(document.documentElement.style.getPropertyValue('--ui-scale')).toBe('1.2')
+    expect(localStorage.getItem(UI_SCALE_STORAGE_KEY)).toBe('1.3')
+  })
+})
+```
+
+- [ ] **Step 2: 运行测试并确认因模块不存在而失败**
+
+Run: `npm run test:unit -- uiScale.spec.ts --run`
+
+Expected: FAIL，错误指出无法解析 `../src/features/preferences/uiScale`。
+
+- [ ] **Step 3: 实现严格校验、读取、应用和保存**
+
+```ts
+export const UI_SCALE_OPTIONS = [0.9, 1, 1.1, 1.2, 1.3] as const
+export type UiScale = (typeof UI_SCALE_OPTIONS)[number]
+export const UI_SCALE_STORAGE_KEY = 'gameshelf.ui-scale'
+
+function isUiScale(value: number): value is UiScale {
+  return UI_SCALE_OPTIONS.some((option) => option === value)
+}
+
+export function readUiScale(storage: Storage): UiScale {
+  try {
+    const value = Number(storage.getItem(UI_SCALE_STORAGE_KEY))
+    return isUiScale(value) ? value : 1
+  } catch {
+    return 1
+  }
+}
+
+export function applyUiScale(scale: UiScale, root: HTMLElement): void {
+  root.style.setProperty('--ui-scale', String(scale))
+}
+
+export function saveUiScale(scale: UiScale, storage: Storage): void {
+  try {
+    storage.setItem(UI_SCALE_STORAGE_KEY, String(scale))
+  } catch {
+    // 存储不可用时仍保留本次运行中的缩放效果。
+  }
+}
+```
+
+- [ ] **Step 4: 运行缩放模块测试**
+
+Run: `npm run test:unit -- uiScale.spec.ts --run`
+
+Expected: 2 tests PASS。
+
+- [ ] **Step 5: 提交缩放领域模块**
+
+```bash
+git add frontend/src/features/preferences/uiScale.ts frontend/tests/uiScale.spec.ts
+git commit -m "feat: add persistent UI scale model"
+```
+
+---
+
+### Task 2: 缩放选择组件和应用集成
+
+**Files:**
+- Create: `frontend/src/features/preferences/UiScaleControl.vue`
+- Create: `frontend/tests/UiScaleControl.spec.ts`
+- Modify: `frontend/src/App.vue`
+- Modify: `frontend/src/styles/base.css`
+- Modify: `frontend/src/features/library/library.css`
+- Test: `frontend/tests/App.spec.ts`
+
+**Interfaces:**
+- Consumes: Task 1 的 `UiScale`、`UI_SCALE_OPTIONS`、`readUiScale`、`applyUiScale` 和 `saveUiScale`。
+- Produces: `UiScaleControl` 的 `modelValue: UiScale` 属性和 `update:modelValue(value: UiScale)` 事件。
+
+- [ ] **Step 1: 编写缩放选择组件的失败测试**
+
+```ts
+import { mount } from '@vue/test-utils'
+import { describe, expect, it } from 'vitest'
+import UiScaleControl from '../src/features/preferences/UiScaleControl.vue'
+
+describe('UiScaleControl', () => {
+  it('shows all five levels and emits a numeric scale', async () => {
+    const wrapper = mount(UiScaleControl, { props: { modelValue: 1 } })
+    const options = wrapper.findAll('option').map((option) => option.text())
+    expect(options).toEqual(['90%', '100%', '110%', '120%', '130%'])
+
+    await wrapper.get('[data-test="ui-scale"]').setValue('1.2')
+    expect(wrapper.emitted('update:modelValue')).toEqual([[1.2]])
+  })
+})
+```
+
+- [ ] **Step 2: 扩展应用测试，描述恢复和保存行为**
+
+在 `frontend/tests/App.spec.ts` 增加：
+
+```ts
+import { beforeEach } from 'vitest'
+import { UI_SCALE_STORAGE_KEY } from '../src/features/preferences/uiScale'
+
+beforeEach(() => {
+  localStorage.clear()
+  document.documentElement.style.removeProperty('--ui-scale')
+})
+
+it('restores and persists the selected UI scale', async () => {
+  localStorage.setItem(UI_SCALE_STORAGE_KEY, '1.2')
+  const wrapper = mount(App, { global: { plugins: [createPinia()] } })
+
+  expect(document.documentElement.style.getPropertyValue('--ui-scale')).toBe('1.2')
+  await wrapper.get('[data-test="ui-scale"]').setValue('1.3')
+
+  expect(document.documentElement.style.getPropertyValue('--ui-scale')).toBe('1.3')
+  expect(localStorage.getItem(UI_SCALE_STORAGE_KEY)).toBe('1.3')
+})
+```
+
+- [ ] **Step 3: 运行两个测试文件并确认组件不存在或界面尚未集成**
+
+Run: `npm run test:unit -- UiScaleControl.spec.ts App.spec.ts --run`
+
+Expected: FAIL，组件文件不存在或找不到 `[data-test="ui-scale"]`。
+
+- [ ] **Step 4: 实现缩放选择组件**
+
+```vue
+<script setup lang="ts">
+import { UI_SCALE_OPTIONS, type UiScale } from './uiScale'
+
+defineProps<{ modelValue: UiScale }>()
+const emit = defineEmits<{ 'update:modelValue': [value: UiScale] }>()
+
+function update(event: Event) {
+  emit('update:modelValue', Number((event.target as HTMLSelectElement).value) as UiScale)
+}
+</script>
+
+<template>
+  <label class="ui-scale-control">
+    <span>界面缩放</span>
+    <select data-test="ui-scale" :value="modelValue" @change="update">
+      <option v-for="scale in UI_SCALE_OPTIONS" :key="scale" :value="scale">
+        {{ Math.round(scale * 100) }}%
+      </option>
+    </select>
+  </label>
+</template>
+```
+
+- [ ] **Step 5: 在应用中初始化、应用并保存缩放值**
+
+在 `App.vue` 中创建 `uiScale`：
+
+```ts
+import { watch } from 'vue'
+import UiScaleControl from './features/preferences/UiScaleControl.vue'
+import { applyUiScale, readUiScale, saveUiScale } from './features/preferences/uiScale'
+
+const uiScale = ref(readUiScale(window.localStorage))
+watch(uiScale, (scale) => {
+  applyUiScale(scale, document.documentElement)
+  saveUiScale(scale, window.localStorage)
+}, { immediate: true })
+```
+
+把页头右侧改为同时容纳缩放选择和原有添加目录按钮：
+
+```vue
+<div class="app-actions">
+  <UiScaleControl v-model="uiScale" />
+  <button v-if="state === 'ready'" type="button" @click="showAddRoot = true">＋ 添加游戏目录</button>
+</div>
+```
+
+- [ ] **Step 6: 让所有可缩放尺寸使用根字号**
+
+在 `base.css` 中定义：
+
+```css
+:root {
+  --ui-scale: 1;
+  font-size: calc(16px * var(--ui-scale));
+}
+```
+
+将 `base.css` 和 `library.css` 中代表字体、内外边距、圆角、面板宽度、卡片宽度及间距的固定像素尺寸按以下固定映射换算为 `rem`：
+
+```text
+4=.25rem   5=.3125rem  6=.375rem   7=.4375rem  8=.5rem
+9=.5625rem 10=.625rem  11=.6875rem 12=.75rem   13=.8125rem
+14=.875rem 15=.9375rem 16=1rem     17=1.0625rem 18=1.125rem
+20=1.25rem 22=1.375rem 24=1.5rem   42=2.625rem 44=2.75rem
+60=3.75rem 70=4.375rem 115=7.1875rem 120=7.5rem 150=9.375rem
+160=10rem 168=10.5rem 180=11.25rem 210=13.125rem 230=14.375rem
+240=15rem 250=15.625rem 330=20.625rem 360=22.5rem 420=26.25rem
+560=35rem
+```
+
+`1px` 边框、`2px` 焦点偏移、`3px` 焦点轮廓、`320px` 原生最小视口、`700px`/`1000px` 媒体查询断点和 `999px` 胶囊圆角保持原单位。为缩放控件增加：
+
+```css
+.app-actions,
+.ui-scale-control {
+  display: flex;
+  align-items: center;
+  gap: .625rem;
+}
+
+.ui-scale-control {
+  margin: 0;
+  color: #bbb7c7;
+  font-size: .8125rem;
+}
+
+.ui-scale-control select {
+  border: 1px solid #393641;
+  border-radius: .5rem;
+  padding: .5625rem;
+  color: #eceaf2;
+  background: #17151e;
+}
+```
+
+- [ ] **Step 7: 运行缩放相关测试和类型检查**
+
+Run: `npm run test:unit -- uiScale.spec.ts UiScaleControl.spec.ts App.spec.ts --run && npm run type-check`
+
+Expected: 所有目标测试 PASS，`vue-tsc` 退出码为 0。
+
+- [ ] **Step 8: 提交缩放界面**
+
+```bash
+git add frontend/src/features/preferences frontend/src/App.vue frontend/src/styles/base.css frontend/src/features/library/library.css frontend/tests/UiScaleControl.spec.ts frontend/tests/App.spec.ts
+git commit -m "feat: add portable interface scaling"
+```
+
+---
+
+### Task 3: 单一关闭入口和独立侧栏滚动
+
+**Files:**
+- Modify: `frontend/src/features/library/GameDetailDrawer.vue`
+- Modify: `frontend/src/features/library/GameSettingsPanel.vue`
+- Modify: `frontend/src/features/library/library.css`
+- Modify: `frontend/tests/GameDetailDrawer.spec.ts`
+- Modify: `frontend/tests/GameGrid.spec.ts`
+
+**Interfaces:**
+- Consumes: `GameGrid` 现有的 `close()` 和焦点恢复逻辑。
+- Produces: `GameDetailDrawer` 的 `close` 事件、`data-test="drawer-backdrop"` 遮罩，以及详情存在期间的根节点 `detail-open` 类。
+- Changes: `GameSettingsPanel` 删除 `close` 事件，只保留 `updated(game)` 事件。
+
+- [ ] **Step 1: 编写详情交互和清理行为的失败测试**
+
+把 `frontend/tests/GameDetailDrawer.spec.ts` 扩展为：
+
+```ts
+import { mount } from '@vue/test-utils'
+import { afterEach, describe, expect, it } from 'vitest'
+import { createMockBridge, fixtureGame } from '../src/api/mockBridge'
+import GameDetailDrawer from '../src/features/library/GameDetailDrawer.vue'
+
+afterEach(() => {
+  document.documentElement.classList.remove('detail-open')
+  document.body.innerHTML = ''
+})
+
+describe('GameDetailDrawer', () => {
+  it('uses one close button and closes from the backdrop', async () => {
+    const wrapper = mount(GameDetailDrawer, {
+      props: { game: fixtureGame(), bridge: createMockBridge() },
+      attachTo: document.body,
+    })
+
+    expect(wrapper.findAll('[data-test="drawer-close"]')).toHaveLength(1)
+    expect(wrapper.find('[data-test="drawer-backdrop"]').exists()).toBe(true)
+    await wrapper.get('[data-test="drawer-backdrop"]').trigger('click')
+    expect(wrapper.emitted('close')).toHaveLength(1)
+  })
+
+  it('locks page scrolling and always cleans the lock', () => {
+    const wrapper = mount(GameDetailDrawer, {
+      props: { game: fixtureGame(), bridge: createMockBridge() },
+      attachTo: document.body,
+    })
+
+    expect(document.documentElement.classList.contains('detail-open')).toBe(true)
+    wrapper.unmount()
+    expect(document.documentElement.classList.contains('detail-open')).toBe(false)
+  })
+
+  it('uses the original cover and closes on Escape', async () => {
+    const wrapper = mount(GameDetailDrawer, {
+      props: {
+        game: fixtureGame({ coverOriginalUrl: '/cover/original' }),
+        bridge: createMockBridge(),
+      },
+      attachTo: document.body,
+    })
+
+    expect(wrapper.get('[data-test="detail-cover"]').attributes('src')).toBe('/cover/original')
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    expect(wrapper.emitted('close')).toHaveLength(1)
+  })
+})
+```
+
+- [ ] **Step 2: 编写关闭后恢复卡片焦点的失败测试**
+
+在 `frontend/tests/GameGrid.spec.ts` 增加：
+
+```ts
+it('restores focus to the opening card after backdrop close', async () => {
+  const wrapper = mount(GameGrid, {
+    props: { games: [fixtureGame({ id: '1' })], bridge: createMockBridge() },
+    attachTo: document.body,
+  })
+  const card = wrapper.get('[data-test="game-card-1"]')
+  await card.trigger('click')
+  await wrapper.get('[data-test="drawer-backdrop"]').trigger('click')
+  await Promise.resolve()
+
+  expect(document.activeElement).toBe(card.element)
+  wrapper.unmount()
+})
+```
+
+- [ ] **Step 3: 运行详情测试并确认遮罩、滚动锁和单一按钮断言失败**
+
+Run: `npm run test:unit -- GameDetailDrawer.spec.ts GameGrid.spec.ts --run`
+
+Expected: FAIL，找不到 `drawer-backdrop`、`detail-open`，或检测到重复关闭入口。
+
+- [ ] **Step 4: 移除设置面板中的重复关闭按钮和事件**
+
+将 `GameSettingsPanel.vue` 的事件声明改为：
+
+```ts
+const emit = defineEmits<{ updated: [game: Game] }>()
+```
+
+将设置区标题改为：
+
+```vue
+<div class="section-heading"><h2>游戏设置</h2></div>
+```
+
+同时删除 `GameDetailDrawer.vue` 传给 `GameSettingsPanel` 的 `@close` 监听。
+
+- [ ] **Step 5: 实现详情覆盖层、Escape 监听和滚动锁**
+
+在 `GameDetailDrawer.vue` 使用生命周期统一清理状态：
+
+```ts
+import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+
+const emit = defineEmits<{ close: []; updated: [game: Game] }>()
+const drawer = ref<HTMLElement | null>(null)
+
+function close() {
+  emit('close')
+}
+
+function onKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') close()
+}
+
+onMounted(async () => {
+  document.documentElement.classList.add('detail-open')
+  window.addEventListener('keydown', onKeydown)
+  await nextTick()
+  drawer.value?.focus()
+})
+
+onBeforeUnmount(() => {
+  document.documentElement.classList.remove('detail-open')
+  window.removeEventListener('keydown', onKeydown)
+})
+```
+
+模板外层使用固定详情层，遮罩与侧栏为兄弟元素；详情内容完整保留：
+
+```vue
+<div class="game-detail-layer">
+  <div data-test="drawer-backdrop" class="drawer-backdrop" aria-hidden="true" @click="close" @wheel.prevent />
+  <aside ref="drawer" data-test="game-detail-drawer" class="game-drawer" role="dialog" aria-modal="true" :aria-label="`${game.title} 详情`" tabindex="-1">
+    <button data-test="drawer-close" class="drawer-close icon-button" type="button" aria-label="关闭游戏详情" @click="close">×</button>
+    <div class="detail-cover-frame">
+      <img v-if="game.coverOriginalUrl" data-test="detail-cover" :src="game.coverOriginalUrl" :alt="`${game.title} 完整封面`" />
+      <div v-else class="cover-placeholder">{{ game.title.slice(0, 1).toUpperCase() }}</div>
+    </div>
+    <h2>{{ game.title }}</h2>
+    <p class="detail-meta">{{ game.engineId ?? '未知引擎' }} · {{ game.status }}</p>
+    <CoverActions :game-id="game.id" :has-cover="Boolean(game.coverOriginalUrl)" :bridge="bridge" @updated="$emit('updated', $event)" />
+    <GameSettingsPanel :game="game" :bridge="bridge" @updated="$emit('updated', $event)" />
+  </aside>
+</div>
+```
+
+- [ ] **Step 6: 实现滚动和视觉隔离样式**
+
+在样式中使用以下结构，并沿用最终换算后的 `rem` 尺寸：
+
+```css
+html {
+  scrollbar-gutter: stable;
+}
+
+html.detail-open,
+html.detail-open body {
+  overflow: hidden;
+}
+
+.game-detail-layer {
+  position: fixed;
+  z-index: 20;
+  inset: 0;
+}
+
+.drawer-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgb(0 0 0 / 22%);
+}
+
+.game-drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+  width: min(26.25rem, 92vw);
+  height: 100dvh;
+}
+```
+
+- [ ] **Step 7: 运行详情测试与类型检查**
+
+Run: `npm run test:unit -- GameDetailDrawer.spec.ts GameGrid.spec.ts --run && npm run type-check`
+
+Expected: 所有目标测试 PASS，`vue-tsc` 退出码为 0。
+
+- [ ] **Step 8: 提交详情交互修复**
+
+```bash
+git add frontend/src/features/library/GameDetailDrawer.vue frontend/src/features/library/GameSettingsPanel.vue frontend/src/features/library/library.css frontend/tests/GameDetailDrawer.spec.ts frontend/tests/GameGrid.spec.ts
+git commit -m "fix: isolate game detail drawer interactions"
+```
+
+---
+
+### Task 4: 完整回归与界面验收
+
+**Files:**
+- Modify only if verification finds a requirement-specific defect.
+
+**Interfaces:**
+- Consumes: Tasks 1-3 的最终前端行为。
+- Produces: 可构建的静态前端资源和通过的完整测试结果。
+
+- [ ] **Step 1: 运行完整前端测试**
+
+Run: `npm run test:unit -- --run`
+
+Expected: 全部 Vitest 测试 PASS。
+
+- [ ] **Step 2: 运行类型检查和生产构建**
+
+Run: `npm run type-check && npm run build`
+
+Expected: 两条命令退出码均为 0，Vite 成功生成 `resources/ui`。
+
+- [ ] **Step 3: 运行 Python 回归测试**
+
+Run: `python -m pytest -q`
+
+Expected: 全部 Python 测试 PASS；本次前端改动未影响后端契约。
+
+- [ ] **Step 4: 启动桌面应用进行人工验收**
+
+Run: `python -m gameshelf`
+
+检查：五档缩放即时生效；详情只有顶部一个关闭按钮；左侧背景轻微变暗；左侧滚轮不移动主页面；详情滚动条位于窗口最右侧且只有一条；遮罩、顶部按钮和 `Esc` 均能关闭详情；关闭后主页面滚动位置不变。
+
+- [ ] **Step 5: 确认验证没有遗留未提交文件**
+
+Run: `git status --short`
+
+Expected: 输出为空。若前面的验证暴露缺陷，则先为该缺陷补充失败测试、完成最小修复、重跑 Step 1-4，并使用该修复涉及文件的完整字面路径创建 `fix: polish UI scale and drawer behavior` 提交，再执行本步骤。
