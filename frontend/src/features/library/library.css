@@ -1,7 +1,7 @@
 .library-toolbar { display: grid; grid-template-columns: minmax(180px, 1fr) 150px 160px; gap: 10px; margin-bottom: 16px; }
 .library-toolbar select { border: 1px solid #393641; border-radius: 8px; padding: 9px; color: #eceaf2; background: #17151e; }
 .cover-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 16px; }
-.cover-card { display: grid; gap: 9px; border: 0; padding: 0; text-align: left; background: transparent; }
+.cover-card { display: grid; gap: 9px; min-height: auto; border: 0; padding: 0; text-align: left; background: transparent; }
 .cover-card strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cover-frame { position: relative; overflow: hidden; aspect-ratio: 2 / 3; border: 1px solid #35313e; border-radius: 10px; background: #1b1822; }
 .cover-frame img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 50%; }

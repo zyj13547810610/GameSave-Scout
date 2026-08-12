@@ -24,12 +24,22 @@ textarea {
 }
 
 button {
+  min-height: 44px;
   border: 1px solid #7257d8;
   border-radius: 8px;
   padding: 8px 12px;
   color: white;
   background: #6548d1;
   cursor: pointer;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+summary:focus-visible {
+  outline: 3px solid #b5a7ff;
+  outline-offset: 2px;
 }
 
 button:disabled {
@@ -135,6 +145,7 @@ label {
 
 .secondary,
 .icon-button {
+  min-width: 44px;
   border-color: #45414f;
   background: #25222d;
 }
@@ -296,5 +307,16 @@ label {
   .settings-panel {
     grid-column: 1 / -1;
     min-height: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
   }
 }
