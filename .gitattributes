@@ -1,0 +1,3 @@
+.gitattributes text eol=lf
+frontend/index.html text eol=lf
+resources/ui/** text eol=lf
