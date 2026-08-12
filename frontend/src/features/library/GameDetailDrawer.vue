@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Game, GameShelfBridge } from '../../api/contracts'
+import CoverActions from '../covers/CoverActions.vue'
 import GameSettingsPanel from './GameSettingsPanel.vue'
 
 defineProps<{ game: Game; bridge: GameShelfBridge }>()
@@ -15,6 +16,7 @@ defineEmits<{ close: []; updated: [game: Game] }>()
     </div>
     <h2>{{ game.title }}</h2>
     <p class="detail-meta">{{ game.engineId ?? '未知引擎' }} · {{ game.status }}</p>
+    <CoverActions :game-id="game.id" :has-cover="Boolean(game.coverOriginalUrl)" :bridge="bridge" @updated="$emit('updated', $event)" />
     <GameSettingsPanel :game="game" :bridge="bridge" @updated="$emit('updated', $event)" @close="$emit('close')" />
   </aside>
 </template>
