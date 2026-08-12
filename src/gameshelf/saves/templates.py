@@ -94,4 +94,3 @@ class PathTemplateResolver:
             "<winPublic>": folders.public,
             "<winDir>": folders.windows,
         }
-

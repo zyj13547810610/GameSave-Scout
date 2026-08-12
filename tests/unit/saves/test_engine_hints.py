@@ -194,4 +194,3 @@ def _game(engine_id: str) -> Game:
         last_launched_at=None,
         missing_since=None,
     )
-

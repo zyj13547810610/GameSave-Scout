@@ -48,4 +48,3 @@ describe('AddSaveLocationDialog', () => {
     expect(wrapper.text()).toContain('HKEY_CURRENT_USER')
   })
 })
-

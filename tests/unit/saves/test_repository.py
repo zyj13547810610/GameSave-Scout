@@ -51,4 +51,3 @@ def _insert_game(connection: sqlite3.Connection) -> None:
                 '2026-08-12T00:00:00+00:00')
         """
     )
-

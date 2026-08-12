@@ -101,4 +101,3 @@ function pathForSubmission(): string | null {
     </form>
   </div>
 </template>
-

@@ -56,4 +56,3 @@ def _evidence(value: str) -> tuple[str, ...]:
     if not isinstance(loaded, list) or not all(isinstance(item, str) for item in loaded):
         raise ValueError("Expected a JSON string array for save-location evidence.")
     return tuple(loaded)
-

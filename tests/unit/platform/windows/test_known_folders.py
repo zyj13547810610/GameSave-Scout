@@ -63,4 +63,3 @@ def test_provider_wraps_lookup_errors_with_stable_code() -> None:
         provider.load()
 
     assert caught.value.code == "known_folder_lookup_failed"
-

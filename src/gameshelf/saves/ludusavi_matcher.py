@@ -247,4 +247,3 @@ def _condition_evidence(rule: ManifestLocationRule) -> tuple[str, ...]:
 
 def _deduplicate(values: Iterable[str]) -> tuple[str, ...]:
     return tuple(dict.fromkeys(values))
-

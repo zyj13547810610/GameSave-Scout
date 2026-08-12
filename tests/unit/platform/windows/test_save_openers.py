@@ -80,4 +80,3 @@ def test_registry_checks_and_opens_canonical_key() -> None:
 
     assert registry_api.last_key == key
     assert spawned == [("regedit.exe",)]
-

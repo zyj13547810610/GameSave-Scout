@@ -11,4 +11,3 @@ GameShelf 使用或随发行包分发以下第三方组件/数据。各项目仍
 - 随附许可证：`resources/manifests/ludusavi/LICENSE`
 
 GameShelf 只读取这些位置规则来生成待用户确认的建议，不使用 Ludusavi 执行备份或恢复。
-

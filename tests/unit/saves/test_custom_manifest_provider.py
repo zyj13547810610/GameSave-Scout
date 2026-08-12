@@ -45,4 +45,3 @@ def test_custom_provider_rejects_files_over_eight_mib(tmp_path: Path) -> None:
 
     assert result.manifests == ()
     assert "8 MiB" in result.errors[0].message
-

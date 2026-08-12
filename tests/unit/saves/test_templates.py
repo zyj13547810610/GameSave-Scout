@@ -89,4 +89,3 @@ def test_expand_supports_each_known_folder_token(
     resolver: PathTemplateResolver,
 ) -> None:
     assert resolver.expand(template, None) == expected
-

@@ -38,5 +38,30 @@ describe('LudusaviSettings', () => {
     await wrapper.get('[data-test="open-custom-manifests"]').trigger('click')
     expect(open).toHaveBeenCalledTimes(1)
   })
-})
 
+  it('shows the provider result after the update task completes', async () => {
+    const bridge = createMockBridge({
+      update_ludusavi: async () => ok({ taskId: 'task-1' }),
+      task_snapshot: async () => ok({
+        id: 'task-1',
+        kind: 'ludusavi_update',
+        status: 'completed',
+        progress: { completed: 1, total: 1 },
+        message: 'Ludusavi 清单已是最新。',
+        result: {
+          status: 'not_modified',
+          message: 'Ludusavi 清单已是最新。',
+          metadata: null,
+        },
+        error: null,
+      }),
+    })
+    const wrapper = mount(LudusaviSettings, { props: { bridge } })
+    await flushPromises()
+
+    await wrapper.get('[data-test="update-ludusavi"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Ludusavi 清单已是最新。')
+  })
+})

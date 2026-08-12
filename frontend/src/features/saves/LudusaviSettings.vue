@@ -37,7 +37,9 @@ async function pollTask(taskId: string) {
   if (!result.ok) return void (message.value = result.error.message)
   const task = result.data
   if (task.status === 'completed') {
-    message.value = 'Ludusavi 清单已检查完成。'
+    message.value = updateResultMessage(task.result)
+      || task.message
+      || 'Ludusavi 清单已检查完成。'
     await loadStatus()
     return
   }
@@ -52,6 +54,11 @@ async function pollTask(taskId: string) {
 async function openCustomDirectory() {
   const result = await props.bridge.open_custom_manifest_directory()
   if (!result.ok) message.value = result.error.message
+}
+
+function updateResultMessage(value: unknown): string | null {
+  if (typeof value !== 'object' || value === null || !('message' in value)) return null
+  return typeof value.message === 'string' && value.message ? value.message : null
 }
 </script>
 

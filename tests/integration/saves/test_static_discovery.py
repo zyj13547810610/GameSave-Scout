@@ -144,4 +144,3 @@ def test_confirmed_location_is_never_suggested_again(
     static_harness.save_service.accept_suggestion(static_harness.game_id, suggestion)
 
     assert static_harness.discovery.suggest_for_game(static_harness.game_id) == ()
-

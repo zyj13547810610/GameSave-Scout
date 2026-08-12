@@ -232,3 +232,13 @@ def test_confirmed_registry_location_can_be_verified_and_opened(
 
     assert verified.exists is True
     assert save_stack.registry.opened == [key]
+
+
+def test_manual_registry_location_rejects_unsupported_root(
+    save_stack: SaveStack,
+) -> None:
+    key = r"HKEY_CLASSES_ROOT\Software\Studio\Alice"
+    save_stack.registry.existing.add(key)
+
+    with pytest.raises(InvalidSaveLocation, match="受支持"):
+        save_stack.service.add_manual(save_stack.game.id, "registry", key)

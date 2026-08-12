@@ -59,4 +59,3 @@ describe('SaveSuggestionList', () => {
     expect((wrapper.get('[data-test="suggestion-s1"]').element as HTMLInputElement).checked).toBe(false)
   })
 })
-

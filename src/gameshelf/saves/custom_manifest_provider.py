@@ -66,4 +66,3 @@ class CustomManifestProvider:
                 continue
             manifests.append(LoadedCustomManifest(path.name, manifest))
         return CustomManifestLoadResult(tuple(manifests), tuple(errors))
-

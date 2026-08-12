@@ -28,4 +28,3 @@ export function confidenceLabel(confidence: number): string {
   if (confidence >= 0.75) return '中置信度'
   return '低置信度'
 }
-

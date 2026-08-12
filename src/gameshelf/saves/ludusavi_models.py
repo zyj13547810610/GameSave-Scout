@@ -57,4 +57,3 @@ class ManifestMatch:
     matched_name: str
     evidence: tuple[str, ...]
     locations: tuple[MatchedLocation, ...]
-

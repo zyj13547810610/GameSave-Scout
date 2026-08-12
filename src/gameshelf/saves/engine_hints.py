@@ -286,4 +286,3 @@ def _safe_iterdir(directory: Path) -> tuple[Path, ...]:
         return tuple(directory.iterdir())
     except OSError:
         return ()
-

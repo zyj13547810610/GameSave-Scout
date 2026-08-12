@@ -60,4 +60,3 @@ describe('SaveLocationList', () => {
     expect(remove).not.toHaveBeenCalled()
   })
 })
-
