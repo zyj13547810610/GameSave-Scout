@@ -26,3 +26,11 @@ npm --prefix frontend run test:unit -- --run
 npm --prefix frontend run type-check
 npm --prefix frontend run build
 ```
+
+构建后的前端文件复制到 `resources/ui` 后，可以在不打开窗口的情况下验证便携路径与数据库：
+
+```powershell
+python -m gameshelf --smoke-test
+```
+
+正常开发启动使用 `python -m gameshelf`。可通过 `GAMESHELF_DEV_SERVER_URL` 指向本地 Vite 开发服务器；冻结版会忽略该变量并只加载随包 UI。
