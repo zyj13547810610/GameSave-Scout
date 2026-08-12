@@ -12,6 +12,7 @@ from gameshelf.bridge.contracts import ApiResult, JSONValue, failure, success
 from gameshelf.bridge.tasks import TaskRegistry, TaskSnapshot
 from gameshelf.covers.image_pipeline import MAX_SOURCE_BYTES, InvalidCoverImage
 from gameshelf.covers.service import CoverService
+from gameshelf.engines.service import EngineDetectionService
 from gameshelf.library.launcher import (
     GameLauncher,
     InvalidLaunchConfiguration,
@@ -22,6 +23,7 @@ from gameshelf.library.launcher import (
 from gameshelf.library.models import Game, ScanRoot
 from gameshelf.library.service import (
     GameNotFoundError,
+    InvalidEngineConfiguration,
     InvalidExecutableError,
     InvalidGameConfiguration,
     InvalidRootConfiguration,
@@ -46,6 +48,7 @@ class BridgeApi:
         scanner: ScanService | None = None,
         launcher: GameLauncher | None = None,
         covers: CoverService | None = None,
+        engine_detection: EngineDetectionService | None = None,
         asset_session_token: str | None = None,
     ) -> None:
         self._paths = paths
@@ -55,6 +58,7 @@ class BridgeApi:
         self._scanner = scanner
         self._launcher = launcher
         self._covers = covers
+        self._engine_detection = engine_detection
         self._asset_session_token = asset_session_token
         self._window: Any | None = None
 
@@ -184,6 +188,52 @@ class BridgeApi:
             return success(self._game_dto(game))
         except (InvalidRequest, InvalidExecutableError) as error:
             return failure("invalid_executable", str(error))
+        except GameNotFoundError:
+            return failure("game_not_found", "没有找到对应的游戏。")
+
+    def list_engine_options(self) -> ApiResult:
+        options = self._require_engine_detection().list_options()
+        return success(
+            [
+                {
+                    "id": option.id,
+                    "label": option.label,
+                    "experimental": option.experimental,
+                }
+                for option in options
+            ]
+        )
+
+    def set_game_engine(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            game_id = _string(payload, "gameId")
+            requested = _string(payload, "engineId")
+            if requested == "unknown":
+                engine_id = None
+            elif requested == "custom":
+                label = _string(payload, "customLabel").strip()
+                if len(label) > 80 or "\x00" in label:
+                    raise InvalidRequest("customLabel must be at most 80 characters.")
+                engine_id = f"custom:{label}"
+            elif self._require_engine_detection().has_option(requested):
+                engine_id = requested
+            else:
+                raise InvalidRequest("engineId is not a supported engine option.")
+            game = self._require_library().set_game_engine(game_id, engine_id)
+            return success(self._game_dto(game))
+        except (InvalidRequest, InvalidEngineConfiguration) as error:
+            return failure("invalid_engine", str(error))
+        except GameNotFoundError:
+            return failure("game_not_found", "没有找到对应的游戏。")
+
+    def clear_manual_engine(self, request: object) -> ApiResult:
+        try:
+            game_id = _string(_payload(request), "gameId")
+            game = self._require_library().clear_manual_engine(game_id)
+            return success(self._game_dto(game))
+        except (InvalidRequest, InvalidEngineConfiguration) as error:
+            return failure("invalid_engine", str(error))
         except GameNotFoundError:
             return failure("game_not_found", "没有找到对应的游戏。")
 
@@ -358,6 +408,9 @@ class BridgeApi:
             "status": game.status,
             "engineId": game.engine_id,
             "engineVariant": game.engine_variant,
+            "engineLabel": self._engine_label(game.engine_id),
+            "engineIsManual": game.engine_is_manual,
+            "detectedEngine": self._detected_engine_dto(game),
             "mainExeRelpath": game.main_exe_relpath,
             "mainExeIsManual": game.main_exe_is_manual,
             "workingDirRelpath": game.working_dir_relpath,
@@ -390,6 +443,68 @@ class BridgeApi:
         if self._covers is None:
             raise RuntimeError("Cover services are not configured.")
         return self._covers
+
+    def _require_engine_detection(self) -> EngineDetectionService:
+        if self._engine_detection is None:
+            raise RuntimeError("Engine detection services are not configured.")
+        return self._engine_detection
+
+    def _engine_label(self, engine_id: str | None) -> str:
+        if self._engine_detection is not None:
+            return self._engine_detection.label_for(engine_id)
+        if engine_id is None:
+            return "未知引擎"
+        return engine_id.removeprefix("custom:")
+
+    def _detected_engine_dto(self, game: Game) -> dict[str, JSONValue] | None:
+        candidate_evidence = tuple(
+            item for item in game.engine_evidence if item.code.startswith("candidate:")
+        )
+        ambiguous = game.detected_engine_id is None and bool(candidate_evidence)
+        if (
+            game.detected_engine_id is None
+            and game.engine_confidence is None
+            and not game.engine_evidence
+        ):
+            return None
+        alternatives: list[JSONValue] = [
+            {
+                "id": item.code.removeprefix("candidate:"),
+                "label": self._engine_label(item.code.removeprefix("candidate:")),
+            }
+            for item in candidate_evidence
+        ]
+        evidence: list[JSONValue] = [
+            {
+                "code": item.code,
+                "detail": item.detail,
+                "path": item.path,
+                "weight": item.weight,
+            }
+            for item in game.engine_evidence
+            if not item.code.startswith("candidate:")
+        ]
+        detected_id = game.detected_engine_id
+        experimental = False
+        if self._engine_detection is not None:
+            experimental = self._engine_detection.is_experimental(
+                detected_id
+            ) or any(
+                self._engine_detection.is_experimental(
+                    item.code.removeprefix("candidate:")
+                )
+                for item in candidate_evidence
+            )
+        return {
+            "id": detected_id,
+            "label": "疑似多个引擎" if ambiguous else self._engine_label(detected_id),
+            "variant": game.detected_engine_variant,
+            "confidence": _confidence_label(game.engine_confidence),
+            "evidence": evidence,
+            "ambiguous": ambiguous,
+            "experimental": experimental,
+            "alternatives": alternatives,
+        }
 
     def _require_game(self, game_id: str) -> Game:
         game = self._require_library().get_game(game_id)
@@ -497,3 +612,13 @@ def _scan_mode(payload: dict[str, object]) -> Any:
     if mode not in {"children", "recursive"}:
         raise InvalidRequest("scanMode must be 'children' or 'recursive'.")
     return mode
+
+
+def _confidence_label(value: float | None) -> str | None:
+    if value is None:
+        return None
+    if value >= 0.9:
+        return "高"
+    if value >= 0.75:
+        return "中"
+    return "低"

@@ -16,6 +16,25 @@
 .detail-cover-frame img { width: 100%; height: 100%; object-fit: contain; }
 .detail-cover-frame .cover-placeholder { width: 15rem; height: 100%; }
 .detail-meta { color: #9893a4; }
+.engine-badge { display: inline-flex; width: fit-content; align-items: center; gap: .375rem; border: 1px solid #4b435e; border-radius: 999px; padding: .2rem .5rem; color: #cfc2f5; background: #211b2d; font-size: .72rem; }
+.engine-badge small { color: #f1c77c; }
+.engine-details, .engine-picker { margin-top: 1rem; border-top: 1px solid #302c38; padding-top: 1rem; }
+.engine-details h3 { margin-top: 0; }
+.engine-details p { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.engine-suggestion, .engine-alternatives { color: #aaa3b7; }
+.engine-flag { border-radius: 999px; padding: .15rem .45rem; color: #cfc2f5; background: #292038; font-size: .72rem; }
+.engine-flag.warning { color: #f3cc87; background: #332815; }
+.engine-evidence { margin: .75rem 0; border-radius: .5rem; background: #100f14; padding: .65rem .75rem; }
+.engine-evidence summary { cursor: pointer; }
+.engine-evidence ul { margin-bottom: 0; padding-left: 1.2rem; }
+.engine-evidence li { margin-top: .45rem; }
+.engine-evidence li small { display: block; color: #817b8b; overflow-wrap: anywhere; }
+.engine-picker { display: grid; gap: .7rem; }
+.engine-picker label { display: grid; gap: .35rem; color: #aaa3b7; }
+.engine-picker select, .engine-picker input { width: 100%; border: 1px solid #393641; border-radius: .5rem; padding: .6rem; color: #eceaf2; background: #17151e; }
+.engine-picker-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.engine-picker .secondary { color: #c7c1d0; background: #28242f; }
+.inline-error { margin: 0; color: #ff9c9c; }
 .game-drawer .game-settings-panel { min-height: auto; border: 0; padding: 0; background: transparent; }
 @container (max-width: 33rem) { .library-toolbar { grid-template-columns: 1fr; } }
 @media (max-width: 700px) { .library-toolbar { grid-template-columns: 1fr; } }

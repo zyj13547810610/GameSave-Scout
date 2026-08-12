@@ -45,6 +45,10 @@ class InvalidGameConfiguration(ValueError):
     """Raised when editable game metadata is malformed."""
 
 
+class InvalidEngineConfiguration(ValueError):
+    """Raised when a manual engine value is malformed."""
+
+
 class LibraryService:
     def __init__(self, repository: LibraryRepository, writer: DbWriter) -> None:
         self._repository = repository
@@ -225,6 +229,42 @@ class LibraryService:
             game.id,
             "main_exe_relpath = ?, main_exe_is_manual = 1, updated_at = ?",
             (relative, _utc_now()),
+        )
+
+    def set_game_engine(
+        self,
+        game_id: str,
+        engine_id: str | None,
+        variant: str | None = None,
+    ) -> Game:
+        clean_engine_id = None
+        if engine_id is not None:
+            clean_engine_id = engine_id.strip()
+            if not clean_engine_id or "\x00" in clean_engine_id:
+                raise InvalidEngineConfiguration("引擎名称无效。")
+        clean_variant = variant.strip() if variant is not None else None
+        if clean_variant == "":
+            clean_variant = None
+        if clean_variant is not None and "\x00" in clean_variant:
+            raise InvalidEngineConfiguration("引擎变体无效。")
+        return self._update_game(
+            game_id,
+            """
+            engine_id = ?, engine_variant = ?, engine_is_manual = 1,
+            updated_at = ?
+            """,
+            (clean_engine_id, clean_variant, _utc_now()),
+        )
+
+    def clear_manual_engine(self, game_id: str) -> Game:
+        return self._update_game(
+            game_id,
+            """
+            engine_id = detected_engine_id,
+            engine_variant = detected_engine_variant,
+            engine_is_manual = 0, updated_at = ?
+            """,
+            (_utc_now(),),
         )
 
     def update_launch_configuration(

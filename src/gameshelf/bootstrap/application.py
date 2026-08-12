@@ -61,9 +61,7 @@ def build_application(paths: AppPaths) -> Application:
     tasks = TaskRegistry()
     repository = LibraryRepository(database)
     library = LibraryService(repository, writer)
-    engine_detection = EngineDetectionService.from_rules_file(
-        paths.app_root / "resources" / "rules" / "engines.yaml"
-    )
+    engine_detection = EngineDetectionService.from_rules_file(_engine_rules_file(paths))
     scanner = ScanService(repository, writer, engine_detection)
     launcher = GameLauncher(
         repository, writer, WindowsProcessLauncher(), WindowsShell()
@@ -93,6 +91,7 @@ def build_application(paths: AppPaths) -> Application:
         scanner=scanner,
         launcher=launcher,
         covers=covers,
+        engine_detection=engine_detection,
         asset_session_token=asset_address.session_token,
     )
     return Application(
@@ -106,3 +105,10 @@ def build_application(paths: AppPaths) -> Application:
         asset_server=asset_server,
         asset_address=asset_address,
     )
+
+
+def _engine_rules_file(paths: AppPaths) -> Path:
+    adjacent = paths.app_root / "resources" / "rules" / "engines.yaml"
+    if adjacent.is_file():
+        return adjacent
+    return Path(__file__).resolve().parents[3] / "resources" / "rules" / "engines.yaml"

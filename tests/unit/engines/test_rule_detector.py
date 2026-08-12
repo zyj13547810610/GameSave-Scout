@@ -22,6 +22,7 @@ def test_rule_requires_all_and_scores_any_evidence(tmp_path: Path) -> None:
     assert match is not None
     assert match.engine_id == "tyrano"
     assert match.confidence >= 0.9
+    assert match.evidence[0].detail == "发现路径：data/system/Config.tjs"
 
 
 def test_missing_required_evidence_never_matches(tmp_path: Path) -> None:

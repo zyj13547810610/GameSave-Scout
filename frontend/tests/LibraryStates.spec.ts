@@ -45,6 +45,16 @@ describe('library states', () => {
     await wrapper.get('img').trigger('error')
     expect(wrapper.text()).toContain('封面加载失败')
   })
+
+  it('shows the adopted engine as a compact badge', () => {
+    const wrapper = mount(GameCard, {
+      props: {
+        game: fixtureGame({ engineId: 'renpy', engineLabel: "Ren'Py" }),
+      },
+    })
+
+    expect(wrapper.text()).toContain("Ren'Py")
+  })
 })
 
 function mountApp(bridge: ReturnType<typeof createMockBridge>, pinia: ReturnType<typeof createPinia>) {

@@ -98,10 +98,22 @@ def _evaluate(
         return None
     return EngineEvidence(
         f"rule_{evidence.op}",
-        f"Matched {evidence.op}",
+        _evidence_detail(evidence),
         evidence.weight,
         evidence.path,
     )
+
+
+def _evidence_detail(evidence: EvidenceRule) -> str:
+    labels = {
+        "path_exists": "发现路径",
+        "glob_exists": "发现匹配文件",
+        "magic_at": "文件头特征匹配",
+        "edge_contains": "文件边缘特征匹配",
+        "text_contains": "配置文本特征匹配",
+        "pe_field_contains": "程序产品信息匹配",
+    }
+    return f"{labels[evidence.op]}：{evidence.path}"
 
 
 def _target(root: Path, relative: str) -> Path:

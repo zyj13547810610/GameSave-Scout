@@ -77,4 +77,29 @@ describe('GameDetailDrawer', () => {
 
     expect(document.activeElement).toBe(wrapper.get('[data-test="drawer-close"]').element)
   })
+
+  it('includes engine evidence and the manual engine picker', () => {
+    const wrapper = mount(GameDetailDrawer, {
+      props: {
+        game: fixtureGame({
+          engineId: 'unity',
+          engineLabel: 'Unity',
+          detectedEngine: {
+            id: 'unity',
+            label: 'Unity',
+            variant: null,
+            confidence: '高',
+            evidence: [],
+            ambiguous: false,
+            experimental: false,
+            alternatives: [],
+          },
+        }),
+        bridge: createMockBridge(),
+      },
+    })
+
+    expect(wrapper.text()).toContain('当前：Unity')
+    expect(wrapper.text()).toContain('手动设置引擎')
+  })
 })

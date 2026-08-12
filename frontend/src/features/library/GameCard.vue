@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import type { Game } from '../../api/contracts'
+import EngineBadge from '../engines/EngineBadge.vue'
 
 defineProps<{ game: Game }>()
 defineEmits<{ open: [event: MouseEvent] }>()
@@ -17,5 +18,6 @@ const labels = { installed: '已安装', missing: '本体失效', save_only: '�
       <span v-if="game.status === 'installed' && !game.mainExeRelpath" class="card-badge no-exe">无 EXE</span>
     </div>
     <strong>{{ game.title }}</strong>
+    <EngineBadge v-if="game.engineId" :label="game.engineLabel" :experimental="game.detectedEngine?.experimental" />
   </button>
 </template>

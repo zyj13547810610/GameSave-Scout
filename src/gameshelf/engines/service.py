@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 from gameshelf.engines.base import EngineDetector
@@ -16,9 +17,40 @@ from gameshelf.engines.rule_detector import RuleDetector
 from gameshelf.engines.rule_schema import load_engine_rules
 
 
+@dataclass(frozen=True)
+class EngineOption:
+    id: str
+    label: str
+    experimental: bool = False
+
+
+_BUILTIN_OPTIONS = (
+    EngineOption("rpg_maker_2k", "RPG Maker 2000/2003"),
+    EngineOption("rpg_maker_xp", "RPG Maker XP"),
+    EngineOption("rpg_maker_vx", "RPG Maker VX"),
+    EngineOption("rpg_maker_vx_ace", "RPG Maker VX Ace"),
+    EngineOption("rpg_maker_mv", "RPG Maker MV"),
+    EngineOption("rpg_maker_mz", "RPG Maker MZ"),
+    EngineOption("mkxp_z", "MKXP-Z"),
+    EngineOption("rgu", "RGU"),
+    EngineOption("renpy", "Ren'Py"),
+    EngineOption("unity", "Unity"),
+    EngineOption("wolf_rpg", "WOLF RPG Editor"),
+    EngineOption("smile_game_builder", "SMILE GAME BUILDER"),
+    EngineOption("rpg_developer_bakin", "RPG Developer Bakin"),
+    EngineOption("visual_novel_maker", "Visual Novel Maker"),
+)
+
+
 class EngineDetectionService:
-    def __init__(self, registry: DetectorRegistry) -> None:
+    def __init__(
+        self,
+        registry: DetectorRegistry,
+        options: tuple[EngineOption, ...] = (),
+    ) -> None:
         self._registry = registry
+        self._options = options
+        self._options_by_id = {option.id: option for option in options}
 
     @classmethod
     def from_rules_file(cls, rules_file: Path) -> EngineDetectionService:
@@ -31,7 +63,36 @@ class EngineDetectionService:
             CreatorEngineDetector(),
             *(RuleDetector(rule) for rule in rules),
         )
-        return cls(DetectorRegistry(detectors))
+        options_by_id = {option.id: option for option in _BUILTIN_OPTIONS}
+        for rule in rules:
+            options_by_id[rule.engine_id] = EngineOption(
+                rule.engine_id, rule.label, rule.experimental
+            )
+        options = tuple(
+            sorted(
+                options_by_id.values(),
+                key=lambda option: (option.experimental, option.label.casefold()),
+            )
+        )
+        return cls(DetectorRegistry(detectors), options)
 
     def detect(self, game_dir: Path, executable: Path | None) -> DetectionOutcome:
         return self._registry.detect(game_dir, executable)
+
+    def list_options(self) -> tuple[EngineOption, ...]:
+        return self._options
+
+    def has_option(self, engine_id: str) -> bool:
+        return engine_id in self._options_by_id
+
+    def label_for(self, engine_id: str | None) -> str:
+        if engine_id is None:
+            return "未知引擎"
+        if engine_id.startswith("custom:"):
+            return engine_id.removeprefix("custom:")
+        option = self._options_by_id.get(engine_id)
+        return option.label if option is not None else engine_id
+
+    def is_experimental(self, engine_id: str | None) -> bool:
+        option = self._options_by_id.get(engine_id or "")
+        return option.experimental if option is not None else False

@@ -25,6 +25,37 @@ export type ScanRoot = {
   createdAt: string
 }
 
+export type EngineOption = {
+  id: string
+  label: string
+  experimental: boolean
+}
+
+export type EngineEvidence = {
+  code: string
+  detail: string
+  path: string | null
+  weight: number
+}
+
+export type EngineSelection = {
+  id: string | null
+  label: string
+  variant: string | null
+  manual: boolean
+}
+
+export type EngineDetection = {
+  id: string | null
+  label: string
+  variant: string | null
+  confidence: '高' | '中' | '低' | null
+  evidence: EngineEvidence[]
+  ambiguous: boolean
+  experimental: boolean
+  alternatives: { id: string; label: string }[]
+}
+
 export type Game = {
   id: string
   scanRootId: string | null
@@ -34,6 +65,9 @@ export type Game = {
   status: 'installed' | 'missing' | 'save_only'
   engineId: string | null
   engineVariant: string | null
+  engineLabel: string
+  engineIsManual: boolean
+  detectedEngine: EngineDetection | null
   mainExeRelpath: string | null
   mainExeIsManual: boolean
   workingDirRelpath: string | null
@@ -102,6 +136,9 @@ export interface GameShelfBridge {
   set_game_title(input: { gameId: string; title: string }): Promise<ApiResult<Game>>
   choose_game_executable(input: { gameId: string }): Promise<ApiResult<string | null>>
   set_game_executable(input: { gameId: string; selectedPath: string }): Promise<ApiResult<Game>>
+  list_engine_options(): Promise<ApiResult<EngineOption[]>>
+  set_game_engine(input: { gameId: string; engineId: string; customLabel?: string }): Promise<ApiResult<Game>>
+  clear_manual_engine(input: { gameId: string }): Promise<ApiResult<Game>>
   update_launch_configuration(input: {
     gameId: string
     workingDirRelpath: string | null

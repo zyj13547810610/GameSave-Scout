@@ -2,6 +2,8 @@
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { Game, GameShelfBridge } from '../../api/contracts'
 import CoverActions from '../covers/CoverActions.vue'
+import EngineDetails from '../engines/EngineDetails.vue'
+import EnginePicker from '../engines/EnginePicker.vue'
 import GameSettingsPanel from './GameSettingsPanel.vue'
 
 defineProps<{ game: Game; bridge: GameShelfBridge }>()
@@ -77,6 +79,11 @@ onBeforeUnmount(() => {
       </div>
       <h2>{{ game.title }}</h2>
       <p class="detail-meta">{{ game.engineId ?? '未知引擎' }} · {{ game.status }}</p>
+      <EngineDetails
+        :adopted="{ id: game.engineId, label: game.engineLabel, variant: game.engineVariant, manual: game.engineIsManual }"
+        :detected="game.detectedEngine"
+      />
+      <EnginePicker :game="game" :bridge="bridge" @updated="$emit('updated', $event)" />
       <CoverActions :game-id="game.id" :has-cover="Boolean(game.coverOriginalUrl)" :bridge="bridge" @updated="$emit('updated', $event)" />
       <GameSettingsPanel :game="game" :bridge="bridge" @updated="$emit('updated', $event)" />
     </aside>
