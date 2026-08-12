@@ -13,6 +13,12 @@ from gameshelf.bridge.tasks import TaskRegistry
 from gameshelf.db.connection import ConnectionFactory
 from gameshelf.db.migrator import Migrator
 from gameshelf.db.writer import DbWriter
+from gameshelf.library.launcher import GameLauncher
+from gameshelf.library.repository import LibraryRepository
+from gameshelf.library.service import LibraryService
+from gameshelf.platform.windows.processes import WindowsProcessLauncher
+from gameshelf.platform.windows.shell import WindowsShell
+from gameshelf.scanning.service import ScanService
 
 
 @dataclass
@@ -46,7 +52,20 @@ def build_application(paths: AppPaths) -> Application:
     writer = DbWriter(database)
     writer.start()
     tasks = TaskRegistry()
-    api = BridgeApi(paths, tasks, schema_version=schema_version)
+    repository = LibraryRepository(database)
+    library = LibraryService(repository, writer)
+    scanner = ScanService(repository, writer)
+    launcher = GameLauncher(
+        repository, writer, WindowsProcessLauncher(), WindowsShell()
+    )
+    api = BridgeApi(
+        paths,
+        tasks,
+        schema_version=schema_version,
+        library=library,
+        scanner=scanner,
+        launcher=launcher,
+    )
     return Application(
         paths=paths,
         api=api,

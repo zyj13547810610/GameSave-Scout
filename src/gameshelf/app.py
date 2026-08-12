@@ -46,6 +46,7 @@ def _run_desktop(application: Application) -> int:
     if window is None:
         application.close()
         raise RuntimeError("无法创建 GameShelf 桌面窗口。")
+    application.api.attach_window(window)
     window.events.closed += application.close
     try:
         webview.start(

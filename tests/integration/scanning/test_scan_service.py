@@ -144,6 +144,35 @@ def test_overlapping_roots_assign_candidate_to_longest_root(
     assert games[0].relative_dir == "GameA"
 
 
+def test_confirmed_move_preserves_original_game_id_and_removes_temporary_candidate(
+    scan_harness: "ScanHarness",
+) -> None:
+    original_root = scan_harness.add_root(mode="children")
+    scan_harness.mkdir("GameA", exes=["Game.exe"])
+    original = scan_harness.scan(original_root.id, "full").games[0]
+    scan_harness.remove_dir("GameA")
+    scan_harness.scan(original_root.id, "full")
+
+    moved_root_path = scan_harness.root_path.parent / "moved-games"
+    moved_game = moved_root_path / "GameA"
+    moved_game.mkdir(parents=True)
+    (moved_game / "Game.exe").write_bytes(b"not-a-real-pe")
+    moved_root = scan_harness.add_root(mode="children", path=moved_root_path)
+    summary = scan_harness.scan(moved_root.id, "full")
+    suggestion = summary.move_suggestions[0]
+
+    confirmed = scan_harness.scanner.confirm_move(
+        summary.session_id,
+        suggestion.existing_game_id,
+        suggestion.candidate_relative_dir,
+    )
+
+    assert confirmed.id == original.id
+    assert confirmed.scan_root_id == moved_root.id
+    assert confirmed.status == "installed"
+    assert scan_harness.games() == (confirmed,)
+
+
 @dataclass
 class ScanHarness:
     root_path: Path

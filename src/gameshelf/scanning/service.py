@@ -14,7 +14,7 @@ from uuid import uuid4
 from gameshelf.bridge.tasks import TaskCancelled, TaskContext
 from gameshelf.db.writer import DbWriter
 from gameshelf.library.models import Game, ScanRoot
-from gameshelf.library.repository import LibraryRepository
+from gameshelf.library.repository import LibraryRepository, game_from_row
 from gameshelf.library.service import RootNotFoundError
 from gameshelf.scanning.discovery import RootUnavailableError, enumerate_candidates
 from gameshelf.scanning.executable_ranker import rank_executables
@@ -112,6 +112,75 @@ class ScanService:
             move_suggestions=result.move_suggestions,
             games=result.games,
         )
+
+    def confirm_move(
+        self,
+        session_id: str,
+        existing_game_id: str,
+        candidate_relative_dir: str,
+    ) -> Game:
+        def operation(connection: sqlite3.Connection) -> Game:
+            session = connection.execute(
+                "SELECT root_id, status, scope_json FROM scan_sessions WHERE id = ?",
+                (session_id,),
+            ).fetchone()
+            if session is None or session["status"] != "completed":
+                raise ConfirmMoveError("The referenced scan session is not complete.")
+            scope = json.loads(session["scope_json"])
+            expected = {
+                "existingGameId": existing_game_id,
+                "candidateRelativeDir": candidate_relative_dir,
+            }
+            if expected not in scope.get("moveCandidates", []):
+                raise ConfirmMoveError("The move was not suggested by this scan session.")
+            existing = connection.execute(
+                "SELECT * FROM games WHERE id = ? AND status = 'missing'",
+                (existing_game_id,),
+            ).fetchone()
+            if existing is None:
+                raise ConfirmMoveError("The original game is no longer missing.")
+            candidate = connection.execute(
+                """
+                SELECT * FROM games
+                WHERE scan_root_id = ? AND relative_dir = ? AND status = 'installed'
+                """,
+                (session["root_id"], candidate_relative_dir),
+            ).fetchone()
+            if candidate is None or candidate["id"] == existing_game_id:
+                raise ConfirmMoveError("The suggested target is no longer available.")
+
+            connection.execute("DELETE FROM games WHERE id = ?", (candidate["id"],))
+            now = _utc_now()
+            connection.execute(
+                """
+                UPDATE games
+                SET scan_root_id = ?, relative_dir = ?, install_path_key = ?,
+                    status = 'installed', missing_since = NULL,
+                    detected_title = ?, detected_main_exe_relpath = ?,
+                    main_exe_relpath = CASE WHEN main_exe_is_manual = 1
+                        THEN main_exe_relpath ELSE ? END,
+                    exe_arch = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    candidate["scan_root_id"],
+                    candidate["relative_dir"],
+                    candidate["install_path_key"],
+                    candidate["detected_title"],
+                    candidate["detected_main_exe_relpath"],
+                    candidate["main_exe_relpath"],
+                    candidate["exe_arch"],
+                    now,
+                    existing_game_id,
+                ),
+            )
+            row = connection.execute(
+                "SELECT * FROM games WHERE id = ?", (existing_game_id,)
+            ).fetchone()
+            assert row is not None
+            return game_from_row(row)
+
+        return self._writer.submit(operation).result()
 
     def _candidates(
         self, root: ScanRoot, scan_kind: ScanKind, context: TaskContext
@@ -215,3 +284,7 @@ def _empty_summary(
 
 def _utc_now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
+
+
+class ConfirmMoveError(ValueError):
+    """Raised when a move suggestion is stale or cannot be verified."""

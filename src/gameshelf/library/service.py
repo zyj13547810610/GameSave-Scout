@@ -5,8 +5,9 @@ from __future__ import annotations
 import ntpath
 import posixpath
 import sqlite3
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
+from pathlib import Path
 from uuid import uuid4
 
 from gameshelf.db.writer import DbWriter
@@ -16,7 +17,12 @@ from gameshelf.library.repository import (
     game_from_row,
     scan_root_from_row,
 )
-from gameshelf.scanning.path_keys import windows_path_key
+from gameshelf.scanning.path_keys import (
+    PathTraversalError,
+    expand_relative,
+    is_same_or_child,
+    windows_path_key,
+)
 
 
 class InvalidRootConfiguration(ValueError):
@@ -25,6 +31,18 @@ class InvalidRootConfiguration(ValueError):
 
 class RootNotFoundError(LookupError):
     """Raised when a scan-root command names an unknown record."""
+
+
+class GameNotFoundError(LookupError):
+    """Raised when a game-library command names an unknown record."""
+
+
+class InvalidExecutableError(ValueError):
+    """Raised when a manually selected executable is unsafe or unavailable."""
+
+
+class InvalidGameConfiguration(ValueError):
+    """Raised when editable game metadata is malformed."""
 
 
 class LibraryService:
@@ -175,6 +193,119 @@ class LibraryService:
     def get_game(self, game_id: str) -> Game | None:
         return self._repository.get_game(game_id)
 
+    def set_game_title(self, game_id: str, title: str) -> Game:
+        clean_title = title.strip()
+        if not clean_title:
+            raise InvalidGameConfiguration("Game title cannot be empty.")
+        return self._update_game(
+            game_id,
+            "title = ?, title_is_manual = 1, updated_at = ?",
+            (clean_title, _utc_now()),
+        )
+
+    def set_game_executable(self, game_id: str, selected_path: str) -> Game:
+        game = self._require_game(game_id)
+        install_dir = self.install_directory(game_id)
+        selected = Path(selected_path)
+        selected_key = windows_path_key(selected)
+        if (
+            not is_same_or_child(selected_key, windows_path_key(install_dir))
+            or selected.suffix.casefold() != ".exe"
+            or not selected.is_file()
+        ):
+            raise InvalidExecutableError(
+                "The executable must be an existing .exe inside the game directory."
+            )
+        relative = ntpath.relpath(str(selected), str(install_dir)).replace("\\", "/")
+        try:
+            expand_relative(install_dir, relative)
+        except PathTraversalError as error:
+            raise InvalidExecutableError("The executable leaves the game directory.") from error
+        return self._update_game(
+            game.id,
+            "main_exe_relpath = ?, main_exe_is_manual = 1, updated_at = ?",
+            (relative, _utc_now()),
+        )
+
+    def update_launch_configuration(
+        self,
+        game_id: str,
+        *,
+        working_dir_relpath: str | None,
+        launch_args: Sequence[str],
+        environment: Mapping[str, str],
+    ) -> Game:
+        install_dir = self.install_directory(game_id)
+        clean_working_dir: str | None = None
+        if working_dir_relpath is not None and working_dir_relpath.strip():
+            clean_working_dir = _normalize_relative_directory(working_dir_relpath)
+            try:
+                expand_relative(install_dir, clean_working_dir)
+            except PathTraversalError as error:
+                raise InvalidGameConfiguration(
+                    "Working directory must remain inside the game directory."
+                ) from error
+        clean_args = tuple(_validate_text(value, "launch argument") for value in launch_args)
+        clean_environment: dict[str, str] = {}
+        for key, value in environment.items():
+            clean_key = _validate_text(key, "environment key")
+            clean_value = _validate_text(value, "environment value")
+            if not clean_key or "=" in clean_key:
+                raise InvalidGameConfiguration("Invalid environment variable name.")
+            clean_environment[clean_key] = clean_value
+        return self._update_game(
+            game_id,
+            """
+            working_dir_relpath = ?, launch_args_json = ?, environment_json = ?,
+            updated_at = ?
+            """,
+            (
+                clean_working_dir,
+                _json_array(clean_args),
+                _json_object(clean_environment),
+                _utc_now(),
+            ),
+        )
+
+    def install_directory(self, game_id: str) -> Path:
+        game = self._require_game(game_id)
+        if game.scan_root_id is not None and game.relative_dir is not None:
+            root = self._repository.get_root(game.scan_root_id)
+            if root is not None:
+                try:
+                    return expand_relative(Path(root.display_path), game.relative_dir)
+                except PathTraversalError as error:
+                    raise InvalidGameConfiguration(
+                        "Stored game directory is unsafe."
+                    ) from error
+        if game.install_path_key is not None:
+            return Path(game.install_path_key)
+        raise InvalidGameConfiguration("Game has no installation directory.")
+
+    def _require_game(self, game_id: str) -> Game:
+        game = self._repository.get_game(game_id)
+        if game is None:
+            raise GameNotFoundError(game_id)
+        return game
+
+    def _update_game(
+        self, game_id: str, assignments: str, parameters: tuple[object, ...]
+    ) -> Game:
+        def operation(connection: sqlite3.Connection) -> Game:
+            cursor = connection.execute(
+                f"UPDATE games SET {assignments} WHERE id = ?",  # noqa: S608
+                (*parameters, game_id),
+            )
+            if cursor.rowcount == 0:
+                raise GameNotFoundError(game_id)
+            row = connection.execute(
+                "SELECT * FROM games WHERE id = ?", (game_id,)
+            ).fetchone()
+            assert row is not None
+            return game_from_row(row)
+
+        return self._writer.submit(operation).result()
+
     def create_game_for_test(
         self, root_id: str, relative_dir: str, title: str
     ) -> Game:
@@ -262,3 +393,15 @@ def _json_array(values: Sequence[str]) -> str:
     import json
 
     return json.dumps(values, ensure_ascii=False, separators=(",", ":"))
+
+
+def _json_object(values: Mapping[str, str]) -> str:
+    import json
+
+    return json.dumps(values, ensure_ascii=False, separators=(",", ":"))
+
+
+def _validate_text(value: str, label: str) -> str:
+    if "\x00" in value:
+        raise InvalidGameConfiguration(f"Invalid NUL character in {label}.")
+    return value

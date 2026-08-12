@@ -145,13 +145,28 @@ def reconcile_session(
         "updated": updated,
         "missing": missing,
     }
+    scope = {
+        "scanKind": scan_kind,
+        "moveCandidates": [
+            {
+                "existingGameId": suggestion.existing_game_id,
+                "candidateRelativeDir": suggestion.candidate_relative_dir,
+            }
+            for suggestion in suggestions
+        ],
+    }
     connection.execute(
         """
         UPDATE scan_sessions
-        SET status = 'completed', finished_at = ?, counts_json = ?
+        SET status = 'completed', finished_at = ?, counts_json = ?, scope_json = ?
         WHERE id = ?
         """,
-        (now, json.dumps(counts, separators=(",", ":")), session_id),
+        (
+            now,
+            json.dumps(counts, separators=(",", ":")),
+            json.dumps(scope, separators=(",", ":")),
+            session_id,
+        ),
     )
 
     games: list[Game] = []

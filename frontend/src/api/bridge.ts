@@ -1,9 +1,10 @@
+import type { InjectionKey } from 'vue'
 import type { GameShelfBridge } from './contracts'
 import { createMockBridge } from './mockBridge'
 
-type BridgeOptions = {
-  windowObject?: Window
-}
+export const bridgeKey: InjectionKey<GameShelfBridge> = Symbol('GameShelfBridge')
+
+type BridgeOptions = { windowObject?: Window }
 
 export function createBridge(options: BridgeOptions = {}): GameShelfBridge {
   const windowObject = options.windowObject ?? window
@@ -15,30 +16,21 @@ export function createBridge(options: BridgeOptions = {}): GameShelfBridge {
 
 function createDeferredBridge(windowObject: Window): GameShelfBridge {
   let apiPromise: Promise<GameShelfBridge> | undefined
-  const api = () => {
-    apiPromise ??= waitForPywebview(windowObject)
-    return apiPromise
-  }
-  return {
-    async bootstrap() {
-      return (await api()).bootstrap()
+  const api = () => (apiPromise ??= waitForPywebview(windowObject))
+  return new Proxy({} as GameShelfBridge, {
+    get(_target, property: keyof GameShelfBridge) {
+      return async (...args: unknown[]) => {
+        const target = await api()
+        const method = target[property] as (...values: unknown[]) => unknown
+        return method.apply(target, args)
+      }
     },
-    async task_snapshot(taskId) {
-      return (await api()).task_snapshot(taskId)
-    },
-    async cancel_task(taskId) {
-      return (await api()).cancel_task(taskId)
-    },
-  }
+  })
 }
 
 function waitForPywebview(windowObject: Window): Promise<GameShelfBridge> {
   if (windowObject.pywebview?.api) return Promise.resolve(windowObject.pywebview.api)
   return new Promise((resolve) => {
-    windowObject.addEventListener(
-      'pywebviewready',
-      () => resolve(windowObject.pywebview!.api),
-      { once: true },
-    )
+    windowObject.addEventListener('pywebviewready', () => resolve(windowObject.pywebview!.api), { once: true })
   })
 }
