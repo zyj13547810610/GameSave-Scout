@@ -10,6 +10,7 @@ readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
   "pefile>=2024.8.26,<2027",
+  "Pillow>=11.3,<13",
   "pywebview>=6.2,<7",
 ]
 
