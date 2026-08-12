@@ -1,0 +1,28 @@
+Alice Story:
+  files:
+    "<winAppData>/RenPy/Alice":
+      tags: [save]
+      when:
+        - os: windows
+    "<base>/config.ini":
+      tags: [config]
+    "<base>/steam-cloud/*.sav":
+      tags: [save]
+      when:
+        - os: windows
+          store: steam
+    "<home>/.local/share/alice":
+      when:
+        - os: linux
+  installDir:
+    AliceGame: {}
+  registry:
+    HKEY_CURRENT_USER/Software/Studio/Alice:
+      tags: [save]
+  steam:
+    id: 123
+  futureField:
+    accepted: true
+Bob:
+  alias: Alice Story
+

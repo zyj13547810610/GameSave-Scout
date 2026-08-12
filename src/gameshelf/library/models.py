@@ -35,6 +35,7 @@ class Game:
     relative_dir: str | None
     install_path_key: str | None
     title: str
+    detected_title: str | None
     status: GameStatus
     detected_engine_id: str | None
     detected_engine_variant: str | None

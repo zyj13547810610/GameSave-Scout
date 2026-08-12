@@ -79,6 +79,7 @@ def game_from_row(row: sqlite3.Row) -> Game:
         relative_dir=row["relative_dir"],
         install_path_key=row["install_path_key"],
         title=str(row["title"]),
+        detected_title=row["detected_title"],
         status=cast(GameStatus, row["status"]),
         detected_engine_id=row["detected_engine_id"],
         detected_engine_variant=row["detected_engine_variant"],

@@ -13,6 +13,7 @@ dependencies = [
   "Pillow>=11.3,<13",
   "pywebview>=6.2,<7",
   "PyYAML>=6.0.2,<7",
+  "RapidFuzz>=3.13,<4",
 ]
 
 [project.optional-dependencies]
