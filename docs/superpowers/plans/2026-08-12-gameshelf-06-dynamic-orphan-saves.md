@@ -1,46 +1,46 @@
-# GameShelf Dynamic and Orphan Save Discovery Implementation Plan
+# GameShelf 动态与孤立存档发现实施计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **供智能体执行者使用：** 必须使用子技能 `superpowers:subagent-driven-development`（推荐）或 `superpowers:executing-plans`，按任务逐项实施本计划。各步骤使用复选框（`- [ ]`）跟踪进度。
 
-**Goal:** Find unknown save locations through a guided game session and discover legacy/orphan saves through local rule-based scans, while keeping every association user-controlled.
+**目标：** 通过引导式游戏会话寻找未知存档位置，并通过本地规则扫描发现旧存档/孤立存档，同时确保每项关联都由用户控制。
 
-**Architecture:** A session manager combines watchdog filesystem events, bounded fallback snapshots, process-tree lifetime, explicit “just saved” timestamps, and targeted registry snapshots. A separate orphan scanner evaluates Ludusavi paths and engine/path signatures over chosen scopes; both pipelines persist explainable discoveries for review rather than auto-linking them.
+**架构：** 会话管理器结合 watchdog 文件系统事件、受限的降级快照、进程树生命周期、用户明确标记的“刚刚保存”时间点及定向注册表快照。独立的孤立存档扫描器在选定范围内评估 Ludusavi 路径和引擎/路径特征；两条流水线都持久化可解释的发现结果供用户审核，而不自动关联。
 
-**Tech Stack:** Existing static-save stack plus watchdog, psutil, SQLite, Windows registry adapter, RapidFuzz, Vue 3/Vitest, pytest.
+**技术栈：** 现有静态存档技术栈，加上 watchdog、psutil、SQLite、Windows 注册表适配器、RapidFuzz、Vue 3/Vitest、pytest。
 
-## Global Constraints
+## 全局约束
 
-- Dynamic detection is an explicit guided session, never an always-on system monitor.
-- Do not claim filesystem events are attributable to a particular PID; process trees control session lifetime only.
-- Default monitored roots: game directory, Documents, Saved Games, AppData Roaming/Local/LocalLow, accessible ProgramData, custom roots, and confirmed-save parents.
-- Skip inaccessible roots and report them; do not require administrator rights.
-- Never persist raw high-volume events or registry values; persist aggregated evidence only.
-- Filter common log/cache/temp/shader/telemetry/crash noise and cap candidates.
-- Handle observer overflow by time-window metadata fallback and visibly mark incomplete evidence.
-- Orphan discoveries require explicit link/create-save-only/ignore decisions.
-- Expanded disk scans are user-selected, cancellable, bounded, and never silently scan every drive.
-- Never delete, move, edit, back up, or restore save files.
-- Follow TDD and commit after every task.
+- 动态检测是用户明确启动的引导式会话，绝不是常驻系统监控器。
+- 不得声称文件系统事件可归因于某个特定 PID；进程树只用于控制会话生命周期。
+- 默认监控根目录：游戏目录、文档、保存的游戏、AppData Roaming/Local/LocalLow、可访问的 ProgramData、自定义根目录，以及已确认存档位置的父目录。
+- 跳过并报告不可访问的根目录；不要求管理员权限。
+- 绝不持久化高容量原始事件或注册表值；只持久化聚合证据。
+- 过滤常见日志/缓存/临时/着色器/遥测/崩溃噪声，并限制候选项数量。
+- 监视器溢出时，使用时间窗口元数据降级扫描，并明显标记证据不完整。
+- 孤立存档发现必须由用户明确选择关联/创建仅存档卡片/忽略。
+- 扩展磁盘扫描由用户选择、可取消、有明确边界，绝不静默扫描所有驱动器。
+- 绝不删除、移动、编辑、备份或恢复存档文件。
+- 遵循 TDD，并在每个任务完成后提交。
 
 ---
 
-### Task 1: Model, Aggregate, Filter, and Score File Observations
+### 任务 1：对文件观察结果进行建模、聚合、过滤与评分
 
-**Files:**
-- Modify: `pyproject.toml`
-- Create: `src/gameshelf/saves/dynamic_models.py`
-- Create: `src/gameshelf/saves/noise_filters.py`
-- Create: `src/gameshelf/saves/scoring.py`
-- Create: `tests/unit/saves/test_noise_filters.py`
-- Create: `tests/unit/saves/test_scoring.py`
+**文件：**
+- 修改：`pyproject.toml`
+- 新建：`src/gameshelf/saves/dynamic_models.py`
+- 新建：`src/gameshelf/saves/noise_filters.py`
+- 新建：`src/gameshelf/saves/scoring.py`
+- 新建：`tests/unit/saves/test_noise_filters.py`
+- 新建：`tests/unit/saves/test_scoring.py`
 
-**Interfaces:**
-- Produces: `FileObservation(path, event_kinds, first_seen, last_seen, before, after)`.
-- Produces: `ObservationAggregator.record(event)`, `mark_saved(at)`, and `rank(context) -> tuple[SaveCandidate, ...]`.
-- Produces: `SaveCandidate(path, kind, confidence, evidence, filtered_reason)`.
-- Candidate list is capped at 200 before UI and sorted deterministically.
+**接口：**
+- 产出：`FileObservation(path, event_kinds, first_seen, last_seen, before, after)`。
+- 产出：`ObservationAggregator.record(event)`、`mark_saved(at)` 和 `rank(context) -> tuple[SaveCandidate, ...]`。
+- 产出：`SaveCandidate(path, kind, confidence, evidence, filtered_reason)`。
+- 送到 UI 前，候选列表最多保留 200 项，并以确定性方式排序。
 
-- [ ] **Step 1: Write failing aggregation, time-weight, repetition, and noise tests**
+- [ ] **步骤 1：编写会失败的聚合、时间权重、重复与噪声测试**
 
 ```python
 def test_repeated_events_for_same_path_are_aggregated() -> None:
@@ -72,21 +72,21 @@ def test_common_noise_is_filtered(path: str) -> None:
     assert classify_noise(Path(path)).is_noise is True
 ```
 
-- [ ] **Step 2: Add runtime dependencies and run tests to verify failure**
+- [ ] **步骤 2：添加运行时依赖并运行测试以确认失败**
 
-Add `watchdog>=6,<7` and `psutil>=7,<8` to dependencies, reinstall, then run:
+将 `watchdog>=6,<7` 和 `psutil>=7,<8` 添加到依赖，重新安装，然后运行：
 
 ```powershell
 python -m pytest tests/unit/saves/test_noise_filters.py tests/unit/saves/test_scoring.py -v
 ```
 
-Expected: FAIL because dynamic models/scoring are absent.
+预期：失败，因为动态模型/评分尚不存在。
 
-- [ ] **Step 3: Implement explainable additive scoring with hard filters**
+- [ ] **步骤 3：实现带硬过滤器且可解释的加法评分**
 
-Use a wall-clock UTC timestamp plus a monotonic timestamp inside a session: monotonic values drive relative scoring; UTC values filter filesystem metadata and persist session times. Aggregate case-insensitive Windows path keys, moves as source+destination observations, and retain before/after size/mtime where available.
+会话内同时使用墙上时钟 UTC 时间戳和单调时间戳：单调值用于相对评分；UTC 值用于筛选文件系统元数据及持久化会话时间。按不区分大小写的 Windows 路径键聚合；移动操作记录为源和目标两个观察项；可用时保留变更前后的大小/mtime。
 
-Apply these initial score contributions, then clamp to `0..1`:
+应用以下初始评分贡献，再将结果限制在 `0..1`：
 
 ```text
 created/modified within ±2 seconds of a save mark     +0.40
@@ -100,11 +100,11 @@ browser cache or unrelated high-frequency noise        -0.40
 very large (>1 GiB) transient file                      -0.20
 ```
 
-File extensions alone contribute at most `0.10`. Preserve evidence codes and localized detail; do not store inferred PID. Group files in the same parent when three or more coordinated candidates change, and offer the directory as an additional candidate.
+单靠文件扩展名最多贡献 `0.10`。保留证据代码和本地化详情；不存储推断出的 PID。同一父目录中有三个或更多协同变化候选文件时，将它们分组，并额外将该目录作为候选项。
 
-- [ ] **Step 4: Run scoring tests and static checks**
+- [ ] **步骤 4：运行评分测试与静态检查**
 
-Run:
+运行：
 
 ```powershell
 python -m pytest tests/unit/saves/test_noise_filters.py tests/unit/saves/test_scoring.py -v
@@ -112,30 +112,30 @@ python -m ruff check src/gameshelf/saves tests/unit/saves
 python -m mypy src/gameshelf/saves
 ```
 
-Expected: all pass.
+预期：全部通过。
 
-- [ ] **Step 5: Commit candidate scoring**
+- [ ] **步骤 5：提交候选项评分**
 
 ```powershell
 git add pyproject.toml src/gameshelf/saves tests/unit/saves
 git commit -m "feat: score dynamic save observations"
 ```
 
-### Task 2: Monitor Accessible Roots and Fall Back After Overflow
+### 任务 2：监控可访问根目录并在溢出后降级处理
 
-**Files:**
-- Create: `src/gameshelf/saves/filesystem_monitor.py`
-- Create: `src/gameshelf/saves/fallback_scan.py`
-- Create: `tests/unit/saves/test_filesystem_monitor.py`
-- Create: `tests/unit/saves/test_fallback_scan.py`
+**文件：**
+- 新建：`src/gameshelf/saves/filesystem_monitor.py`
+- 新建：`src/gameshelf/saves/fallback_scan.py`
+- 新建：`tests/unit/saves/test_filesystem_monitor.py`
+- 新建：`tests/unit/saves/test_fallback_scan.py`
 
-**Interfaces:**
-- Produces: `FilesystemMonitor.start(roots, callback) -> MonitorReport` and `stop() -> MonitorReport`.
-- Produces: `MonitorReport(active_roots, skipped_roots, overflowed_roots)`.
-- Produces: `TimeWindowScanner.scan(roots, started_at, finished_at, context) -> observations`.
-- Adapter exposes `mark_overflow(root)` so platform errors/queue overflow are testable.
+**接口：**
+- 产出：`FilesystemMonitor.start(roots, callback) -> MonitorReport` 和 `stop() -> MonitorReport`。
+- 产出：`MonitorReport(active_roots, skipped_roots, overflowed_roots)`。
+- 产出：`TimeWindowScanner.scan(roots, started_at, finished_at, context) -> observations`。
+- 适配器公开 `mark_overflow(root)`，使平台错误/队列溢出可测试。
 
-- [ ] **Step 1: Write failing accessible-root, event, cancellation, and fallback tests**
+- [ ] **步骤 1：编写会失败的可访问根目录、事件、取消与降级测试**
 
 ```python
 def test_monitor_skips_inaccessible_root_and_keeps_accessible_root(fake_observer, tmp_path) -> None:
@@ -158,43 +158,43 @@ def test_overflow_root_uses_time_window_metadata_scan(tmp_path, task_context) ->
     assert [item.path for item in observations] == [changed]
 ```
 
-- [ ] **Step 2: Run monitor/fallback tests and verify failure**
+- [ ] **步骤 2：运行监控/降级测试并确认失败**
 
-Run: `python -m pytest tests/unit/saves/test_filesystem_monitor.py tests/unit/saves/test_fallback_scan.py -v`
+运行：`python -m pytest tests/unit/saves/test_filesystem_monitor.py tests/unit/saves/test_fallback_scan.py -v`
 
-Expected: FAIL because monitor modules are absent.
+预期：失败，因为监控模块尚不存在。
 
-- [ ] **Step 3: Implement watchdog adaptation and bounded metadata fallback**
+- [ ] **步骤 3：实现 watchdog 适配与受限元数据降级扫描**
 
-Use watchdog `Observer` on Windows, recursive schedules, and a dedicated bounded event queue of 50,000 normalized events. Catch scheduling `PermissionError`, `FileNotFoundError`, and `OSError` per root. Queue saturation or observer error marks only that root overflowed and continues other roots.
+在 Windows 上使用 watchdog `Observer`、递归调度及容量为 50,000 个规范化事件的专用有界事件队列。按根目录捕获调度时的 `PermissionError`、`FileNotFoundError` 和 `OSError`。队列饱和或监视器错误只将对应根目录标记为溢出，并继续处理其他根目录。
 
-The fallback scanner traverses only overflowed/user-approved roots, skips links/reparse points and noise directories, checks cancellation every 64 entries, and selects files whose `mtime` or `ctime` falls within session start minus 2 seconds through finish plus 5 seconds. Cap visited entries at 500,000 per root and report truncation; never read file content during fallback.
+降级扫描器只遍历溢出或用户批准的根目录，跳过链接/重解析点和噪声目录，每处理 64 个条目检查一次取消，并选择 `mtime` 或 `ctime` 位于“会话开始前 2 秒至结束后 5 秒”范围内的文件。每个根目录最多访问 500,000 个条目，截断时要报告；降级期间绝不读取文件内容。
 
-- [ ] **Step 4: Run monitor/fallback tests and static checks**
+- [ ] **步骤 4：运行监控/降级测试与静态检查**
 
-Run: `python -m pytest tests/unit/saves/test_filesystem_monitor.py tests/unit/saves/test_fallback_scan.py -v`
+运行：`python -m pytest tests/unit/saves/test_filesystem_monitor.py tests/unit/saves/test_fallback_scan.py -v`
 
-Expected: all pass.
+预期：全部通过。
 
-- [ ] **Step 5: Commit filesystem monitoring**
+- [ ] **步骤 5：提交文件系统监控**
 
 ```powershell
 git add src/gameshelf/saves/filesystem_monitor.py src/gameshelf/saves/fallback_scan.py tests/unit/saves
 git commit -m "feat: monitor save writes with overflow fallback"
 ```
 
-### Task 3: Track Game Process-Tree Lifetime Without File Attribution
+### 任务 3：跟踪游戏进程树生命周期，但不归因文件操作
 
-**Files:**
-- Create: `src/gameshelf/platform/windows/process_tree.py`
-- Create: `tests/unit/platform/windows/test_process_tree.py`
+**文件：**
+- 新建：`src/gameshelf/platform/windows/process_tree.py`
+- 新建：`tests/unit/platform/windows/test_process_tree.py`
 
-**Interfaces:**
-- Consumes: the safe launch configuration from Plan 02.
-- Produces: `ProcessTreeTracker.start(root_pid)`, `snapshot() -> ProcessTreeSnapshot`, `wait_until_exit(cancel, timeout)`, and `stop_tracking()`.
-- Snapshot contains known PIDs and alive state only; it has no file-write claims.
+**接口：**
+- 使用：计划 02 的安全启动配置。
+- 产出：`ProcessTreeTracker.start(root_pid)`、`snapshot() -> ProcessTreeSnapshot`、`wait_until_exit(cancel, timeout)` 和 `stop_tracking()`。
+- 快照只包含已知 PID 和存活状态；不声称任何文件写入归属。
 
-- [ ] **Step 1: Write failing parent-exit/child-survival and PID-reuse tests**
+- [ ] **步骤 1：编写会失败的父进程退出/子进程存活及 PID 重用测试**
 
 ```python
 def test_tracker_stays_alive_when_launcher_parent_exits_but_child_runs(fake_psutil) -> None:
@@ -213,44 +213,44 @@ def test_tracker_rejects_reused_pid_with_new_create_time(fake_psutil) -> None:
     assert tracker.snapshot().alive_pids == ()
 ```
 
-- [ ] **Step 2: Run process-tree tests and verify failure**
+- [ ] **步骤 2：运行进程树测试并确认失败**
 
-Run: `python -m pytest tests/unit/platform/windows/test_process_tree.py -v`
+运行：`python -m pytest tests/unit/platform/windows/test_process_tree.py -v`
 
-Expected: FAIL because tracker is absent.
+预期：失败，因为跟踪器尚不存在。
 
-- [ ] **Step 3: Implement psutil tracking with create-time identity**
+- [ ] **步骤 3：使用创建时间标识实现 psutil 跟踪**
 
-Capture `(pid, create_time)` for the root and every observed descendant. Poll at 500 ms while active, retain descendants seen before their parent exits, and treat `NoSuchProcess`, `AccessDenied`, and zombie states as nonfatal evidence. `wait_until_exit` ends after no known process remains for a 2-second grace period, cancellation, or configured timeout.
+记录根进程和每个已观察后代的 `(pid, create_time)`。活动期间每 500 ms 轮询；保留父进程退出前已看到的后代；将 `NoSuchProcess`、`AccessDenied` 和僵尸状态作为非致命证据。没有任何已知进程存活并经过 2 秒宽限期、发生取消或达到配置超时后，`wait_until_exit` 结束。
 
-Do not add methods named `writes`, `files_written`, or similar; the tracker is strictly lifecycle state.
+不得添加名为 `writes`、`files_written` 或类似的方法；跟踪器严格只表示生命周期状态。
 
-- [ ] **Step 4: Run process tests and static checks**
+- [ ] **步骤 4：运行进程测试与静态检查**
 
-Run: `python -m pytest tests/unit/platform/windows/test_process_tree.py -v`
+运行：`python -m pytest tests/unit/platform/windows/test_process_tree.py -v`
 
-Expected: all pass.
+预期：全部通过。
 
-- [ ] **Step 5: Commit process lifecycle tracking**
+- [ ] **步骤 5：提交进程生命周期跟踪**
 
 ```powershell
 git add src/gameshelf/platform/windows/process_tree.py tests/unit/platform/windows/test_process_tree.py
 git commit -m "feat: track save-session process lifetime"
 ```
 
-### Task 4: Snapshot Only Targeted Registry Keys
+### 任务 4：仅快照定向注册表键
 
-**Files:**
-- Create: `src/gameshelf/platform/windows/registry.py`
-- Create: `src/gameshelf/saves/registry_snapshot.py`
-- Create: `tests/unit/saves/test_registry_snapshot.py`
+**文件：**
+- 新建：`src/gameshelf/platform/windows/registry.py`
+- 新建：`src/gameshelf/saves/registry_snapshot.py`
+- 新建：`tests/unit/saves/test_registry_snapshot.py`
 
-**Interfaces:**
-- Produces: `WindowsRegistry.key_exists`, `walk_key_metadata`, and `open_key_in_regedit`.
-- Produces: `RegistrySnapshot.capture(keys) -> RegistrySnapshot` and `diff(before, after) -> tuple[RegistryChange, ...]`.
-- Snapshot stores key path, value name, type, and SHA-256 of serialized value—not raw value content.
+**接口：**
+- 产出：`WindowsRegistry.key_exists`、`walk_key_metadata` 和 `open_key_in_regedit`。
+- 产出：`RegistrySnapshot.capture(keys) -> RegistrySnapshot` 和 `diff(before, after) -> tuple[RegistryChange, ...]`。
+- 快照存储键路径、值名称、类型以及序列化值的 SHA-256，不存储原始值内容。
 
-- [ ] **Step 1: Write failing hash/diff/access tests**
+- [ ] **步骤 1：编写会失败的哈希/差异/访问测试**
 
 ```python
 def test_registry_diff_reports_changed_value_without_retaining_content(fake_registry) -> None:
@@ -264,44 +264,44 @@ def test_registry_diff_reports_changed_value_without_retaining_content(fake_regi
     assert b"secret-b" not in repr(after).encode()
 ```
 
-- [ ] **Step 2: Run registry snapshot tests and verify failure**
+- [ ] **步骤 2：运行注册表快照测试并确认失败**
 
-Run: `python -m pytest tests/unit/saves/test_registry_snapshot.py -v`
+运行：`python -m pytest tests/unit/saves/test_registry_snapshot.py -v`
 
-Expected: FAIL because registry abstractions are absent.
+预期：失败，因为注册表抽象尚不存在。
 
-- [ ] **Step 3: Implement targeted, bounded registry metadata traversal**
+- [ ] **步骤 3：实现定向且受限的注册表元数据遍历**
 
-Accept only normalized HKCU/HKLM keys generated by confirmed/static hints. Traverse at most 2,000 values/subkeys per target and eight levels deep. Hash `type + length + bytes` in memory and discard raw bytes. Access denied becomes skipped-key evidence. There is no whole-registry watcher or scan.
+只接受由已确认位置/静态提示生成的规范化 HKCU/HKLM 键。每个目标最多遍历 2,000 个值/子键，深度最多八层。在内存中对 `type + length + bytes` 计算哈希，随后丢弃原始字节。访问被拒绝转为跳过键的证据。不实现全注册表监视或扫描。
 
-- [ ] **Step 4: Run registry tests and static checks**
+- [ ] **步骤 4：运行注册表测试与静态检查**
 
-Run: `python -m pytest tests/unit/saves/test_registry_snapshot.py -v`
+运行：`python -m pytest tests/unit/saves/test_registry_snapshot.py -v`
 
-Expected: all pass.
+预期：全部通过。
 
-- [ ] **Step 5: Commit targeted registry comparison**
+- [ ] **步骤 5：提交定向注册表比较**
 
 ```powershell
 git add src/gameshelf/platform/windows/registry.py src/gameshelf/saves/registry_snapshot.py tests/unit/saves/test_registry_snapshot.py
 git commit -m "feat: compare targeted save registry keys"
 ```
 
-### Task 5: Orchestrate and Persist Guided Detection Sessions
+### 任务 5：编排并持久化引导式检测会话
 
-**Files:**
-- Create: `src/gameshelf/saves/detection_session.py`
-- Create: `src/gameshelf/saves/detection_service.py`
-- Create: `tests/integration/saves/test_detection_service.py`
-- Modify: `src/gameshelf/bootstrap/application.py`
+**文件：**
+- 新建：`src/gameshelf/saves/detection_session.py`
+- 新建：`src/gameshelf/saves/detection_service.py`
+- 新建：`tests/integration/saves/test_detection_service.py`
+- 修改：`src/gameshelf/bootstrap/application.py`
 
-**Interfaces:**
-- Produces: `SaveDetectionService.start(game_id, custom_roots) -> ActiveDetection`.
-- Produces: `mark_saved(session_id)`, `stop(session_id)`, `snapshot(session_id)`, and `accept(session_id, candidate_ids)`.
-- Produces one active session per game and a maximum of two active sessions application-wide.
-- Session states: `preparing`, `monitoring`, `settling`, `completed`, `cancelled`, `failed`.
+**接口：**
+- 产出：`SaveDetectionService.start(game_id, custom_roots) -> ActiveDetection`。
+- 产出：`mark_saved(session_id)`、`stop(session_id)`、`snapshot(session_id)` 和 `accept(session_id, candidate_ids)`。
+- 每个游戏最多有一个活动会话，整个应用最多同时有两个活动会话。
+- 会话状态：`preparing`、`monitoring`、`settling`、`completed`、`cancelled`、`failed`。
 
-- [ ] **Step 1: Write failing state-machine and persistence tests**
+- [ ] **步骤 1：编写会失败的状态机与持久化测试**
 
 ```python
 def test_detection_session_collects_save_and_requires_acceptance(detection_harness) -> None:
@@ -324,32 +324,32 @@ def test_detection_failure_does_not_remove_existing_locations(detection_harness)
     assert detection_harness.save_locations("game-1") == [existing]
 ```
 
-Also test duplicate active session rejection, process exit automatic stop, manual stop, timeout, no candidates, skipped roots, overflow fallback, and targeted registry change.
+还要测试拒绝重复活动会话、进程退出时自动停止、手动停止、超时、无候选项、跳过根目录、溢出降级和定向注册表变化。
 
-- [ ] **Step 2: Run detection integration tests and verify failure**
+- [ ] **步骤 2：运行检测集成测试并确认失败**
 
-Run: `python -m pytest tests/integration/saves/test_detection_service.py -v`
+运行：`python -m pytest tests/integration/saves/test_detection_service.py -v`
 
-Expected: FAIL because orchestration is absent.
+预期：失败，因为编排功能尚不存在。
 
-- [ ] **Step 3: Implement the full state machine and aggregate persistence**
+- [ ] **步骤 3：实现完整状态机与聚合持久化**
 
-Preparation:
+准备阶段：
 
-1. resolve game/install/launch configuration;
-2. build and deduplicate default/custom/confirmed-parent monitor roots;
-3. capture targeted registry snapshot;
-4. start filesystem monitors;
-5. launch the game and start process tracking;
-6. transition to `monitoring`.
+1. 解析游戏/安装/启动配置；
+2. 构建默认/自定义/已确认位置父目录的监控根目录并去重；
+3. 捕获定向注册表快照；
+4. 启动文件系统监控器；
+5. 启动游戏并开始进程跟踪；
+6. 转入 `monitoring`。
 
-Stop on explicit request, process-tree exit, cancellation, or a default six-hour timeout. After stop, wait a three-second quiet period, stop observers, run fallback for overflowed roots, take the after-registry snapshot, score/aggregate, persist at most 200 `save_discoveries`, and store summary only—not raw events. Run the whole session as one `TaskRegistry` operation and call `context.raise_if_cancelled()` during setup, monitoring polls, quiet period, fallback enumeration, and pre-persistence; cancellation stops observers and process tracking in `finally` and records `cancelled`.
+在明确请求、进程树退出、取消或默认六小时超时时停止。停止后等待三秒静默期，停止监视器，对溢出根目录运行降级扫描，获取事后注册表快照，评分/聚合，最多持久化 200 条 `save_discoveries`，并且只存摘要，不存原始事件。整个会话作为一项 `TaskRegistry` 操作运行；在设置、监控轮询、静默期、降级枚举和持久化前调用 `context.raise_if_cancelled()`；取消时在 `finally` 中停止监视器与进程跟踪，并记录为 `cancelled`。
 
-Acceptance collapses selected paths to portable templates and inserts confirmed `dynamic` locations in one transaction. Registry candidates use kind `registry`. If there are no candidates, return actions `expanded_scan` and `manual_select` rather than a failure.
+接受操作将选中路径折叠为便携模板，并在一个事务中插入已确认的 `dynamic` 位置。注册表候选项使用类型 `registry`。没有候选项时，返回 `expanded_scan` 和 `manual_select` 操作，而不是报错。
 
-- [ ] **Step 4: Run detection, monitor, scoring, and persistence tests**
+- [ ] **步骤 4：运行检测、监控、评分与持久化测试**
 
-Run:
+运行：
 
 ```powershell
 python -m pytest tests/unit/saves tests/integration/saves/test_detection_service.py -v
@@ -357,32 +357,32 @@ python -m ruff check src tests
 python -m mypy src
 ```
 
-Expected: all pass.
+预期：全部通过。
 
-- [ ] **Step 5: Commit guided detection service**
+- [ ] **步骤 5：提交引导式检测服务**
 
 ```powershell
 git add src/gameshelf/saves src/gameshelf/bootstrap tests/integration/saves
 git commit -m "feat: orchestrate guided save detection"
 ```
 
-### Task 6: Build the Guided Save-Detection Wizard
+### 任务 6：构建引导式存档检测向导
 
-**Files:**
-- Modify: `src/gameshelf/bridge/api.py`
-- Create: `tests/unit/bridge/test_detection_api.py`
-- Modify: `frontend/src/api/contracts.ts`
-- Create: `frontend/src/features/saves/SaveDetectionWizard.vue`
-- Create: `frontend/src/features/saves/DetectionCandidateList.vue`
-- Create: `frontend/src/features/saves/detectionStore.ts`
-- Create: `frontend/tests/SaveDetectionWizard.spec.ts`
-- Modify: `frontend/src/features/library/GameDetailDrawer.vue`
+**文件：**
+- 修改：`src/gameshelf/bridge/api.py`
+- 新建：`tests/unit/bridge/test_detection_api.py`
+- 修改：`frontend/src/api/contracts.ts`
+- 新建：`frontend/src/features/saves/SaveDetectionWizard.vue`
+- 新建：`frontend/src/features/saves/DetectionCandidateList.vue`
+- 新建：`frontend/src/features/saves/detectionStore.ts`
+- 新建：`frontend/tests/SaveDetectionWizard.spec.ts`
+- 修改：`frontend/src/features/library/GameDetailDrawer.vue`
 
-**Interfaces:**
-- Adds bridge methods `start_save_detection`, `mark_game_saved`, `stop_save_detection`, `save_detection_snapshot`, and `accept_detection_candidates`.
-- Wizard states mirror backend states and poll only while active.
+**接口：**
+- 添加桥接方法 `start_save_detection`、`mark_game_saved`、`stop_save_detection`、`save_detection_snapshot` 和 `accept_detection_candidates`。
+- 向导状态与后端状态一致，仅在活动期间轮询。
 
-- [ ] **Step 1: Write failing wizard-state tests**
+- [ ] **步骤 1：编写会失败的向导状态测试**
 
 ```ts
 it('guides prepare launch mark save stop and review without auto-accepting', async () => {
@@ -399,28 +399,28 @@ it('guides prepare launch mark save stop and review without auto-accepting', asy
 })
 ```
 
-Add tests for skipped-root summary, overflow/incomplete warning, no candidates, cancellation, game launch failure, and registry candidate warning.
+添加跳过根目录摘要、溢出/不完整警告、无候选项、取消、游戏启动失败及注册表候选警告测试。
 
-- [ ] **Step 2: Run bridge/wizard tests and verify failure**
+- [ ] **步骤 2：运行桥接/向导测试并确认失败**
 
-Run:
+运行：
 
 ```powershell
 python -m pytest tests/unit/bridge/test_detection_api.py -v
 npm --prefix frontend run test:unit -- --run tests/SaveDetectionWizard.spec.ts
 ```
 
-Expected: FAIL because endpoints/wizard are absent.
+预期：失败，因为端点/向导尚不存在。
 
-- [ ] **Step 3: Implement the explicit guided workflow**
+- [ ] **步骤 3：实现明确的引导式流程**
 
-Before launch, show monitored locations and permit adding custom directories. During monitoring, show elapsed time, process-running state, “我刚刚保存了,” and Stop. After completion, show ranked file/directory/registry candidates with high/medium/low confidence and evidence; default-check only high-confidence filesystem candidates, never registry candidates.
+启动前显示监控位置，并允许添加自定义目录。监控期间显示已用时间、进程运行状态、“我刚刚保存了”和停止按钮。完成后显示按排名排列的文件/目录/注册表候选项及高/中/低置信度和证据；默认只勾选高置信度文件系统候选项，绝不默认勾选注册表候选项。
 
-The overflow warning text must say “部分文件事件可能遗漏，已使用时间窗口补充扫描,” not imply completeness. No-candidate state offers expanded scan and manual selection. Closing an active wizard asks whether to stop detection.
+溢出警告必须写明“部分文件事件可能遗漏，已使用时间窗口补充扫描”，不得暗示结果完整。无候选项状态提供扩展扫描和手动选择。关闭活动中的向导时，询问是否停止检测。
 
-- [ ] **Step 4: Run detection UI and backend suites**
+- [ ] **步骤 4：运行检测 UI 与后端测试套件**
 
-Run:
+运行：
 
 ```powershell
 python -m pytest tests/unit/bridge/test_detection_api.py tests/integration/saves/test_detection_service.py -v
@@ -428,31 +428,31 @@ npm --prefix frontend run test:unit -- --run
 npm --prefix frontend run type-check
 ```
 
-Expected: all pass.
+预期：全部通过。
 
-- [ ] **Step 5: Commit the detection wizard**
+- [ ] **步骤 5：提交检测向导**
 
 ```powershell
 git add src/gameshelf/bridge frontend/src frontend/tests tests/unit/bridge
 git commit -m "feat: guide users through save detection"
 ```
 
-### Task 7: Implement Rule-Based and User-Selected Orphan Scans
+### 任务 7：实现基于规则及用户选择的孤立存档扫描
 
-**Files:**
-- Create: `src/gameshelf/saves/orphan_models.py`
-- Create: `src/gameshelf/saves/orphan_scanner.py`
-- Create: `src/gameshelf/saves/legacy_patterns.py`
-- Create: `tests/unit/saves/test_legacy_patterns.py`
-- Create: `tests/integration/saves/test_orphan_scanner.py`
+**文件：**
+- 新建：`src/gameshelf/saves/orphan_models.py`
+- 新建：`src/gameshelf/saves/orphan_scanner.py`
+- 新建：`src/gameshelf/saves/legacy_patterns.py`
+- 新建：`tests/unit/saves/test_legacy_patterns.py`
+- 新建：`tests/integration/saves/test_orphan_scanner.py`
 
-**Interfaces:**
-- Produces: `OrphanScanner.scan_default(context) -> OrphanScanSummary`.
-- Produces: `scan_selected(roots, max_depth, context) -> OrphanScanSummary`.
-- Default scan evaluates applicable Ludusavi known-folder/registry rules plus engine legacy roots.
-- Selected scan depth range is `1..12`, default `6`; max 1,000,000 visited entries per selected root.
+**接口：**
+- 产出：`OrphanScanner.scan_default(context) -> OrphanScanSummary`。
+- 产出：`scan_selected(roots, max_depth, context) -> OrphanScanSummary`。
+- 默认扫描评估适用的 Ludusavi 已知文件夹/注册表规则及引擎旧式根目录。
+- 选择扫描的深度范围为 `1..12`，默认 `6`；每个选中根目录最多访问 1,000,000 个条目。
 
-- [ ] **Step 1: Write failing deleted-game and low-confidence tests**
+- [ ] **步骤 1：编写会失败的已删除游戏与低置信度测试**
 
 ```python
 def test_default_scan_finds_renpy_and_unity_orphans(orphan_harness) -> None:
@@ -471,59 +471,59 @@ def test_generic_save_file_without_context_stays_low_confidence(orphan_harness) 
     assert candidate.confidence < 0.5
 ```
 
-Also test Ludusavi known-folder paths, ignored noise/system directories, cancellation, entry/depth truncation, duplicate discoveries, and no automatic game link.
+还要测试 Ludusavi 已知文件夹路径、忽略的噪声/系统目录、取消、条目/深度截断、重复发现及不自动关联游戏。
 
-- [ ] **Step 2: Run orphan tests and verify failure**
+- [ ] **步骤 2：运行孤立存档测试并确认失败**
 
-Run: `python -m pytest tests/unit/saves/test_legacy_patterns.py tests/integration/saves/test_orphan_scanner.py -v`
+运行：`python -m pytest tests/unit/saves/test_legacy_patterns.py tests/integration/saves/test_orphan_scanner.py -v`
 
-Expected: FAIL because orphan scanning is absent.
+预期：失败，因为孤立存档扫描尚不存在。
 
-- [ ] **Step 3: Implement default database scan and bounded selected-root scan**
+- [ ] **步骤 3：实现默认数据库扫描与受限的选定根目录扫描**
 
-Default scan:
+默认扫描：
 
-- evaluate every Ludusavi Windows file/registry rule whose leading token can expand without a store/root user ID;
-- check concrete paths/globs for existence without reading save content;
-- enumerate direct children of `<winAppData>\RenPy` and two levels beneath LocalLow for Unity-like company/product structure;
-- inspect common engine-relative names only when the selected/default root context supports them;
-- merge duplicate path keys and retain all evidence.
+- 评估所有开头令牌无需平台商店/root 用户 ID 即可展开的 Ludusavi Windows 文件/注册表规则；
+- 检查具体路径/glob 是否存在，但不读取存档内容；
+- 枚举 `<winAppData>\RenPy` 的直接子目录，并检查 LocalLow 下两层深度的 Unity 式公司/产品结构；
+- 只有选定/默认根目录上下文支持时，才检查常见引擎相对名称；
+- 合并重复路径键并保留全部证据。
 
-Selected scan skips Windows, Program Files, `$Recycle.Bin`, System Volume Information, node/browser caches, links/reparse points, and user-configured exclusions. It looks for strong directory structures and save filename groups; a single generic save extension is low confidence. Check cancellation every 64 entries and report depth/entry truncation.
+选定扫描跳过 Windows、Program Files、`$Recycle.Bin`、System Volume Information、node/浏览器缓存、链接/重解析点和用户配置的排除项。它寻找强目录结构和存档文件名组；单独一个通用存档扩展名只具有低置信度。每处理 64 个条目检查一次取消，并报告深度/条目截断。
 
-Persist a `scan_sessions(kind='orphan')` and aggregated `save_discoveries`. Never set `linked_game_id` during scanning.
+持久化一条 `scan_sessions(kind='orphan')` 和聚合后的 `save_discoveries`。扫描期间绝不设置 `linked_game_id`。
 
-- [ ] **Step 4: Run orphan and static-manifest regression tests**
+- [ ] **步骤 4：运行孤立存档与静态清单回归测试**
 
-Run: `python -m pytest tests/unit/saves tests/integration/saves/test_orphan_scanner.py -v`
+运行：`python -m pytest tests/unit/saves tests/integration/saves/test_orphan_scanner.py -v`
 
-Expected: all pass.
+预期：全部通过。
 
-- [ ] **Step 5: Commit orphan scanning**
+- [ ] **步骤 5：提交孤立存档扫描**
 
 ```powershell
 git add src/gameshelf/saves tests/unit/saves tests/integration/saves
 git commit -m "feat: discover orphaned save locations"
 ```
 
-### Task 8: Review, Link, Create Save-Only Cards, or Ignore Discoveries
+### 任务 8：审核、关联、创建仅存档卡片或忽略发现结果
 
-**Files:**
-- Create: `src/gameshelf/saves/orphan_review.py`
-- Modify: `src/gameshelf/bridge/api.py`
-- Create: `tests/integration/saves/test_orphan_review.py`
-- Modify: `frontend/src/api/contracts.ts`
-- Create: `frontend/src/features/saves/OrphanSavePage.vue`
-- Create: `frontend/src/features/saves/OrphanSaveCard.vue`
-- Create: `frontend/src/features/saves/OrphanScanDialog.vue`
-- Create: `frontend/tests/OrphanSavePage.spec.ts`
+**文件：**
+- 新建：`src/gameshelf/saves/orphan_review.py`
+- 修改：`src/gameshelf/bridge/api.py`
+- 新建：`tests/integration/saves/test_orphan_review.py`
+- 修改：`frontend/src/api/contracts.ts`
+- 新建：`frontend/src/features/saves/OrphanSavePage.vue`
+- 新建：`frontend/src/features/saves/OrphanSaveCard.vue`
+- 新建：`frontend/src/features/saves/OrphanScanDialog.vue`
+- 新建：`frontend/tests/OrphanSavePage.spec.ts`
 
-**Interfaces:**
-- Produces: `OrphanReviewService.link(discovery_id, game_id)`, `create_save_only(discovery_id, title)`, and `ignore(discovery_id)`.
-- Adds bridge methods `start_orphan_scan`, `list_orphan_discoveries`, `link_orphan_save`, `create_save_only_game`, and `ignore_orphan_save`.
-- `create_save_only` creates one `games(status='save_only')` row and one confirmed `legacy_scan` save location transactionally.
+**接口：**
+- 产出：`OrphanReviewService.link(discovery_id, game_id)`、`create_save_only(discovery_id, title)` 和 `ignore(discovery_id)`。
+- 添加桥接方法 `start_orphan_scan`、`list_orphan_discoveries`、`link_orphan_save`、`create_save_only_game` 和 `ignore_orphan_save`。
+- `create_save_only` 在事务中创建一条 `games(status='save_only')` 记录和一个已确认的 `legacy_scan` 存档位置。
 
-- [ ] **Step 1: Write failing transactional review tests**
+- [ ] **步骤 1：编写会失败的事务化审核测试**
 
 ```python
 def test_create_save_only_card_is_atomic(review_harness) -> None:
@@ -543,26 +543,26 @@ def test_link_requires_existing_game_and_does_not_move_files(review_harness) -> 
     assert review_harness.filesystem_snapshot() == before
 ```
 
-- [ ] **Step 2: Run review/UI tests and verify failure**
+- [ ] **步骤 2：运行审核/UI 测试并确认失败**
 
-Run:
+运行：
 
 ```powershell
 python -m pytest tests/integration/saves/test_orphan_review.py -v
 npm --prefix frontend run test:unit -- --run tests/OrphanSavePage.spec.ts
 ```
 
-Expected: FAIL because review service/page are absent.
+预期：失败，因为审核服务/页面尚不存在。
 
-- [ ] **Step 3: Implement explicit review actions and evidence-first UI**
+- [ ] **步骤 3：实现明确的审核操作与证据优先 UI**
 
-The page filters unreviewed/linked/save-only/ignored and confidence/engine. Each card shows display path, suggested game/engine, evidence, confidence, and last scan. Link opens an existing-game search; create-save-only requires a nonempty user title; ignore is reversible through the ignored filter.
+页面可按未审核/已关联/仅存档/已忽略以及置信度/引擎筛选。每张卡片显示路径、建议游戏/引擎、证据、置信度和最近扫描时间。关联操作打开现有游戏搜索；创建仅存档卡片要求用户输入非空标题；忽略操作可通过“已忽略”筛选撤销。
 
-Link/create transactions insert or reuse a confirmed save location and update discovery status. They do not rename, move, inspect content, or delete the discovered files. Low-confidence results never preselect an action.
+关联/创建事务插入或复用已确认的存档位置，并更新发现状态。它们不会重命名、移动、检查内容或删除已发现文件。低置信度结果绝不预选任何操作。
 
-- [ ] **Step 4: Run full dynamic/orphan acceptance gate**
+- [ ] **步骤 4：运行完整动态/孤立存档验收门禁**
 
-Run:
+运行：
 
 ```powershell
 python -m pytest
@@ -573,27 +573,27 @@ npm --prefix frontend run type-check
 npm --prefix frontend run build
 ```
 
-Expected: all pass.
+预期：全部通过。
 
-- [ ] **Step 5: Commit completed orphan review**
+- [ ] **步骤 5：提交完整的孤立存档审核**
 
 ```powershell
 git add src/gameshelf/saves src/gameshelf/bridge frontend/src frontend/tests tests
 git commit -m "feat: review and link orphan save discoveries"
 ```
 
-### Task 9: Add a Real Process/File Integration Fixture
+### 任务 9：添加真实进程/文件集成夹具
 
-**Files:**
-- Create: `tests/fixtures/save_writer.py`
-- Create: `tests/integration/saves/test_real_save_writer_session.py`
-- Modify: `README.md`
+**文件：**
+- 新建：`tests/fixtures/save_writer.py`
+- 新建：`tests/integration/saves/test_real_save_writer_session.py`
+- 修改：`README.md`
 
-**Interfaces:**
-- Test helper writes a requested file after receiving `save` on stdin and exits after `quit`.
-- Exercises process lifetime plus real watchdog delivery without requiring a commercial game.
+**接口：**
+- 测试辅助程序从 stdin 收到 `save` 后写入指定文件，收到 `quit` 后退出。
+- 无需商业游戏即可测试进程生命周期和真实 watchdog 事件传递。
 
-- [ ] **Step 1: Write the failing Windows-only integration test**
+- [ ] **步骤 1：编写会失败的 Windows 专用集成测试**
 
 ```python
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows watchdog integration")
@@ -608,42 +608,42 @@ def test_real_helper_write_is_ranked_after_save_mark(real_detection_harness, tmp
     assert any(item.path == target and item.confidence >= 0.7 for item in result.candidates)
 ```
 
-- [ ] **Step 2: Run the test and verify failure**
+- [ ] **步骤 2：运行测试并确认失败**
 
-Run: `python -m pytest tests/integration/saves/test_real_save_writer_session.py -v`
+运行：`python -m pytest tests/integration/saves/test_real_save_writer_session.py -v`
 
-Expected: FAIL because the helper/harness path is absent.
+预期：失败，因为辅助程序/测试工具路径尚不存在。
 
-- [ ] **Step 3: Implement the deterministic helper and integration adapter**
+- [ ] **步骤 3：实现确定性的辅助程序与集成适配器**
 
-The helper accepts target path as one argv element, creates its parent, writes `b"gameshelf-test-save"` on `save`, flushes/fsyncs, and exits on `quit`. The harness launches `[sys.executable, helper, target]` with `shell=False` and monitors only the temporary parent. It must cleanly terminate the helper in `finally` on test failure.
+辅助程序将目标路径作为一个 argv 元素接收，创建其父目录，在收到 `save` 时写入 `b"gameshelf-test-save"` 并执行 flush/fsync，在收到 `quit` 时退出。测试工具以 `shell=False` 启动 `[sys.executable, helper, target]`，并且只监控临时父目录。测试失败时必须在 `finally` 中干净终止辅助程序。
 
-- [ ] **Step 4: Run Windows integration and the entire increment**
+- [ ] **步骤 4：运行 Windows 集成测试与完整增量测试**
 
-Run:
+运行：
 
 ```powershell
 python -m pytest tests/integration/saves/test_real_save_writer_session.py -v
 python -m pytest
 ```
 
-Expected: all pass on Windows; only the explicitly marked real-watch test skips elsewhere.
+预期：在 Windows 上全部通过；其他平台只跳过明确标记的真实监控测试。
 
-- [ ] **Step 5: Commit the real integration fixture**
+- [ ] **步骤 5：提交真实集成夹具**
 
 ```powershell
 git add tests/fixtures/save_writer.py tests/integration/saves/test_real_save_writer_session.py README.md
 git commit -m "test: verify real guided save monitoring"
 ```
 
-## Dynamic/Orphan Increment Acceptance Gate
+## 动态/孤立存档增量验收门禁
 
-- A guided session launches only the configured game, records one or more explicit save marks, and ranks the test save correctly.
-- Process tracking controls lifetime but never appears as file-write attribution.
-- Inaccessible roots are reported and do not require elevation.
-- Overflow/truncation produces visible incomplete-evidence warnings and bounded fallback work.
-- No raw event stream or registry value content remains in SQLite.
-- No candidate becomes a save location without user acceptance.
-- Default orphan scan can identify representative Ren'Py/Unity/Ludusavi leftovers.
-- A generic `save01.dat` without context remains low confidence and unnamed.
-- Link, save-only, and ignore actions never alter discovered files.
+- 引导式会话只启动已配置游戏，记录一次或多次明确的保存标记，并正确排列测试存档。
+- 进程跟踪控制生命周期，但绝不表现为文件写入归因。
+- 不可访问的根目录会被报告，且无需提升权限。
+- 溢出/截断会产生清晰可见的证据不完整警告，并执行受限的降级工作。
+- SQLite 中不保留原始事件流或注册表值内容。
+- 未经用户接受，任何候选项都不会成为存档位置。
+- 默认孤立存档扫描能识别有代表性的 Ren'Py/Unity/Ludusavi 遗留存档。
+- 缺少上下文的通用 `save01.dat` 保持低置信度且不命名。
+- 关联、仅存档和忽略操作绝不改动已发现文件。

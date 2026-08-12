@@ -1,46 +1,46 @@
-# GameShelf Engine Recognition Implementation Plan
+# GameShelf 游戏引擎识别实施计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **供智能体执行者使用：** 必须使用子技能 `superpowers:subagent-driven-development`（推荐）或 `superpowers:executing-plans`，按任务逐项实施本计划。各步骤使用复选框（`- [ ]`）跟踪进度。
 
-**Goal:** Identify the approved MTool-listed, Galgame, Unity, and experimental engine families from bounded read-only evidence while preserving unknown games and manual corrections.
+**目标：** 根据有限的只读证据识别已确认的 MTool 所列引擎、Galgame 引擎、Unity 及实验性引擎系列，同时保留未知游戏和手动修正。
 
-**Architecture:** A detector registry runs cheap probes before bounded inspection. Most formats use declarative file/magic rules; metadata-heavy families use focused Python detectors. Results retain every weighted evidence item, distinguish detected from adopted values, and refuse a definitive label when evidence is ambiguous.
+**架构：** 检测器注册表先执行低成本探测，再进行受限检查。大多数格式使用声明式文件/魔数规则；依赖较多元数据的系列使用专用 Python 检测器。结果保留每条加权证据，区分检测值与采用值，并在证据存在歧义时拒绝给出确定标签。
 
-**Tech Stack:** Existing scanning/library stack, Python protocols/dataclasses, pefile, YAML rules, pytest fixtures, Vue 3/Vitest.
+**技术栈：** 现有扫描/游戏库技术栈、Python protocol/dataclass、pefile、YAML 规则、pytest 夹具、Vue 3/Vitest。
 
-## Global Constraints
+## 全局约束
 
-- Engine recognition never controls whether a directory is allowed in the library.
-- Read names, directory structure, PE metadata, small text configs, and bounded file regions only.
-- Never execute, inject into, decrypt, extract, or rewrite a game.
-- Never commit commercial game assets; tests use synthetic directory trees and minimal legal byte headers.
-- Every result includes confidence and human-readable evidence.
-- Preserve manual engine values while continuing to refresh detected suggestions.
-- A weak recognizer returns unknown or “疑似”; it does not force the closest label.
-- Formal support means a maintained recognizer and fixtures, not guaranteed recognition of every customized build.
-- Follow TDD and commit after every task.
+- 引擎识别绝不决定某个目录能否加入游戏库。
+- 只读取名称、目录结构、PE 元数据、小型文本配置和受限的文件区域。
+- 绝不执行游戏，也不对其进行注入、解密、提取或改写。
+- 绝不提交商业游戏资源；测试使用合成目录树和最小合法字节标头。
+- 每项结果都包含置信度和便于人理解的证据。
+- 保留手动设置的引擎值，同时继续刷新自动检测建议。
+- 较弱的识别器返回未知或“疑似”，不会强行套用最接近的标签。
+- 正式支持表示我们维护相应识别器和夹具，并不保证识别每个定制构建。
+- 遵循 TDD，并在每个任务完成后提交。
 
 ---
 
-### Task 1: Build the Detector Protocol, Bounded Reader, and Registry
+### 任务 1：构建检测器协议、受限读取器与注册表
 
-**Files:**
-- Create: `src/gameshelf/engines/__init__.py`
-- Create: `src/gameshelf/engines/models.py`
-- Create: `src/gameshelf/engines/base.py`
-- Create: `src/gameshelf/engines/bounded_reader.py`
-- Create: `src/gameshelf/engines/registry.py`
-- Create: `tests/unit/engines/test_registry.py`
-- Create: `tests/unit/engines/test_bounded_reader.py`
+**文件：**
+- 新建：`src/gameshelf/engines/__init__.py`
+- 新建：`src/gameshelf/engines/models.py`
+- 新建：`src/gameshelf/engines/base.py`
+- 新建：`src/gameshelf/engines/bounded_reader.py`
+- 新建：`src/gameshelf/engines/registry.py`
+- 新建：`tests/unit/engines/test_registry.py`
+- 新建：`tests/unit/engines/test_bounded_reader.py`
 
-**Interfaces:**
-- Produces: `EngineEvidence(code, detail, weight, path)`.
-- Produces: `EngineMatch(engine_id, variant, confidence, evidence, rule_version, experimental)`.
-- Produces protocol `EngineDetector.cheap_probe(context) -> bool` and `inspect(context) -> EngineMatch | None`.
-- Produces: `DetectorRegistry.detect(game_dir, executable) -> DetectionOutcome`.
-- Produces bounded reads `read_prefix`, `read_suffix`, `contains_in_edges`, and `read_text_limit`.
+**接口：**
+- 产出：`EngineEvidence(code, detail, weight, path)`。
+- 产出：`EngineMatch(engine_id, variant, confidence, evidence, rule_version, experimental)`。
+- 产出协议：`EngineDetector.cheap_probe(context) -> bool` 和 `inspect(context) -> EngineMatch | None`。
+- 产出：`DetectorRegistry.detect(game_dir, executable) -> DetectionOutcome`。
+- 产出受限读取方法：`read_prefix`、`read_suffix`、`contains_in_edges` 和 `read_text_limit`。
 
-- [ ] **Step 1: Write failing confidence, ambiguity, and read-limit tests**
+- [ ] **步骤 1：编写会失败的置信度、歧义和读取上限测试**
 
 ```python
 def test_registry_runs_inspection_only_after_cheap_probe(tmp_path) -> None:
@@ -68,13 +68,13 @@ def test_bounded_reader_never_reads_unbounded_file(tmp_path, spy_open) -> None:
     assert spy_open.total_bytes_read <= 8192
 ```
 
-- [ ] **Step 2: Run engine-core tests and verify failure**
+- [ ] **步骤 2：运行引擎核心测试并确认失败**
 
-Run: `python -m pytest tests/unit/engines/test_registry.py tests/unit/engines/test_bounded_reader.py -v`
+运行：`python -m pytest tests/unit/engines/test_registry.py tests/unit/engines/test_bounded_reader.py -v`
 
-Expected: FAIL because the engine package is absent.
+预期：失败，因为引擎软件包尚不存在。
 
-- [ ] **Step 3: Implement immutable results and conservative selection**
+- [ ] **步骤 3：实现不可变结果与保守选择策略**
 
 ```python
 @dataclass(frozen=True)
@@ -94,13 +94,13 @@ class EngineMatch:
     experimental: bool = False
 ```
 
-Clamp confidence to `0..1`, sort by confidence then stable engine ID, require `>=0.70` for a best formal result and `>=0.80` for a best experimental result, and mark ambiguous when the top two differ by less than `0.08`. Keep at most three alternatives. A detector exception becomes diagnostic evidence/logging and must not abort other detectors.
+将置信度限制在 `0..1`，先按置信度、再按稳定引擎 ID 排序；最佳正式结果要求 `>=0.70`，最佳实验性结果要求 `>=0.80`；前两名差值小于 `0.08` 时标记为有歧义。最多保留三个备选项。检测器异常转为诊断证据/日志，不得中止其他检测器。
 
-Bounded text reads are at most 256 KiB with BOM/UTF-8/CP932 fallback; binary inspection reads at most 64 KiB per file unless a detector explicitly uses prefix+suffix limits whose sum remains 128 KiB.
+受限文本读取最多 256 KiB，并按 BOM/UTF-8/CP932 回退；二进制检查每个文件最多读取 64 KiB，除非检测器明确同时使用前缀与后缀上限，但两者合计仍不得超过 128 KiB。
 
-- [ ] **Step 4: Run focused tests and static checks**
+- [ ] **步骤 4：运行针对性测试与静态检查**
 
-Run:
+运行：
 
 ```powershell
 python -m pytest tests/unit/engines/test_registry.py tests/unit/engines/test_bounded_reader.py -v
@@ -108,32 +108,32 @@ python -m ruff check src/gameshelf/engines tests/unit/engines
 python -m mypy src/gameshelf/engines
 ```
 
-Expected: all pass.
+预期：全部通过。
 
-- [ ] **Step 5: Commit detector infrastructure**
+- [ ] **步骤 5：提交检测器基础设施**
 
 ```powershell
 git add src/gameshelf/engines tests/unit/engines
 git commit -m "feat: add bounded engine detector registry"
 ```
 
-### Task 2: Implement the Declarative Rule Detector
+### 任务 2：实现声明式规则检测器
 
-**Files:**
-- Modify: `pyproject.toml`
-- Create: `src/gameshelf/engines/rule_schema.py`
-- Create: `src/gameshelf/engines/rule_detector.py`
-- Create: `resources/rules/engines.schema.json`
-- Create: `resources/rules/engines.yaml`
-- Create: `tests/unit/engines/test_rule_detector.py`
+**文件：**
+- 修改：`pyproject.toml`
+- 新建：`src/gameshelf/engines/rule_schema.py`
+- 新建：`src/gameshelf/engines/rule_detector.py`
+- 新建：`resources/rules/engines.schema.json`
+- 新建：`resources/rules/engines.yaml`
+- 新建：`tests/unit/engines/test_rule_detector.py`
 
-**Interfaces:**
-- Produces: `load_engine_rules(path: Path) -> tuple[EngineRule, ...]` with strict unknown-key rejection.
-- Produces: `RuleDetector(rule: EngineRule)`.
-- Supported evidence operators: `path_exists`, `glob_exists`, `magic_at`, `edge_contains`, `text_contains`, `pe_field_contains`.
-- Rule combination supports required `all`, weighted `any`, and negative evidence.
+**接口：**
+- 产出：严格拒绝未知键的 `load_engine_rules(path: Path) -> tuple[EngineRule, ...]`。
+- 产出：`RuleDetector(rule: EngineRule)`。
+- 支持的证据运算符：`path_exists`、`glob_exists`、`magic_at`、`edge_contains`、`text_contains`、`pe_field_contains`。
+- 规则组合支持必需的 `all`、加权的 `any` 和负面证据。
 
-- [ ] **Step 1: Write failing schema and matching tests**
+- [ ] **步骤 1：编写会失败的架构与匹配测试**
 
 ```python
 def test_rule_requires_all_and_scores_any_evidence(tmp_path) -> None:
@@ -156,15 +156,15 @@ def test_unknown_rule_key_is_rejected(tmp_path) -> None:
         load_engine_rules(path)
 ```
 
-- [ ] **Step 2: Run rule tests and verify failure**
+- [ ] **步骤 2：运行规则测试并确认失败**
 
-Add `PyYAML>=6.0.2,<7` to project dependencies, reinstall the editable package, then run: `python -m pytest tests/unit/engines/test_rule_detector.py -v`.
+将 `PyYAML>=6.0.2,<7` 添加到项目依赖，重新安装可编辑软件包，然后运行：`python -m pytest tests/unit/engines/test_rule_detector.py -v`。
 
-Expected: FAIL because the rule engine is absent.
+预期：失败，因为规则引擎尚不存在。
 
-- [ ] **Step 3: Implement strict YAML parsing and weighted evidence**
+- [ ] **步骤 3：实现严格 YAML 解析与加权证据**
 
-Use this stable YAML shape:
+使用以下稳定的 YAML 结构：
 
 ```yaml
 version: "2026.08.12-1"
@@ -192,45 +192,45 @@ rules:
         weight: -0.10
 ```
 
-Normalize rule-relative paths and reject absolute paths/`..`. Glob only below the game root and cap matches at 128 per evidence item. Confidence is the sum of present weights divided by the sum of positive weights, adjusted by negative evidence and clamped. Every matched operator becomes a localized evidence code; missing optional evidence is not shown as an error.
+规范化规则中的相对路径，并拒绝绝对路径/`..`。glob 仅在游戏根目录下执行，每条证据最多匹配 128 项。置信度等于已出现证据的权重和除以正面权重总和，再根据负面证据调整并限制范围。每个匹配的运算符都转为本地化证据代码；缺少可选证据时不显示为错误。
 
-- [ ] **Step 4: Run rule tests and validate the shipped YAML**
+- [ ] **步骤 4：运行规则测试并校验随附 YAML**
 
-Run:
+运行：
 
 ```powershell
 python -m pytest tests/unit/engines/test_rule_detector.py -v
 python -c "from pathlib import Path; from gameshelf.engines.rule_schema import load_engine_rules; print(len(load_engine_rules(Path('resources/rules/engines.yaml'))))"
 ```
 
-Expected: tests pass and the validation command prints at least `1`.
+预期：测试通过，校验命令输出至少 `1`。
 
-- [ ] **Step 5: Commit declarative engine rules**
+- [ ] **步骤 5：提交声明式引擎规则**
 
 ```powershell
 git add pyproject.toml src/gameshelf/engines resources/rules tests/unit/engines
 git commit -m "feat: add declarative engine recognition rules"
 ```
 
-### Task 3: Add RPG Maker, WOLF, Ren'Py, and Unity Detectors
+### 任务 3：添加 RPG Maker、WOLF、Ren'Py 与 Unity 检测器
 
-**Files:**
-- Create: `src/gameshelf/engines/detectors/__init__.py`
-- Create: `src/gameshelf/engines/detectors/rpg_maker.py`
-- Create: `src/gameshelf/engines/detectors/renpy.py`
-- Create: `src/gameshelf/engines/detectors/unity.py`
-- Create: `src/gameshelf/engines/detectors/wolf.py`
-- Create: `tests/unit/engines/detectors/test_rpg_maker.py`
-- Create: `tests/unit/engines/detectors/test_renpy.py`
-- Create: `tests/unit/engines/detectors/test_unity.py`
-- Create: `tests/unit/engines/detectors/test_wolf.py`
+**文件：**
+- 新建：`src/gameshelf/engines/detectors/__init__.py`
+- 新建：`src/gameshelf/engines/detectors/rpg_maker.py`
+- 新建：`src/gameshelf/engines/detectors/renpy.py`
+- 新建：`src/gameshelf/engines/detectors/unity.py`
+- 新建：`src/gameshelf/engines/detectors/wolf.py`
+- 新建：`tests/unit/engines/detectors/test_rpg_maker.py`
+- 新建：`tests/unit/engines/detectors/test_renpy.py`
+- 新建：`tests/unit/engines/detectors/test_unity.py`
+- 新建：`tests/unit/engines/detectors/test_wolf.py`
 
-**Interfaces:**
-- Produces formal IDs/variants: `rpg_maker_2k`, `rpg_maker_xp`, `rpg_maker_vx`, `rpg_maker_vx_ace`, `mkxp_z`, `rgu`, `rpg_maker_mv`, `rpg_maker_mz`, `renpy`, `unity`, and `wolf_rpg`.
-- Unity match metadata may include `company_name` and `product_name` when extracted reliably.
-- Tyrano/Visual Novel Maker are not misclassified as generic RPG Maker MV merely because they use NW.js.
+**接口：**
+- 产出正式 ID/变体：`rpg_maker_2k`、`rpg_maker_xp`、`rpg_maker_vx`、`rpg_maker_vx_ace`、`mkxp_z`、`rgu`、`rpg_maker_mv`、`rpg_maker_mz`、`renpy`、`unity` 和 `wolf_rpg`。
+- 能够可靠提取时，Unity 匹配元数据可包含 `company_name` 和 `product_name`。
+- 不会仅因使用 NW.js 就将 Tyrano/Visual Novel Maker 错分为通用 RPG Maker MV。
 
-- [ ] **Step 1: Write parameterized positive and near-negative fixtures**
+- [ ] **步骤 1：编写参数化的正例与近似反例夹具**
 
 ```python
 @pytest.mark.parametrize(("files", "engine_id", "variant"), [
@@ -247,17 +247,17 @@ def test_rpg_maker_variants(file_tree, files, engine_id, variant):
     assert (match.engine_id, match.variant) == (engine_id, variant)
 ```
 
-Add tests for `mkxp.json`/`mkxp-z` PE metadata, `RGU.exe`/RGSS library evidence, Ren'Py `game/*.rpyc` plus `renpy/`, Unity `UnityPlayer.dll + <exe>_Data/globalgamemanagers`, and WOLF `Game.exe + Data/BasicData/Game.dat` or encrypted `Data.wolf`. Add near-negative tests with only `Game.exe`, only `UnityPlayer.dll`, or only a `www` folder.
+为以下情况添加测试：`mkxp.json`/`mkxp-z` PE 元数据、`RGU.exe`/RGSS 库证据、Ren'Py 的 `game/*.rpyc` 加 `renpy/`、Unity 的 `UnityPlayer.dll + <exe>_Data/globalgamemanagers`，以及 WOLF 的 `Game.exe + Data/BasicData/Game.dat` 或加密 `Data.wolf`。添加仅有 `Game.exe`、仅有 `UnityPlayer.dll` 或仅有 `www` 文件夹的近似反例测试。
 
-- [ ] **Step 2: Run detector tests and verify failure**
+- [ ] **步骤 2：运行检测器测试并确认失败**
 
-Run: `python -m pytest tests/unit/engines/detectors -v`
+运行：`python -m pytest tests/unit/engines/detectors -v`
 
-Expected: FAIL because the focused detectors are absent.
+预期：失败，因为专用检测器尚不存在。
 
-- [ ] **Step 3: Implement variant-specific combination rules**
+- [ ] **步骤 3：实现变体专用组合规则**
 
-Use these minimum high-confidence combinations:
+至少使用以下高置信度组合：
 
 ```text
 RPG Maker 2k/2k3 : RPG_RT.exe + (RPG_RT.ldb or RPG_RT.lmt)
@@ -271,11 +271,11 @@ Unity            : UnityPlayer.dll + executable-named *_Data + globalgamemanager
 WOLF             : Game.exe + Data/BasicData/Game.dat, or Game.exe + encrypted .wolf data
 ```
 
-For Unity, read product/company metadata only from bounded supported metadata/PE fields; absent metadata does not reduce a valid Unity engine match below threshold. For MV/MZ, check both root and `www/` layouts. Do not treat a generic RGSS archive without its matching launcher/config evidence as definitive.
+对于 Unity，只从受限且受支持的元数据/PE 字段读取产品和公司信息；缺少元数据不会使有效的 Unity 引擎匹配降到阈值以下。对于 MV/MZ，同时检查根目录和 `www/` 布局。通用 RGSS 归档如果缺少对应启动器/配置证据，不得视为确定结果。
 
-- [ ] **Step 4: Run detector and registry tests**
+- [ ] **步骤 4：运行检测器与注册表测试**
 
-Run:
+运行：
 
 ```powershell
 python -m pytest tests/unit/engines -v
@@ -283,29 +283,29 @@ python -m ruff check src/gameshelf/engines tests/unit/engines
 python -m mypy src/gameshelf/engines
 ```
 
-Expected: all pass.
+预期：全部通过。
 
-- [ ] **Step 5: Commit core RPG/runtime detectors**
+- [ ] **步骤 5：提交核心 RPG/运行时检测器**
 
 ```powershell
 git add src/gameshelf/engines/detectors tests/unit/engines/detectors
 git commit -m "feat: recognize RPG Maker RenPy Unity and WOLF"
 ```
 
-### Task 4: Add the Remaining MTool-Listed Recognizers
+### 任务 4：添加 MTool 所列的其余识别器
 
-**Files:**
-- Modify: `resources/rules/engines.yaml`
-- Create: `src/gameshelf/engines/detectors/creator_engines.py`
-- Create: `tests/unit/engines/detectors/test_creator_engines.py`
-- Create: `tests/fixtures/engines/README.md`
+**文件：**
+- 修改：`resources/rules/engines.yaml`
+- 新建：`src/gameshelf/engines/detectors/creator_engines.py`
+- 新建：`tests/unit/engines/detectors/test_creator_engines.py`
+- 新建：`tests/fixtures/engines/README.md`
 
-**Interfaces:**
-- Produces formal IDs: `smile_game_builder`, `rpg_developer_bakin`, `tyrano`, `kirikiri`, `visual_novel_maker`, `choicescript`, `srpg_studio`, and `pixel_game_maker_mv`.
-- KiriKiri variant is `2`, `Z`, or unknown when evidence cannot distinguish.
-- A Unity-exported SMILE GAME BUILDER game may return Unity unless SGB-specific evidence exists; this is correct conservative behavior.
+**接口：**
+- 产出正式 ID：`smile_game_builder`、`rpg_developer_bakin`、`tyrano`、`kirikiri`、`visual_novel_maker`、`choicescript`、`srpg_studio` 和 `pixel_game_maker_mv`。
+- KiriKiri 变体为 `2`、`Z`，证据无法区分时为未知。
+- 由 Unity 导出的 SMILE GAME BUILDER 游戏在没有 SGB 专属证据时可能返回 Unity；这是正确的保守行为。
 
-- [ ] **Step 1: Write failing fixtures for every MTool-listed family**
+- [ ] **步骤 1：为 MTool 所列的每个系列编写会失败的夹具**
 
 ```python
 @pytest.mark.parametrize(("engine_id", "files"), [
@@ -320,17 +320,17 @@ def test_mtool_listed_rules(engine_registry, file_tree, engine_id, files):
     assert outcome.best.engine_id == engine_id
 ```
 
-Add explicit PE metadata fixtures/fakes for SMILE GAME BUILDER (`SMILE GAME BUILDER` or `SmileBoom`), RPG Developer Bakin (`RPG Developer Bakin`/`BakinPlayer`), and Visual Novel Maker (`Visual Novel Maker`) combined with their runtime data layout. Add a generic Unity/NW.js negative for each so product metadata alone or a generic runtime alone cannot misclassify.
+为 SMILE GAME BUILDER（`SMILE GAME BUILDER` 或 `SmileBoom`）、RPG Developer Bakin（`RPG Developer Bakin`/`BakinPlayer`）及 Visual Novel Maker（`Visual Novel Maker`）添加明确的 PE 元数据夹具/假对象，并与各自的运行时数据布局组合。为每种情况添加一个通用 Unity/NW.js 反例，确保只有产品元数据或只有通用运行时不会造成误分类。
 
-- [ ] **Step 2: Run creator-engine tests and verify failure**
+- [ ] **步骤 2：运行创作工具引擎测试并确认失败**
 
-Run: `python -m pytest tests/unit/engines/detectors/test_creator_engines.py -v`
+运行：`python -m pytest tests/unit/engines/detectors/test_creator_engines.py -v`
 
-Expected: FAIL for all newly listed IDs.
+预期：所有新列出的 ID 都失败。
 
-- [ ] **Step 3: Add conservative formal recognizers**
+- [ ] **步骤 3：添加保守的正式识别器**
 
-Implement the following evidence policy:
+实现以下证据策略：
 
 ```text
 TyranoBuilder/Script : data/system/Config.tjs + tyrano runtime or projectID
@@ -343,32 +343,32 @@ RPG Developer Bakin  : Bakin player/product evidence + Bakin data layout
 Visual Novel Maker   : VNM product/runtime evidence + VNM script/data structure
 ```
 
-When only the shared Unity or NW.js base is present, return the base engine (Unity) or no specialized result. Never use a folder name alone as sufficient formal evidence.
+只有共享的 Unity 或 NW.js 基础运行时时，返回基础引擎（Unity）或不返回专用结果。绝不将单独一个文件夹名称当作充分的正式证据。
 
-- [ ] **Step 4: Run all formal-engine tests**
+- [ ] **步骤 4：运行全部正式引擎测试**
 
-Run: `python -m pytest tests/unit/engines -v`
+运行：`python -m pytest tests/unit/engines -v`
 
-Expected: every approved MTool-listed engine has a positive fixture and a near-negative fixture; all tests pass.
+预期：每个已确认的 MTool 所列引擎都有正例夹具和近似反例夹具；全部测试通过。
 
-- [ ] **Step 5: Commit remaining MTool recognizers**
+- [ ] **步骤 5：提交其余 MTool 识别器**
 
 ```powershell
 git add resources/rules src/gameshelf/engines tests/unit/engines tests/fixtures/engines
 git commit -m "feat: recognize MTool-listed creator engines"
 ```
 
-### Task 5: Add Formal Galgame Format Recognizers
+### 任务 5：添加正式 Galgame 格式识别器
 
-**Files:**
-- Modify: `resources/rules/engines.yaml`
-- Create: `tests/unit/engines/test_galgame_rules.py`
+**文件：**
+- 修改：`resources/rules/engines.yaml`
+- 新建：`tests/unit/engines/test_galgame_rules.py`
 
-**Interfaces:**
-- Produces formal IDs: `artemis`, `reallive`, `siglus`, `bgi_ethornell`, `catsystem2`, `yuris`, and `nscripter`.
-- Variant field distinguishes `RealLive`/`SiglusEngine` and `NScripter`/`ONScripter` only when evidence supports it.
+**接口：**
+- 产出正式 ID：`artemis`、`reallive`、`siglus`、`bgi_ethornell`、`catsystem2`、`yuris` 和 `nscripter`。
+- 只有证据支持时，变体字段才区分 `RealLive`/`SiglusEngine` 和 `NScripter`/`ONScripter`。
 
-- [ ] **Step 1: Write failing synthetic magic-header tests**
+- [ ] **步骤 1：编写会失败的合成魔数标头测试**
 
 ```python
 @pytest.mark.parametrize(("engine_id", "files"), [
@@ -383,17 +383,17 @@ def test_galgame_signature_combinations(engine_registry, file_tree, engine_id, f
     assert engine_registry.detect(file_tree(files), None).best.engine_id == engine_id
 ```
 
-Add Siglus (`SiglusEngine.exe` PE/product evidence plus `Scene.pck`/scenario data), KiriKiri already covered, BGI `BURI` + `KO ARC20`, CatSystem `KIF` INT, and ONScripter executable-name/runtime evidence. Test that a generic `.arc`, `.dat`, `.int`, `.pac`, or `Game.exe` alone does not match.
+添加 Siglus（`SiglusEngine.exe` 的 PE/产品证据加 `Scene.pck`/场景数据）、已经覆盖的 KiriKiri、BGI 的 `BURI` + `KO ARC20`、CatSystem 的 `KIF` INT，以及 ONScripter 可执行文件名/运行时证据。测试单独一个通用 `.arc`、`.dat`、`.int`、`.pac` 或 `Game.exe` 不会匹配。
 
-- [ ] **Step 2: Run Galgame rule tests and verify failure**
+- [ ] **步骤 2：运行 Galgame 规则测试并确认失败**
 
-Run: `python -m pytest tests/unit/engines/test_galgame_rules.py -v`
+运行：`python -m pytest tests/unit/engines/test_galgame_rules.py -v`
 
-Expected: FAIL because rules are not yet shipped.
+预期：失败，因为规则尚未随应用提供。
 
-- [ ] **Step 3: Encode combination rules with magic plus companion evidence**
+- [ ] **步骤 3：编码“魔数加配套证据”的组合规则**
 
-Use bounded signatures derived from public format documentation/reference implementations:
+使用来自公开格式文档/参考实现的受限签名：
 
 ```text
 Artemis       : PFS "pf" + MJA0 or Artemis PE/runtime evidence
@@ -406,32 +406,32 @@ NScripter     : nscript.dat/0.txt + NSA/SAR/NS2 archive or NScripter runtime
 ONScripter    : ONScripter runtime name/PE evidence + NScripter script/archive layout
 ```
 
-Require at least two independent signals when an extension or four-byte magic is common. Evidence messages must name the matched file and signal without exposing file contents.
+扩展名或四字节魔数较常见时，要求至少两个独立信号。证据消息必须指出匹配的文件和信号，但不得暴露文件内容。
 
-- [ ] **Step 4: Run all formal and negative tests**
+- [ ] **步骤 4：运行全部正式与反例测试**
 
-Run: `python -m pytest tests/unit/engines -v`
+运行：`python -m pytest tests/unit/engines -v`
 
-Expected: all pass; generic extension near-negatives remain unknown.
+预期：全部通过；通用扩展名近似反例仍保持未知。
 
-- [ ] **Step 5: Commit formal Galgame rules**
+- [ ] **步骤 5：提交正式 Galgame 规则**
 
 ```powershell
 git add resources/rules/engines.yaml tests/unit/engines/test_galgame_rules.py
 git commit -m "feat: recognize formal Galgame engine families"
 ```
 
-### Task 6: Add Experimental Legacy Recognizers
+### 任务 6：添加实验性旧式引擎识别器
 
-**Files:**
-- Modify: `resources/rules/engines.yaml`
-- Create: `tests/unit/engines/test_experimental_rules.py`
+**文件：**
+- 修改：`resources/rules/engines.yaml`
+- 新建：`tests/unit/engines/test_experimental_rules.py`
 
-**Interfaces:**
-- Produces experimental IDs: `qlie`, `majiro`, `malie`, `shiina_rio`, `softpal_amusecraft`, `entis`, and `nitroplus`.
-- All returned matches have `experimental=True` and require confidence `>=0.80`.
+**接口：**
+- 产出实验性 ID：`qlie`、`majiro`、`malie`、`shiina_rio`、`softpal_amusecraft`、`entis` 和 `nitroplus`。
+- 所有返回的匹配项都具有 `experimental=True`，并要求置信度 `>=0.80`。
 
-- [ ] **Step 1: Write failing strong-signature and generic-extension tests**
+- [ ] **步骤 1：编写会失败的强签名与通用扩展名测试**
 
 ```python
 @pytest.mark.parametrize(("engine_id", "filename", "content"), [
@@ -450,53 +450,53 @@ def test_experimental_magic(engine_registry, tmp_path, engine_id, filename, cont
     assert outcome.best.experimental is True
 ```
 
-For each extension, add a same-extension random-content negative that stays unknown.
+为每种扩展名添加同扩展名但内容随机的反例，并确保它保持未知。
 
-- [ ] **Step 2: Run experimental tests and verify failure**
+- [ ] **步骤 2：运行实验性测试并确认失败**
 
-Run: `python -m pytest tests/unit/engines/test_experimental_rules.py -v`
+运行：`python -m pytest tests/unit/engines/test_experimental_rules.py -v`
 
-Expected: FAIL because experimental rules are absent.
+预期：失败，因为实验性规则尚不存在。
 
-- [ ] **Step 3: Add bounded strong signatures and experimental labels**
+- [ ] **步骤 3：添加受限的强签名与实验性标签**
 
-Use `FilePackVer` in bounded file edges for QLIE, `MajiroArcV`, `LIB`/`LIBP`/`LIBU` plus Malie companions, `WARC`, `VAFS`/`PAC ` plus SoftPal companions, `Entis\x1a`/`VIST\x1a`, and `NPA\x01`/`nitP`. A single generic extension never contributes confidence.
+使用以下证据：QLIE 文件受限边缘中的 `FilePackVer`、`MajiroArcV`、`LIB`/`LIBP`/`LIBU` 加 Malie 配套文件、`WARC`、`VAFS`/`PAC ` 加 SoftPal 配套文件、`Entis\x1a`/`VIST\x1a` 及 `NPA\x01`/`nitP`。单独一个通用扩展名绝不贡献置信度。
 
-Expose “实验性识别” in the result evidence. Vendor-custom engines are not represented by a fake catch-all rule; users can manually set `custom:<label>` later through the UI.
+在结果证据中显示“实验性识别”。厂商定制引擎不使用虚假的兜底规则表示；用户之后可在 UI 中手动设置 `custom:<label>`。
 
-- [ ] **Step 4: Run all engine rules and schema validation**
+- [ ] **步骤 4：运行全部引擎规则与架构校验**
 
-Run:
+运行：
 
 ```powershell
 python -m pytest tests/unit/engines -v
 python -c "from pathlib import Path; from gameshelf.engines.rule_schema import load_engine_rules; rules=load_engine_rules(Path('resources/rules/engines.yaml')); print(len(rules))"
 ```
 
-Expected: all pass and the rule count covers formal plus experimental families.
+预期：全部通过，规则数量覆盖正式及实验性系列。
 
-- [ ] **Step 5: Commit experimental recognizers**
+- [ ] **步骤 5：提交实验性识别器**
 
 ```powershell
 git add resources/rules/engines.yaml tests/unit/engines/test_experimental_rules.py
 git commit -m "feat: add experimental legacy engine signatures"
 ```
 
-### Task 7: Integrate Engine Detection into Scanning Without Overwriting Manual Values
+### 任务 7：将引擎检测集成到扫描中且不覆盖手动值
 
-**Files:**
-- Create: `src/gameshelf/engines/service.py`
-- Modify: `src/gameshelf/scanning/service.py`
-- Modify: `src/gameshelf/library/models.py`
-- Modify: `src/gameshelf/library/repository.py`
-- Create: `tests/integration/engines/test_scan_engine_integration.py`
+**文件：**
+- 新建：`src/gameshelf/engines/service.py`
+- 修改：`src/gameshelf/scanning/service.py`
+- 修改：`src/gameshelf/library/models.py`
+- 修改：`src/gameshelf/library/repository.py`
+- 新建：`tests/integration/engines/test_scan_engine_integration.py`
 
-**Interfaces:**
-- Produces: `EngineDetectionService.detect(game_dir, executable) -> DetectionOutcome`.
-- Scan writes `detected_engine_id`, `detected_engine_variant`, `engine_confidence`, and evidence every successful observation.
-- Scan copies detected values into adopted `engine_id`/`variant` only when `engine_is_manual` is false.
+**接口：**
+- 产出：`EngineDetectionService.detect(game_dir, executable) -> DetectionOutcome`。
+- 每次成功观察时，扫描写入 `detected_engine_id`、`detected_engine_variant`、`engine_confidence` 和证据。
+- 仅当 `engine_is_manual` 为 false 时，扫描才把检测值复制到采用的 `engine_id`/`variant`。
 
-- [ ] **Step 1: Write failing scan/manual-override tests**
+- [ ] **步骤 1：编写会失败的扫描/手动覆盖测试**
 
 ```python
 def test_scan_adopts_detected_engine_when_not_manual(engine_scan_harness) -> None:
@@ -516,52 +516,52 @@ def test_scan_refreshes_suggestion_but_preserves_manual_engine(engine_scan_harne
     assert refreshed.engine_is_manual is True
 ```
 
-- [ ] **Step 2: Run integration tests and verify failure**
+- [ ] **步骤 2：运行集成测试并确认失败**
 
-Run: `python -m pytest tests/integration/engines/test_scan_engine_integration.py -v`
+运行：`python -m pytest tests/integration/engines/test_scan_engine_integration.py -v`
 
-Expected: FAIL because scanning does not call the registry.
+预期：失败，因为扫描尚未调用注册表。
 
-- [ ] **Step 3: Add detection after candidate/EXE ranking and before reconciliation**
+- [ ] **步骤 3：在候选项/EXE 排名后、核对前添加检测**
 
-Call engine detection only for observed game candidates, not every traversed folder. Store evidence as a JSON array of `{code, detail, path, weight}` and rule version in the same scan reconciliation transaction. Ambiguous results store no `detected_engine_id` but retain alternatives in evidence. A detector failure becomes a scan warning and leaves the game usable.
+只对观察到的游戏候选项调用引擎检测，而不是对每个遍历到的文件夹调用。在同一扫描核对事务中，将证据存为 `{code, detail, path, weight}` JSON 数组并保存规则版本。有歧义的结果不存储 `detected_engine_id`，但在证据中保留备选项。检测器失败转为扫描警告，游戏仍保持可用。
 
-- [ ] **Step 4: Run scanning and engine suites**
+- [ ] **步骤 4：运行扫描与引擎测试套件**
 
-Run: `python -m pytest tests/unit/engines tests/integration/engines tests/integration/scanning -v`
+运行：`python -m pytest tests/unit/engines tests/integration/engines tests/integration/scanning -v`
 
-Expected: all pass.
+预期：全部通过。
 
-- [ ] **Step 5: Commit scan integration**
+- [ ] **步骤 5：提交扫描集成**
 
 ```powershell
 git add src/gameshelf/engines/service.py src/gameshelf/scanning src/gameshelf/library tests/integration/engines
 git commit -m "feat: detect engines during library scans"
 ```
 
-### Task 8: Show Evidence and Support Manual Engine Overrides
+### 任务 8：显示证据并支持手动覆盖引擎
 
-**Files:**
-- Modify: `src/gameshelf/bridge/api.py`
-- Create: `tests/unit/bridge/test_engine_api.py`
-- Modify: `frontend/src/api/contracts.ts`
-- Create: `frontend/src/features/engines/EngineBadge.vue`
-- Create: `frontend/src/features/engines/EngineDetails.vue`
-- Create: `frontend/src/features/engines/EnginePicker.vue`
-- Create: `frontend/tests/EngineDetails.spec.ts`
-- Create: `frontend/tests/EnginePicker.spec.ts`
-- Modify: `frontend/src/features/library/GameCard.vue`
-- Modify: `frontend/src/features/library/GameDetailDrawer.vue`
-- Modify: `frontend/src/features/library/LibraryToolbar.vue`
-- Create: `src/gameshelf/tools/__init__.py`
-- Create: `src/gameshelf/tools/detect_directory.py`
+**文件：**
+- 修改：`src/gameshelf/bridge/api.py`
+- 新建：`tests/unit/bridge/test_engine_api.py`
+- 修改：`frontend/src/api/contracts.ts`
+- 新建：`frontend/src/features/engines/EngineBadge.vue`
+- 新建：`frontend/src/features/engines/EngineDetails.vue`
+- 新建：`frontend/src/features/engines/EnginePicker.vue`
+- 新建：`frontend/tests/EngineDetails.spec.ts`
+- 新建：`frontend/tests/EnginePicker.spec.ts`
+- 修改：`frontend/src/features/library/GameCard.vue`
+- 修改：`frontend/src/features/library/GameDetailDrawer.vue`
+- 修改：`frontend/src/features/library/LibraryToolbar.vue`
+- 新建：`src/gameshelf/tools/__init__.py`
+- 新建：`src/gameshelf/tools/detect_directory.py`
 
-**Interfaces:**
-- Adds bridge methods `list_engine_options`, `set_game_engine`, and `clear_manual_engine`.
-- Game DTO includes adopted engine, detected suggestion, confidence, evidence, ambiguity, and experimental flag.
-- Manual custom value is `{ engineId: 'custom', customLabel: string }`, normalized in storage to `custom:<label>`.
+**接口：**
+- 添加桥接方法 `list_engine_options`、`set_game_engine` 和 `clear_manual_engine`。
+- 游戏 DTO 包含采用的引擎、检测建议、置信度、证据、歧义状态和实验性标志。
+- 手动自定义值为 `{ engineId: 'custom', customLabel: string }`，存储时规范化为 `custom:<label>`。
 
-- [ ] **Step 1: Write failing API and UI tests**
+- [ ] **步骤 1：编写会失败的 API 与 UI 测试**
 
 ```python
 def test_manual_engine_api_rejects_empty_custom_label(engine_api) -> None:
@@ -585,26 +585,26 @@ it('shows adopted value and a different detected suggestion', () => {
 })
 ```
 
-- [ ] **Step 2: Run engine API/UI tests and verify failure**
+- [ ] **步骤 2：运行引擎 API/UI 测试并确认失败**
 
-Run:
+运行：
 
 ```powershell
 python -m pytest tests/unit/bridge/test_engine_api.py -v
 npm --prefix frontend run test:unit -- --run tests/EngineDetails.spec.ts tests/EnginePicker.spec.ts
 ```
 
-Expected: FAIL for missing endpoints/components.
+预期：因端点/组件缺失而失败。
 
-- [ ] **Step 3: Implement transparent evidence and override behavior**
+- [ ] **步骤 3：实现透明的证据展示与覆盖行为**
 
-Cards show only a compact adopted-engine badge. The drawer displays adopted/detected values, “疑似” for ambiguity, “实验性识别” when applicable, confidence as high/medium/low rather than fake precision, and an expandable evidence list. The picker lists all formal IDs, experimental IDs, Unknown, and Custom.
+卡片只显示简洁的已采用引擎徽标。抽屉显示采用值/检测值；有歧义时显示“疑似”；适用时显示“实验性识别”；置信度显示为高/中/低，而不是虚假的精确数值；证据列表可以展开。选择器列出所有正式 ID、实验性 ID、未知和自定义。
 
-Setting Unknown is a manual override that prevents auto-adoption; clearing the override returns to the latest detected value. Changing an engine never changes save locations automatically; later save-hint generation remains an explicit reviewed action.
+将引擎设为未知是一项手动覆盖，会阻止自动采用；清除覆盖后恢复为最新检测值。更改引擎绝不自动更改存档位置；后续生成存档提示仍是一项需要明确审核的操作。
 
-- [ ] **Step 4: Add a read-only detector CLI and run the acceptance gate**
+- [ ] **步骤 4：添加只读检测器 CLI 并运行验收门禁**
 
-Add `python -m gameshelf.tools.detect_directory "D:\Games\Sample"` as a developer command that prints JSON evidence and performs no DB writes. Then run:
+添加开发者命令 `python -m gameshelf.tools.detect_directory "D:\Games\Sample"`，用于输出 JSON 证据且不执行数据库写入。然后运行：
 
 ```powershell
 python -m pytest
@@ -615,20 +615,20 @@ npm --prefix frontend run type-check
 npm --prefix frontend run build
 ```
 
-Expected: all checks pass; the CLI exits nonzero only for invalid/unreadable input.
+预期：所有检查通过；CLI 仅在输入无效/不可读时以非零状态退出。
 
-- [ ] **Step 5: Commit completed engine recognition**
+- [ ] **步骤 5：提交完整的引擎识别功能**
 
 ```powershell
 git add src frontend tests
 git commit -m "feat: expose explainable engine recognition"
 ```
 
-## Engine Increment Acceptance Gate
+## 引擎增量验收门禁
 
-- Every approved formal family has at least one positive and one near-negative synthetic fixture.
-- Every experimental family requires strong magic/companion evidence and is visibly marked experimental.
-- Generic `.arc`, `.pac`, `.dat`, `.int`, `.lib`, `.war`, `Game.exe`, Unity, or NW.js evidence alone does not force a specialized label.
-- Unknown games remain launchable and filterable.
-- Manual Unknown/custom/formal choices survive scans while latest automatic evidence remains visible.
-- Detection reads bounded data, never executes or extracts files, and never blocks successful library reconciliation.
+- 每个已确认的正式系列至少拥有一个正例和一个近似反例合成夹具。
+- 每个实验性系列都要求强魔数/配套证据，并且显著标记为实验性。
+- 单独存在通用 `.arc`、`.pac`、`.dat`、`.int`、`.lib`、`.war`、`Game.exe`、Unity 或 NW.js 证据时，不会强制套用专用标签。
+- 未知游戏仍然可以启动和筛选。
+- 手动设置的未知/自定义/正式选择在扫描后仍保留，同时继续显示最新自动证据。
+- 检测只读取有限数据，绝不执行或提取文件，也绝不阻止游戏库成功核对。

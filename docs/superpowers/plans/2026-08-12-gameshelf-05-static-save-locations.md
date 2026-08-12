@@ -1,44 +1,44 @@
-# GameShelf Static Save Locations Implementation Plan
+# GameShelf 静态存档位置实施计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **供智能体执行者使用：** 必须使用子技能 `superpowers:subagent-driven-development`（推荐）或 `superpowers:executing-plans`，按任务逐项实施本计划。各步骤使用复选框（`- [ ]`）跟踪进度。
 
-**Goal:** Let every game own multiple portable, user-reviewable save locations discovered manually, from Ludusavi, or from conservative engine hints.
+**目标：** 让每个游戏都能拥有多个便于迁移且可由用户审核的存档位置；这些位置可由用户手动添加，也可来自 Ludusavi 或保守的引擎提示。
 
-**Architecture:** Save paths are stored as templates backed by Windows known-folder adapters, then expanded only for display/open/verification. Ludusavi is parsed into a narrow internal model and matched locally; engine hints propose only existing, evidence-backed locations, with manual confirmation retaining priority.
+**架构：** 存档路径以模板形式存储，并由 Windows 已知文件夹适配器支持；仅在显示、打开或验证时展开。Ludusavi 被解析为范围受限的内部模型并在本地匹配；引擎提示只提出已存在且有证据支持的位置，手动确认始终具有最高优先级。
 
-**Tech Stack:** Existing engine/library stack plus PyYAML, RapidFuzz, Windows known-folder/registry adapters, SQLite, Vue 3/Vitest, pytest.
+**技术栈：** 现有引擎/游戏库技术栈，加上 PyYAML、RapidFuzz、Windows 已知文件夹/注册表适配器、SQLite、Vue 3/Vitest、pytest。
 
-## Global Constraints
+## 全局约束
 
-- Support multiple directory, file, glob, and registry locations per game.
-- Manual locations are confirmed and never overwritten by later suggestions.
-- Store portable templates where a known root can replace an absolute prefix.
-- Opening a glob opens its nearest existing parent; opening a registry location starts Registry Editor only after confirmation.
-- Ludusavi updates occur only after an explicit user action.
-- Validate a downloaded manifest before replacing the active snapshot; preserve the old snapshot on failure.
-- Do not claim that an engine hint is a confirmed save path.
-- Do not implement save copy, backup, restore, or modification.
-- Follow TDD and commit after every task.
+- 每个游戏支持多个目录、文件、glob 和注册表位置。
+- 手动位置视为已确认，绝不被后续建议覆盖。
+- 如果已知根目录可以替换绝对路径前缀，则存储便携路径模板。
+- 打开 glob 时打开其最近的已存在父目录；打开注册表位置时，必须确认后才启动注册表编辑器。
+- 只有用户明确操作后才更新 Ludusavi。
+- 替换活动快照前先校验下载的清单；失败时保留旧快照。
+- 不得将引擎提示声称为已确认的存档路径。
+- 不实现存档复制、备份、恢复或修改。
+- 遵循 TDD，并在每个任务完成后提交。
 
 ---
 
-### Task 1: Expand and Collapse Portable Save-Path Templates
+### 任务 1：展开与折叠便携存档路径模板
 
-**Files:**
-- Create: `src/gameshelf/platform/windows/known_folders.py`
-- Create: `src/gameshelf/saves/__init__.py`
-- Create: `src/gameshelf/saves/templates.py`
-- Create: `tests/unit/saves/test_templates.py`
-- Create: `tests/unit/platform/windows/test_known_folders.py`
+**文件：**
+- 新建：`src/gameshelf/platform/windows/known_folders.py`
+- 新建：`src/gameshelf/saves/__init__.py`
+- 新建：`src/gameshelf/saves/templates.py`
+- 新建：`tests/unit/saves/test_templates.py`
+- 新建：`tests/unit/platform/windows/test_known_folders.py`
 
-**Interfaces:**
-- Produces: `KnownFolders(home, app_data, local_app_data, local_app_data_low, documents, saved_games, program_data, public, windows)`.
-- Produces: `WindowsKnownFolderProvider.load() -> KnownFolders` using `SHGetKnownFolderPath` where appropriate.
-- Produces: `PathTemplateResolver.collapse(path: Path, game_dir: Path | None) -> str`.
-- Produces: `PathTemplateResolver.expand(template: str, game_dir: Path | None) -> Path`.
-- Supported tokens: `<game>`, `<home>`, `<winAppData>`, `<winLocalAppData>`, `<winLocalAppDataLow>`, `<winDocuments>`, `<winSavedGames>`, `<winProgramData>`, `<winPublic>`, and `<winDir>`.
+**接口：**
+- 产出：`KnownFolders(home, app_data, local_app_data, local_app_data_low, documents, saved_games, program_data, public, windows)`。
+- 产出：适当时使用 `SHGetKnownFolderPath` 的 `WindowsKnownFolderProvider.load() -> KnownFolders`。
+- 产出：`PathTemplateResolver.collapse(path: Path, game_dir: Path | None) -> str`。
+- 产出：`PathTemplateResolver.expand(template: str, game_dir: Path | None) -> Path`。
+- 支持的令牌：`<game>`、`<home>`、`<winAppData>`、`<winLocalAppData>`、`<winLocalAppDataLow>`、`<winDocuments>`、`<winSavedGames>`、`<winProgramData>`、`<winPublic>` 和 `<winDir>`。
 
-- [ ] **Step 1: Write failing longest-prefix, Unicode, and traversal tests**
+- [ ] **步骤 1：编写会失败的最长前缀、Unicode 与路径穿越测试**
 
 ```python
 def test_collapse_uses_longest_known_prefix(fake_known_folders, resolver) -> None:
@@ -61,21 +61,21 @@ def test_expand_rejects_escape_unknown_token_and_raw_absolute(template, resolver
         resolver.expand(template, Path(r"D:\Games\Alice"))
 ```
 
-- [ ] **Step 2: Run template tests and verify failure**
+- [ ] **步骤 2：运行模板测试并确认失败**
 
-Run: `python -m pytest tests/unit/saves/test_templates.py tests/unit/platform/windows/test_known_folders.py -v`
+运行：`python -m pytest tests/unit/saves/test_templates.py tests/unit/platform/windows/test_known_folders.py -v`
 
-Expected: FAIL because known-folder/template modules are absent.
+预期：失败，因为已知文件夹/模板模块尚不存在。
 
-- [ ] **Step 3: Implement known-folder lookup and deterministic template conversion**
+- [ ] **步骤 3：实现已知文件夹查找与确定性的模板转换**
 
-Use `SHGetKnownFolderPath` for Roaming AppData, Local AppData, Documents, Saved Games, Public, and Windows; derive LocalLow as the sibling of Local when no direct known-folder ID is available. Use `%PROGRAMDATA%` only after validating it is absolute. Wrap access errors as `KnownFolderError` with a stable code.
+对 Roaming AppData、Local AppData、Documents、Saved Games、Public 和 Windows 使用 `SHGetKnownFolderPath`；没有直接的已知文件夹 ID 时，将 LocalLow 推导为 Local 的同级目录。仅在验证 `%PROGRAMDATA%` 为绝对路径后使用它。将访问错误封装为带稳定错误码的 `KnownFolderError`。
 
-When collapsing, compare normalized Windows keys for all available token roots plus `<game>`, choose the longest matching root, and retain the original display spelling of remaining components. When expanding, require exactly one leading token and reject any `..`, drive, UNC, or embedded token in the suffix. Raw absolute manual selections must be collapsed before persistence rather than stored directly.
+折叠时，比较所有可用令牌根目录和 `<game>` 的规范化 Windows 键，选择最长的匹配根目录，并保留剩余路径分段原本的显示拼写。展开时，要求开头恰好有一个令牌，并拒绝后缀中的任何 `..`、驱动器、UNC 或嵌入令牌。手动选择的原始绝对路径必须先折叠再持久化，不得直接存储。
 
-- [ ] **Step 4: Run template/platform tests and static checks**
+- [ ] **步骤 4：运行模板/平台测试与静态检查**
 
-Run:
+运行：
 
 ```powershell
 python -m pytest tests/unit/saves/test_templates.py tests/unit/platform/windows/test_known_folders.py -v
@@ -83,31 +83,31 @@ python -m ruff check src/gameshelf/saves src/gameshelf/platform/windows tests/un
 python -m mypy src/gameshelf/saves src/gameshelf/platform/windows
 ```
 
-Expected: all pass.
+预期：全部通过。
 
-- [ ] **Step 5: Commit portable save templates**
+- [ ] **步骤 5：提交便携存档模板**
 
 ```powershell
 git add src/gameshelf/saves src/gameshelf/platform/windows tests/unit/saves tests/unit/platform/windows
 git commit -m "feat: add portable save path templates"
 ```
 
-### Task 2: Persist and Verify Multiple Save Locations
+### 任务 2：持久化并验证多个存档位置
 
-**Files:**
-- Create: `src/gameshelf/saves/models.py`
-- Create: `src/gameshelf/saves/repository.py`
-- Create: `src/gameshelf/saves/service.py`
-- Create: `tests/unit/saves/test_repository.py`
-- Create: `tests/integration/saves/test_save_location_service.py`
+**文件：**
+- 新建：`src/gameshelf/saves/models.py`
+- 新建：`src/gameshelf/saves/repository.py`
+- 新建：`src/gameshelf/saves/service.py`
+- 新建：`tests/unit/saves/test_repository.py`
+- 新建：`tests/integration/saves/test_save_location_service.py`
 
-**Interfaces:**
-- Produces immutable `SaveLocation` matching the V1 schema.
-- Produces: `SaveLocationService.add_manual(game_id, kind, selected_path) -> SaveLocation`.
-- Produces: `accept_suggestion`, `disable`, `remove`, `verify_game`, `list_for_game`, and `open_location`.
-- Produces: `SaveLocationSuggestion(kind, path_template, display_path, source, confidence, evidence)`.
+**接口：**
+- 产出：与 V1 架构匹配的不可变 `SaveLocation`。
+- 产出：`SaveLocationService.add_manual(game_id, kind, selected_path) -> SaveLocation`。
+- 产出：`accept_suggestion`、`disable`、`remove`、`verify_game`、`list_for_game` 和 `open_location`。
+- 产出：`SaveLocationSuggestion(kind, path_template, display_path, source, confidence, evidence)`。
 
-- [ ] **Step 1: Write failing multi-location, dedupe, and manual-priority tests**
+- [ ] **步骤 1：编写会失败的多位置、去重与手动优先级测试**
 
 ```python
 def test_game_can_have_multiple_confirmed_manual_locations(save_service, game) -> None:
@@ -133,19 +133,19 @@ def test_verification_updates_existence_but_never_disables_manual_path(save_serv
     assert verified.exists is False
 ```
 
-- [ ] **Step 2: Run save-service tests and verify failure**
+- [ ] **步骤 2：运行存档服务测试并确认失败**
 
-Run: `python -m pytest tests/unit/saves/test_repository.py tests/integration/saves/test_save_location_service.py -v`
+运行：`python -m pytest tests/unit/saves/test_repository.py tests/integration/saves/test_save_location_service.py -v`
 
-Expected: FAIL because save repositories/services do not exist.
+预期：失败，因为存档仓储/服务尚不存在。
 
-- [ ] **Step 3: Implement save-location lifecycle**
+- [ ] **步骤 3：实现存档位置生命周期**
 
-Manual file/directory inputs must exist at selection time and collapse through `PathTemplateResolver`; suggestions may reference currently missing globs but cannot become `confirmed` until the user accepts. Deduplicate by `(game_id, kind, path_key)` after template expansion.
+手动选择的文件/目录在选择时必须存在，并通过 `PathTemplateResolver` 折叠；建议可以引用当前不存在的 glob，但用户接受前不能成为 `confirmed`。模板展开后按 `(game_id, kind, path_key)` 去重。
 
-`verify_game` checks file/directory existence, evaluates glob matches with a 1,000-match cap, and checks registry-key existence through an adapter. It updates only `last_verified_at`; existence is returned in the DTO and not stored as a destructive status.
+`verify_game` 检查文件/目录是否存在，以最多 1,000 个匹配项为上限计算 glob 匹配，并通过适配器检查注册表键是否存在。它只更新 `last_verified_at`；存在状态在 DTO 中返回，不存储为破坏性状态。
 
-`open_location` behavior:
+`open_location` 行为：
 
 ```text
 directory -> open that directory if it exists
@@ -154,39 +154,39 @@ glob      -> open common/nearest existing non-glob parent
 registry  -> require confirmed=true, then open regedit at the key through adapter
 ```
 
-Removing a location deletes only the database record.
+移除位置时只删除数据库记录。
 
-- [ ] **Step 4: Run save persistence and library regression tests**
+- [ ] **步骤 4：运行存档持久化与游戏库回归测试**
 
-Run: `python -m pytest tests/unit/saves tests/integration/saves tests/unit/library -v`
+运行：`python -m pytest tests/unit/saves tests/integration/saves tests/unit/library -v`
 
-Expected: all pass.
+预期：全部通过。
 
-- [ ] **Step 5: Commit save-location persistence**
+- [ ] **步骤 5：提交存档位置持久化**
 
 ```powershell
 git add src/gameshelf/saves tests/unit/saves tests/integration/saves
 git commit -m "feat: persist multiple save locations"
 ```
 
-### Task 3: Add Manual Save-Location UI and Open Actions
+### 任务 3：添加手动存档位置 UI 与打开操作
 
-**Files:**
-- Modify: `src/gameshelf/bridge/api.py`
-- Create: `tests/unit/bridge/test_save_location_api.py`
-- Modify: `frontend/src/api/contracts.ts`
-- Create: `frontend/src/features/saves/SaveLocationList.vue`
-- Create: `frontend/src/features/saves/AddSaveLocationDialog.vue`
-- Create: `frontend/src/features/saves/saveLocationLabels.ts`
-- Create: `frontend/tests/SaveLocationList.spec.ts`
-- Create: `frontend/tests/AddSaveLocationDialog.spec.ts`
-- Modify: `frontend/src/features/library/GameDetailDrawer.vue`
+**文件：**
+- 修改：`src/gameshelf/bridge/api.py`
+- 新建：`tests/unit/bridge/test_save_location_api.py`
+- 修改：`frontend/src/api/contracts.ts`
+- 新建：`frontend/src/features/saves/SaveLocationList.vue`
+- 新建：`frontend/src/features/saves/AddSaveLocationDialog.vue`
+- 新建：`frontend/src/features/saves/saveLocationLabels.ts`
+- 新建：`frontend/tests/SaveLocationList.spec.ts`
+- 新建：`frontend/tests/AddSaveLocationDialog.spec.ts`
+- 修改：`frontend/src/features/library/GameDetailDrawer.vue`
 
-**Interfaces:**
-- Adds bridge methods `list_save_locations`, `choose_save_path`, `add_manual_save_location`, `remove_save_location`, `verify_save_locations`, and `open_save_location`.
-- DTO exposes template only in an advanced disclosure; default display uses expanded display path.
+**接口：**
+- 添加桥接方法 `list_save_locations`、`choose_save_path`、`add_manual_save_location`、`remove_save_location`、`verify_save_locations` 和 `open_save_location`。
+- DTO 只在高级展开区域显示模板；默认使用展开后的显示路径。
 
-- [ ] **Step 1: Write failing bridge and UI tests**
+- [ ] **步骤 1：编写会失败的桥接与 UI 测试**
 
 ```python
 def test_manual_api_requires_game_and_supported_kind(save_api) -> None:
@@ -209,24 +209,24 @@ it('renders multiple locations with source and missing state', () => {
 })
 ```
 
-- [ ] **Step 2: Run API/UI tests and verify failure**
+- [ ] **步骤 2：运行 API/UI 测试并确认失败**
 
-Run:
+运行：
 
 ```powershell
 python -m pytest tests/unit/bridge/test_save_location_api.py -v
 npm --prefix frontend run test:unit -- --run tests/SaveLocationList.spec.ts tests/AddSaveLocationDialog.spec.ts
 ```
 
-Expected: FAIL for missing APIs/components.
+预期：因 API/组件缺失而失败。
 
-- [ ] **Step 3: Implement explicit path selection and list actions**
+- [ ] **步骤 3：实现明确的路径选择与列表操作**
 
-The picker selects a directory for `directory`, one file for `file`, and a directory plus user-entered pattern for `glob`; registry paths are entered as text and validated against `HKEY_CURRENT_USER`/`HKEY_LOCAL_MACHINE` syntax. Display source, confirmed/suggested state, confidence band, last verification, and missing status. Removing requires confirmation; opening an unconfirmed suggestion is allowed only after a “此路径尚未确认” prompt.
+选择器为 `directory` 选择一个目录，为 `file` 选择一个文件，为 `glob` 选择一个目录并由用户输入模式；注册表路径通过文本输入，并按 `HKEY_CURRENT_USER`/`HKEY_LOCAL_MACHINE` 语法校验。显示来源、已确认/建议状态、置信度等级、最近验证时间和缺失状态。移除前需要确认；打开未确认建议前必须先显示“此路径尚未确认”提示。
 
-- [ ] **Step 4: Run save UI and backend tests**
+- [ ] **步骤 4：运行存档 UI 与后端测试**
 
-Run:
+运行：
 
 ```powershell
 python -m pytest tests/unit/bridge/test_save_location_api.py tests/integration/saves -v
@@ -234,33 +234,33 @@ npm --prefix frontend run test:unit -- --run
 npm --prefix frontend run type-check
 ```
 
-Expected: all pass.
+预期：全部通过。
 
-- [ ] **Step 5: Commit manual save-location UX**
+- [ ] **步骤 5：提交手动存档位置体验**
 
 ```powershell
 git add src/gameshelf/bridge frontend/src frontend/tests tests/unit/bridge
 git commit -m "feat: manage save locations from game details"
 ```
 
-### Task 4: Parse and Match the Ludusavi Manifest Locally
+### 任务 4：在本地解析并匹配 Ludusavi 清单
 
-**Files:**
-- Modify: `pyproject.toml`
-- Create: `src/gameshelf/saves/ludusavi_models.py`
-- Create: `src/gameshelf/saves/ludusavi_parser.py`
-- Create: `src/gameshelf/saves/ludusavi_matcher.py`
-- Create: `tests/unit/saves/test_ludusavi_parser.py`
-- Create: `tests/unit/saves/test_ludusavi_matcher.py`
-- Create: `tests/fixtures/ludusavi/manifest.yaml`
+**文件：**
+- 修改：`pyproject.toml`
+- 新建：`src/gameshelf/saves/ludusavi_models.py`
+- 新建：`src/gameshelf/saves/ludusavi_parser.py`
+- 新建：`src/gameshelf/saves/ludusavi_matcher.py`
+- 新建：`tests/unit/saves/test_ludusavi_parser.py`
+- 新建：`tests/unit/saves/test_ludusavi_matcher.py`
+- 新建：`tests/fixtures/ludusavi/manifest.yaml`
 
-**Interfaces:**
-- Produces: `parse_manifest(stream) -> LudusaviManifest`.
-- Produces: `LudusaviMatcher.find(game: Game, install_dir: Path) -> tuple[ManifestMatch, ...]`.
-- Produces only Windows-applicable `files` and `registry` entries; store-specific conditions are retained as evidence but never assumed without platform integration.
-- Alias recursion limit is `8`; glob expansion occurs later in verification, not parser loading.
+**接口：**
+- 产出：`parse_manifest(stream) -> LudusaviManifest`。
+- 产出：`LudusaviMatcher.find(game: Game, install_dir: Path) -> tuple[ManifestMatch, ...]`。
+- 只产出适用于 Windows 的 `files` 和 `registry` 条目；平台商店专用条件保留为证据，但在没有平台集成时绝不自行假定满足。
+- 别名递归上限为 `8`；glob 展开在后续验证阶段执行，而不是在解析器加载时执行。
 
-- [ ] **Step 1: Write failing parser/matcher tests against a representative fixture**
+- [ ] **步骤 1：基于代表性夹具编写会失败的解析器/匹配器测试**
 
 ```yaml
 # tests/fixtures/ludusavi/manifest.yaml
@@ -299,27 +299,27 @@ def test_matcher_uses_title_install_dir_and_bounded_aliases(game_fixture) -> Non
     assert any(item.kind == "registry" for item in matches[0].locations)
 ```
 
-- [ ] **Step 2: Add dependencies and run tests to verify failure**
+- [ ] **步骤 2：添加依赖并运行测试以确认失败**
 
-PyYAML was added by the engine-rule plan. Add `RapidFuzz>=3.13,<4`, retain `PyYAML>=6.0.2,<7`, reinstall, then run:
+引擎规则计划已添加 PyYAML。添加 `RapidFuzz>=3.13,<4`，保留 `PyYAML>=6.0.2,<7`，重新安装，然后运行：
 
 ```powershell
 python -m pytest tests/unit/saves/test_ludusavi_parser.py tests/unit/saves/test_ludusavi_matcher.py -v
 ```
 
-Expected: FAIL because parser/matcher are absent.
+预期：失败，因为解析器/匹配器尚不存在。
 
-- [ ] **Step 3: Implement the supported manifest subset and scored matching**
+- [ ] **步骤 3：实现受支持的清单子集与评分匹配**
 
-Support canonical game keys, `files`, `registry`, `installDir`, `alias`, `when`, and `tags`. Ignore unknown future fields rather than rejecting the whole manifest, but reject wrong types, recursive aliases beyond eight hops, paths without a recognized leading placeholder, and YAML objects above 200,000 game entries.
+支持规范游戏键、`files`、`registry`、`installDir`、`alias`、`when` 和 `tags`。忽略未来出现的未知字段，而不是拒绝整个清单；但要拒绝错误类型、超过八跳的递归别名、开头没有可识别占位符的路径，以及游戏条目超过 200,000 的 YAML 对象。
 
-Match inputs in descending weight: exact normalized canonical title, exact `installDir` basename, detected title, display title, executable stem, then RapidFuzz ratio. Return exact matches at `1.0`; return fuzzy candidates only at `>=0.86`, mark them unconfirmed, and retain the compared names as evidence. Tags containing `save`, or no tags, become save suggestions; `config`-only entries are visible as “配置” but are not preselected as saves.
+匹配输入按权重从高到低排列：完全相同的规范化正式标题、完全相同的 `installDir` 基本名、检测标题、显示标题、可执行文件主干名，最后是 RapidFuzz 比率。精确匹配以 `1.0` 返回；模糊候选仅在 `>=0.86` 时返回，并标记为未确认，同时保留参与比较的名称作为证据。标签包含 `save` 或没有标签的条目成为存档建议；仅含 `config` 的条目显示为“配置”，但不会预选为存档。
 
-Expand `<base>` to the known game install directory, `<game>` to a matched `installDir` or canonical name, and standard Windows tokens through `PathTemplateResolver`. Do not invent store user IDs or store roots.
+将 `<base>` 展开为已知游戏安装目录，将 `<game>` 展开为匹配的 `installDir` 或正式名称，并通过 `PathTemplateResolver` 展开标准 Windows 令牌。不得虚构平台商店用户 ID 或商店根目录。
 
-- [ ] **Step 4: Run manifest unit tests and type checks**
+- [ ] **步骤 4：运行清单单元测试与类型检查**
 
-Run:
+运行：
 
 ```powershell
 python -m pytest tests/unit/saves/test_ludusavi_parser.py tests/unit/saves/test_ludusavi_matcher.py -v
@@ -327,35 +327,35 @@ python -m ruff check src/gameshelf/saves tests/unit/saves
 python -m mypy src/gameshelf/saves
 ```
 
-Expected: all pass.
+预期：全部通过。
 
-- [ ] **Step 5: Commit Ludusavi parsing/matching**
+- [ ] **步骤 5：提交 Ludusavi 解析/匹配功能**
 
 ```powershell
 git add pyproject.toml src/gameshelf/saves tests/unit/saves tests/fixtures/ludusavi
 git commit -m "feat: match local games to Ludusavi rules"
 ```
 
-### Task 5: Bundle, Update, Validate, and Roll Back Ludusavi Snapshots
+### 任务 5：内置、更新、校验与回滚 Ludusavi 快照
 
-**Files:**
-- Create: `src/gameshelf/saves/ludusavi_provider.py`
-- Create: `resources/manifests/ludusavi/manifest.yaml`
-- Create: `resources/manifests/ludusavi/manifest-meta.json`
-- Create: `resources/manifests/ludusavi/LICENSE`
-- Create: `scripts/update_ludusavi_snapshot.py`
-- Create: `tests/unit/saves/test_ludusavi_provider.py`
-- Modify: `THIRD_PARTY_NOTICES.md`
-- Create: `src/gameshelf/saves/custom_manifest_provider.py`
-- Create: `tests/unit/saves/test_custom_manifest_provider.py`
+**文件：**
+- 新建：`src/gameshelf/saves/ludusavi_provider.py`
+- 新建：`resources/manifests/ludusavi/manifest.yaml`
+- 新建：`resources/manifests/ludusavi/manifest-meta.json`
+- 新建：`resources/manifests/ludusavi/LICENSE`
+- 新建：`scripts/update_ludusavi_snapshot.py`
+- 新建：`tests/unit/saves/test_ludusavi_provider.py`
+- 修改：`THIRD_PARTY_NOTICES.md`
+- 新建：`src/gameshelf/saves/custom_manifest_provider.py`
+- 新建：`tests/unit/saves/test_custom_manifest_provider.py`
 
-**Interfaces:**
-- Produces: `LudusaviProvider.ensure_initial_snapshot()`, `load()`, `metadata()`, and `update_explicitly() -> UpdateResult`.
-- Produces: `CustomManifestProvider.load_all() -> tuple[LudusaviManifest, ...]` from `data/manifests/custom/*.yaml`.
-- Update URL is `https://raw.githubusercontent.com/mtkennerly/ludusavi-manifest/master/data/manifest.yaml`.
-- Metadata stores `etag`, `sha256`, `downloadedAt`, `sourceUrl`, and upstream commit when prepared for release.
+**接口：**
+- 产出：`LudusaviProvider.ensure_initial_snapshot()`、`load()`、`metadata()` 和 `update_explicitly() -> UpdateResult`。
+- 产出：从 `data/manifests/custom/*.yaml` 加载的 `CustomManifestProvider.load_all() -> tuple[LudusaviManifest, ...]`。
+- 更新 URL 为 `https://raw.githubusercontent.com/mtkennerly/ludusavi-manifest/master/data/manifest.yaml`。
+- 元数据存储 `etag`、`sha256`、`downloadedAt`、`sourceUrl`，以及准备发布时的上游提交。
 
-- [ ] **Step 1: Write failing initial-copy, 304, success, and invalid-download tests**
+- [ ] **步骤 1：编写会失败的初始复制、304、成功与无效下载测试**
 
 ```python
 def test_initial_snapshot_copies_resource_without_network(provider, fake_http) -> None:
@@ -387,49 +387,49 @@ def test_invalid_custom_manifest_is_reported_without_blocking_valid_files(custom
     assert result.errors[0].source_name == "broken.yaml"
 ```
 
-- [ ] **Step 2: Run provider tests and verify failure**
+- [ ] **步骤 2：运行提供器测试并确认失败**
 
-Run: `python -m pytest tests/unit/saves/test_ludusavi_provider.py -v`
+运行：`python -m pytest tests/unit/saves/test_ludusavi_provider.py -v`
 
-Expected: FAIL because provider/resources are absent.
+预期：失败，因为提供器/资源尚不存在。
 
-- [ ] **Step 3: Implement explicit HTTPS update with validation and atomic replacement**
+- [ ] **步骤 3：实现带校验与原子替换的明确 HTTPS 更新**
 
-Use `urllib.request` with a 30-second timeout, `If-None-Match`, a GameShelf user agent, HTTPS-only URL, and 64 MiB response cap. Stream to `data/temp`, calculate SHA-256, parse through `parse_manifest`, then copy the current file to `data/manifests/ludusavi/previous/` and `os.replace` the validated download. Retain at most two previous manifests.
+使用 `urllib.request`，设置 30 秒超时、`If-None-Match`、GameShelf 用户代理、仅限 HTTPS 的 URL 和 64 MiB 响应上限。将响应流式写入 `data/temp`，计算 SHA-256，通过 `parse_manifest` 解析，然后将当前文件复制到 `data/manifests/ludusavi/previous/`，再用 `os.replace` 替换为校验通过的下载文件。最多保留两个旧清单。
 
-The maintainer script downloads the same URL, validates it, obtains the upstream HEAD commit through the GitHub commits API, writes exact metadata, and copies the upstream MIT license. It is a release-maintenance command, never an automatic application startup action.
+维护者脚本从同一 URL 下载并校验清单，通过 GitHub commits API 获取上游 HEAD 提交，写入精确元数据，并复制上游 MIT 许可证。它是发布维护命令，绝不是应用启动时的自动操作。
 
-`CustomManifestProvider` loads UTF-8 `.yaml`/`.yml` files sorted by filename from `data/manifests/custom`, applies the same parser, caps each file at 8 MiB and the directory at 100 files, disables aliases that cross files, and returns per-file errors without blocking the bundled/active manifest. Custom matches show their source filename as evidence and override an identical canonical/path rule only when the user placed that file locally.
+`CustomManifestProvider` 从 `data/manifests/custom` 按文件名排序加载 UTF-8 `.yaml`/`.yml` 文件，应用同一解析器；每个文件上限 8 MiB，目录上限 100 个文件；禁止跨文件别名；返回每个文件的错误，但不阻塞内置/活动清单。自定义匹配将源文件名显示为证据；只有用户在本地放置该文件时，才覆盖相同的正式名称/路径规则。
 
-- [ ] **Step 4: Generate the pinned resource snapshot and run provider tests**
+- [ ] **步骤 4：生成固定版本的资源快照并运行提供器测试**
 
-Run:
+运行：
 
 ```powershell
 python scripts/update_ludusavi_snapshot.py
 python -m pytest tests/unit/saves/test_ludusavi_provider.py tests/unit/saves/test_custom_manifest_provider.py -v
 ```
 
-Expected: the resource manifest parses, metadata contains a 64-character SHA-256, and tests pass. If the network is unavailable, do not commit an empty resource; rerun when reachable.
+预期：资源清单可正常解析，元数据包含 64 字符 SHA-256，测试通过。网络不可用时不得提交空资源；待网络恢复后重新运行。
 
-- [ ] **Step 5: Commit the licensed local snapshot provider**
+- [ ] **步骤 5：提交带许可证的本地快照提供器**
 
 ```powershell
 git add src/gameshelf/saves resources/manifests/ludusavi scripts/update_ludusavi_snapshot.py tests/unit/saves THIRD_PARTY_NOTICES.md
 git commit -m "feat: manage validated Ludusavi snapshots"
 ```
 
-### Task 6: Generate Conservative Engine Save Hints
+### 任务 6：生成保守的引擎存档提示
 
-**Files:**
-- Create: `src/gameshelf/saves/engine_hints.py`
-- Create: `tests/unit/saves/test_engine_hints.py`
+**文件：**
+- 新建：`src/gameshelf/saves/engine_hints.py`
+- 新建：`tests/unit/saves/test_engine_hints.py`
 
-**Interfaces:**
-- Produces: `EngineSaveHintProvider.suggest(game, install_dir, engine_metadata) -> tuple[SaveLocationSuggestion, ...]`.
-- Hints include source `engine`, confidence, and evidence; they do not persist until accepted.
+**接口：**
+- 产出：`EngineSaveHintProvider.suggest(game, install_dir, engine_metadata) -> tuple[SaveLocationSuggestion, ...]`。
+- 提示包含来源 `engine`、置信度和证据；接受前不持久化。
 
-- [ ] **Step 1: Write failing known-layout and no-evidence tests**
+- [ ] **步骤 1：编写会失败的已知布局与无证据测试**
 
 ```python
 def test_renpy_reads_literal_save_directory_and_suggests_appdata(file_tree, hint_provider) -> None:
@@ -450,15 +450,15 @@ def test_install_relative_hint_is_returned_only_when_path_or_matching_files_exis
     assert hint_provider.suggest(game(engine="rpg_maker_vx_ace"), empty, {}) == ()
 ```
 
-- [ ] **Step 2: Run hint tests and verify failure**
+- [ ] **步骤 2：运行提示测试并确认失败**
 
-Run: `python -m pytest tests/unit/saves/test_engine_hints.py -v`
+运行：`python -m pytest tests/unit/saves/test_engine_hints.py -v`
 
-Expected: FAIL because hint provider is absent.
+预期：失败，因为提示提供器尚不存在。
 
-- [ ] **Step 3: Implement evidence-backed hints only**
+- [ ] **步骤 3：只实现有证据支持的提示**
 
-Support these V1 hints:
+支持以下 V1 提示：
 
 ```text
 Ren'Py             literal config.save_directory -> <winAppData>\RenPy\...
@@ -475,40 +475,40 @@ KiriKiri           existing .sav/.data files in a directory named save/savedata
 NScripter family   existing save*.dat/envdata/kidoku.dat under <game>
 ```
 
-Parse only literal Ren'Py assignments; do not execute Python. Sanitize company/product as path components and reject separators/control characters. For other formal engines without stable standard paths, return no hint and rely on dynamic detection.
+只解析 Ren'Py 字面量赋值；不得执行 Python。将公司/产品名清理为安全的路径分段，并拒绝分隔符/控制字符。对于没有稳定标准路径的其他正式引擎，不返回提示，改为依赖动态检测。
 
-- [ ] **Step 4: Run hint and engine regression tests**
+- [ ] **步骤 4：运行提示与引擎回归测试**
 
-Run: `python -m pytest tests/unit/saves/test_engine_hints.py tests/unit/engines -v`
+运行：`python -m pytest tests/unit/saves/test_engine_hints.py tests/unit/engines -v`
 
-Expected: all pass.
+预期：全部通过。
 
-- [ ] **Step 5: Commit engine save hints**
+- [ ] **步骤 5：提交引擎存档提示**
 
 ```powershell
 git add src/gameshelf/saves/engine_hints.py tests/unit/saves/test_engine_hints.py
 git commit -m "feat: suggest conservative engine save paths"
 ```
 
-### Task 7: Present and Accept Static Save Suggestions
+### 任务 7：展示并接受静态存档建议
 
-**Files:**
-- Create: `src/gameshelf/saves/static_discovery.py`
-- Modify: `src/gameshelf/bridge/api.py`
-- Create: `tests/integration/saves/test_static_discovery.py`
-- Modify: `frontend/src/api/contracts.ts`
-- Create: `frontend/src/features/saves/SaveSuggestionList.vue`
-- Create: `frontend/src/features/saves/LudusaviSettings.vue`
-- Create: `frontend/tests/SaveSuggestionList.spec.ts`
-- Create: `frontend/tests/LudusaviSettings.spec.ts`
-- Modify: `frontend/src/features/library/GameDetailDrawer.vue`
+**文件：**
+- 新建：`src/gameshelf/saves/static_discovery.py`
+- 修改：`src/gameshelf/bridge/api.py`
+- 新建：`tests/integration/saves/test_static_discovery.py`
+- 修改：`frontend/src/api/contracts.ts`
+- 新建：`frontend/src/features/saves/SaveSuggestionList.vue`
+- 新建：`frontend/src/features/saves/LudusaviSettings.vue`
+- 新建：`frontend/tests/SaveSuggestionList.spec.ts`
+- 新建：`frontend/tests/LudusaviSettings.spec.ts`
+- 修改：`frontend/src/features/library/GameDetailDrawer.vue`
 
-**Interfaces:**
-- Produces: `StaticSaveDiscovery.suggest_for_game(game_id) -> tuple[SaveLocationSuggestion, ...]`.
-- Adds bridge methods `suggest_save_locations`, `accept_save_suggestions`, `ludusavi_status`, and `update_ludusavi`.
-- `update_ludusavi` runs in `TaskRegistry` and never on startup.
+**接口：**
+- 产出：`StaticSaveDiscovery.suggest_for_game(game_id) -> tuple[SaveLocationSuggestion, ...]`。
+- 添加桥接方法 `suggest_save_locations`、`accept_save_suggestions`、`ludusavi_status` 和 `update_ludusavi`。
+- `update_ludusavi` 在 `TaskRegistry` 中运行，绝不在启动时运行。
 
-- [ ] **Step 1: Write failing merge/dedupe and UI-confirmation tests**
+- [ ] **步骤 1：编写会失败的合并/去重与 UI 确认测试**
 
 ```python
 def test_static_discovery_merges_same_path_and_keeps_strongest_evidence(static_harness) -> None:
@@ -534,26 +534,26 @@ it('does not persist suggestions until checked and accepted', async () => {
 })
 ```
 
-- [ ] **Step 2: Run static-discovery/UI tests and verify failure**
+- [ ] **步骤 2：运行静态发现/UI 测试并确认失败**
 
-Run:
+运行：
 
 ```powershell
 python -m pytest tests/integration/saves/test_static_discovery.py -v
 npm --prefix frontend run test:unit -- --run tests/SaveSuggestionList.spec.ts tests/LudusaviSettings.spec.ts
 ```
 
-Expected: FAIL because orchestration/UI are absent.
+预期：失败，因为编排/UI 尚不存在。
 
-- [ ] **Step 3: Merge sources, expose evidence, and require explicit acceptance**
+- [ ] **步骤 3：合并来源、公开证据并要求明确接受**
 
-Run custom manifests first, then exact Ludusavi matching, then engine hints. Deduplicate by expanded kind/path key, retain all evidence, prefer manual-existing locations over suggestions, and never suggest a location already confirmed. UI groups exact, likely, and experimental hints; none are prechecked below high confidence, and registry hints always require an additional confirmation sentence. Settings show `data/manifests/custom` with an “打开自定义规则目录” action and per-file parse errors; V1 edits these YAML files outside the app.
+先运行自定义清单，再进行 Ludusavi 精确匹配，最后运行引擎提示。按展开后的类型/路径键去重，保留全部证据，手动已有位置优先于建议，绝不建议已经确认的位置。UI 将精确、可能和实验性提示分组；低于高置信度的项都不预先勾选；注册表提示始终要求额外确认。设置页显示 `data/manifests/custom`，提供“打开自定义规则目录”操作，并显示每个文件的解析错误；V1 在应用外编辑这些 YAML 文件。
 
-The settings view shows bundled/active manifest source, timestamp, SHA-256 prefix, ETag, update action, progress, “already current,” invalid-download rollback, and last error. It contains no automatic-update toggle in V1.
+设置视图显示内置/活动清单来源、时间戳、SHA-256 前缀、ETag、更新操作、进度、“已是最新”、无效下载回滚和最近错误。V1 中不提供自动更新开关。
 
-- [ ] **Step 4: Run the static-save acceptance gate**
+- [ ] **步骤 4：运行静态存档验收门禁**
 
-Run:
+运行：
 
 ```powershell
 python -m pytest
@@ -564,22 +564,22 @@ npm --prefix frontend run type-check
 npm --prefix frontend run build
 ```
 
-Expected: all pass.
+预期：全部通过。
 
-- [ ] **Step 5: Commit completed static save discovery**
+- [ ] **步骤 5：提交完整的静态存档发现功能**
 
 ```powershell
 git add src frontend tests
 git commit -m "feat: review static save location suggestions"
 ```
 
-## Static Save Increment Acceptance Gate
+## 静态存档增量验收门禁
 
-- One game can retain multiple confirmed directory/file/glob/registry locations.
-- Known-folder and game-relative paths round-trip through portable templates.
-- Manual selections are never silently disabled or overwritten.
-- Ludusavi works from a bundled local snapshot with no startup network request.
-- An explicit update validates/atomically replaces the manifest and rolls back on failure.
-- Exact and fuzzy Ludusavi matches are distinguishable and require user review where appropriate.
-- Engine hints are limited to stable metadata or existing matching files.
-- No save data is copied, edited, backed up, or restored.
+- 一个游戏可以保留多个已确认的目录/文件/glob/注册表位置。
+- 已知文件夹路径和游戏相对路径可通过便携模板正确往返转换。
+- 手动选择绝不会被静默禁用或覆盖。
+- Ludusavi 使用内置本地快照运行，启动时不发起网络请求。
+- 明确更新操作会校验并原子替换清单，失败时回滚。
+- Ludusavi 精确匹配和模糊匹配可以区分，并在适当情况下要求用户审核。
+- 引擎提示仅限稳定元数据或已存在的匹配文件。
+- 不复制、编辑、备份或恢复任何存档数据。

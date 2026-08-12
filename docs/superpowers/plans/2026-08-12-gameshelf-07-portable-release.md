@@ -1,42 +1,42 @@
-# GameShelf Portable Packaging and Release Implementation Plan
+# GameShelf 便携打包与发布实施计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **供智能体执行者使用：** 必须使用子技能 `superpowers:subagent-driven-development`（推荐）或 `superpowers:executing-plans`，按任务逐项实施本计划。各步骤使用复选框（`- [ ]`）跟踪进度。
 
-**Goal:** Produce a reproducible Windows 10/11 x64 PyInstaller onedir package whose complete variant includes a fixed WebView2 runtime and whose application-owned persistent writes remain under `data`.
+**目标：** 产出可复现的 Windows 10/11 x64 PyInstaller onedir 安装包；完整版本内含固定版 WebView2 运行时，并确保应用自身的持久化写入都位于 `data` 下。
 
-**Architecture:** A build script creates the Vue production bundle, stages Python resources, runs a reviewed PyInstaller spec, then appends an officially downloaded fixed WebView2 runtime. Startup explicitly selects the staged runtime and portable user-data directory; automated and clean-VM checks validate startup, migration, copying, Unicode paths, and dependency absence.
+**架构：** 构建脚本生成 Vue 生产包、暂存 Python 资源、运行经过审核的 PyInstaller spec，然后加入从官方获取的固定版 WebView2 运行时。启动时明确选择暂存运行时和便携用户数据目录；自动化及干净虚拟机检查验证启动、迁移、目录复制、Unicode 路径和缺少预装依赖的情况。
 
-**Tech Stack:** Existing full application, Vite, Node.js 24 LTS, Python 3.12, pywebview 6.2.x, PyInstaller 6.21.x, fixed Microsoft Edge WebView2 Runtime x64, PowerShell.
+**技术栈：** 现有完整应用、Vite、Node.js 24 LTS、Python 3.12、pywebview 6.2.x、PyInstaller 6.21.x、固定版 Microsoft Edge WebView2 Runtime x64、PowerShell。
 
-## Global Constraints
+## 全局约束
 
-- Build x64 `onedir`; never build `onefile`.
-- The complete portable package must start on supported Windows 10/11 systems without requiring a preinstalled WebView2 runtime.
-- Fixed WebView2 is over 250 MiB; do not commit its binaries to Git.
-- Fixed WebView2 cannot run from UNC/network paths; detect that case and use an installed Evergreen runtime or show an actionable error.
-- On Windows 10 with Fixed Version 120+, ensure the runtime folder grants read/execute to `ALL APPLICATION PACKAGES` and `ALL RESTRICTED APPLICATION PACKAGES` as Microsoft documents.
-- Route webview state to `data/webview`; DB, covers, manifests, backups, logs, and temp stay below `data`.
-- Build/release scripts may replace `dist/GameShelf` only after resolving and verifying that exact path beneath the repository.
-- Do not publish, create a release, or choose the project license without explicit user approval.
-- Include all required third-party licenses/notices in the local artifact.
-- Follow TDD and commit after every task.
+- 构建 x64 `onedir`；绝不构建 `onefile`。
+- 完整便携包必须能够在受支持的 Windows 10/11 系统上启动，无需预装 WebView2 运行时。
+- 固定版 WebView2 超过 250 MiB；不得将其二进制文件提交到 Git。
+- 固定版 WebView2 无法从 UNC/网络路径运行；必须检测这种情况，并使用已安装的 Evergreen 运行时或显示可操作的错误。
+- 在 Windows 10 上使用 Fixed Version 120+ 时，按照 Microsoft 文档确保运行时文件夹向 `ALL APPLICATION PACKAGES` 和 `ALL RESTRICTED APPLICATION PACKAGES` 授予读取/执行权限。
+- WebView 状态写入 `data/webview`；数据库、封面、清单、备份、日志和临时文件都位于 `data` 下。
+- 构建/发布脚本只有在解析并确认精确路径位于仓库下之后，才可替换 `dist/GameShelf`。
+- 未经用户明确批准，不得公开发布、创建 release 或选择项目许可证。
+- 本地产物中包含所有必需的第三方许可证/声明。
+- 遵循 TDD，并在每个任务完成后提交。
 
 ---
 
-### Task 1: Make Resource Location Work in Source and Frozen Modes
+### 任务 1：让资源定位同时支持源码与冻结模式
 
-**Files:**
-- Create: `src/gameshelf/bootstrap/resources.py`
-- Create: `tests/unit/bootstrap/test_resources.py`
-- Modify: `src/gameshelf/bootstrap/application.py`
-- Modify: `src/gameshelf/app.py`
+**文件：**
+- 新建：`src/gameshelf/bootstrap/resources.py`
+- 新建：`tests/unit/bootstrap/test_resources.py`
+- 修改：`src/gameshelf/bootstrap/application.py`
+- 修改：`src/gameshelf/app.py`
 
-**Interfaces:**
-- Produces: `ResourcePaths.for_runtime(app_paths: AppPaths) -> ResourcePaths`.
-- Fields: `ui_dir`, `engine_rules`, `bundled_ludusavi_dir`, and `runtime_dir`.
-- In frozen mode bundled resources live under `sys._MEIPASS/resources`; fixed runtime remains beside `GameShelf.exe` under `runtime/`.
+**接口：**
+- 产出：`ResourcePaths.for_runtime(app_paths: AppPaths) -> ResourcePaths`。
+- 字段：`ui_dir`、`engine_rules`、`bundled_ludusavi_dir` 和 `runtime_dir`。
+- 冻结模式下，内置资源位于 `sys._MEIPASS/resources`；固定运行时仍位于 `GameShelf.exe` 旁的 `runtime/` 下。
 
-- [ ] **Step 1: Write failing source/frozen resource tests**
+- [ ] **步骤 1：编写会失败的源码/冻结资源测试**
 
 ```python
 def test_source_resources_use_repository_resources(tmp_path, monkeypatch) -> None:
@@ -53,43 +53,43 @@ def test_frozen_resources_split_meipass_and_external_runtime(tmp_path) -> None:
     assert paths.runtime_dir == exe.parent / "runtime"
 ```
 
-- [ ] **Step 2: Run resource tests and verify failure**
+- [ ] **步骤 2：运行资源测试并确认失败**
 
-Run: `python -m pytest tests/unit/bootstrap/test_resources.py -v`
+运行：`python -m pytest tests/unit/bootstrap/test_resources.py -v`
 
-Expected: FAIL because resource resolution is absent.
+预期：失败，因为资源解析尚不存在。
 
-- [ ] **Step 3: Implement explicit source/frozen resource resolution**
+- [ ] **步骤 3：实现明确的源码/冻结资源解析**
 
-Never use the current working directory. In frozen mode require `sys._MEIPASS` for immutable bundled resources and `Path(sys.executable).parent` for app root/runtime/data. In source mode derive repository root from `resources.py`. Validate UI/rules/manifest presence during bootstrap and raise a localized `MissingResourceError` listing the missing logical resource, not a traceback.
+绝不使用当前工作目录。冻结模式下，不可变内置资源使用 `sys._MEIPASS`，应用根目录/运行时/data 使用 `Path(sys.executable).parent`。源码模式下根据 `resources.py` 推导仓库根目录。引导时验证 UI/规则/清单是否存在；缺失时抛出本地化 `MissingResourceError`，列出缺少的逻辑资源，而不是 traceback。
 
-- [ ] **Step 4: Run bootstrap/resource tests**
+- [ ] **步骤 4：运行引导/资源测试**
 
-Run: `python -m pytest tests/unit/bootstrap tests/integration/test_application_bootstrap.py -v`
+运行：`python -m pytest tests/unit/bootstrap tests/integration/test_application_bootstrap.py -v`
 
-Expected: all pass.
+预期：全部通过。
 
-- [ ] **Step 5: Commit frozen resource resolution**
+- [ ] **步骤 5：提交冻结资源解析**
 
 ```powershell
 git add src/gameshelf/bootstrap src/gameshelf/app.py tests/unit/bootstrap
 git commit -m "feat: resolve packaged GameShelf resources"
 ```
 
-### Task 2: Automate Frontend and Python Build Staging
+### 任务 2：自动化前端与 Python 构建暂存
 
-**Files:**
-- Create: `scripts/build_ui.ps1`
-- Create: `scripts/verify_build_inputs.py`
-- Create: `tests/unit/scripts/test_verify_build_inputs.py`
-- Modify: `.gitignore`
-- Modify: `README.md`
+**文件：**
+- 新建：`scripts/build_ui.ps1`
+- 新建：`scripts/verify_build_inputs.py`
+- 新建：`tests/unit/scripts/test_verify_build_inputs.py`
+- 修改：`.gitignore`
+- 修改：`README.md`
 
-**Interfaces:**
-- `scripts/build_ui.ps1` runs locked npm install/check/build and replaces only `resources/ui`.
-- `verify_build_inputs.py` checks Python/Node architecture/version, UI, rules, bundled manifest, package locks, and clean required paths.
+**接口：**
+- `scripts/build_ui.ps1` 运行锁定版本的 npm 安装/检查/构建，只替换 `resources/ui`。
+- `verify_build_inputs.py` 检查 Python/Node 架构与版本、UI、规则、内置清单、软件包锁文件及干净的必需路径。
 
-- [ ] **Step 1: Write failing input-verifier tests**
+- [ ] **步骤 1：编写会失败的输入校验器测试**
 
 ```python
 def test_verifier_rejects_missing_ui_and_wrong_architecture(tmp_path) -> None:
@@ -103,15 +103,15 @@ def test_verifier_accepts_complete_locked_inputs(complete_build_repo) -> None:
     assert result.errors == ()
 ```
 
-- [ ] **Step 2: Run verifier tests and verify failure**
+- [ ] **步骤 2：运行校验器测试并确认失败**
 
-Run: `python -m pytest tests/unit/scripts/test_verify_build_inputs.py -v`
+运行：`python -m pytest tests/unit/scripts/test_verify_build_inputs.py -v`
 
-Expected: FAIL because scripts/verifier are absent.
+预期：失败，因为脚本/校验器尚不存在。
 
-- [ ] **Step 3: Implement safe UI replacement and exact build checks**
+- [ ] **步骤 3：实现安全 UI 替换与精确构建检查**
 
-`build_ui.ps1` must resolve repository root from `$PSScriptRoot`, assert the destination equals `<repo>\resources\ui`, run:
+`build_ui.ps1` 必须根据 `$PSScriptRoot` 解析仓库根目录，断言目标等于 `<repo>\resources\ui`，并运行：
 
 ```powershell
 npm --prefix "$repo\frontend" ci
@@ -120,11 +120,11 @@ npm --prefix "$repo\frontend" run type-check
 npm --prefix "$repo\frontend" run build
 ```
 
-Then remove only the verified `resources/ui` directory and copy `frontend/dist` into it. The verifier requires Python `3.12`, 64-bit interpreter, Node major `24`, `frontend/package-lock.json`, `pyproject.toml`, and all immutable resource inputs.
+然后只删除已验证的 `resources/ui` 目录，并将 `frontend/dist` 复制到其中。校验器要求 Python `3.12`、64 位解释器、Node 主版本 `24`、`frontend/package-lock.json`、`pyproject.toml` 及所有不可变资源输入。
 
-- [ ] **Step 4: Run staging and input verification**
+- [ ] **步骤 4：运行暂存与输入校验**
 
-Run:
+运行：
 
 ```powershell
 .\scripts\build_ui.ps1
@@ -132,31 +132,31 @@ python scripts\verify_build_inputs.py
 python -m pytest tests/unit/scripts/test_verify_build_inputs.py -v
 ```
 
-Expected: all commands exit `0`.
+预期：所有命令均以 `0` 退出。
 
-- [ ] **Step 5: Commit build staging**
+- [ ] **步骤 5：提交构建暂存功能**
 
 ```powershell
 git add scripts tests/unit/scripts .gitignore README.md resources/ui
 git commit -m "build: automate locked UI staging"
 ```
 
-### Task 3: Define and Test the PyInstaller Onedir Build
+### 任务 3：定义并测试 PyInstaller Onedir 构建
 
-**Files:**
-- Modify: `pyproject.toml`
-- Create: `packaging/GameShelf.spec`
-- Create: `packaging/version_info.txt`
-- Create: `scripts/build_portable.ps1`
-- Create: `tests/integration/packaging/test_frozen_smoke.py`
-- Modify: `.gitignore`
+**文件：**
+- 修改：`pyproject.toml`
+- 新建：`packaging/GameShelf.spec`
+- 新建：`packaging/version_info.txt`
+- 新建：`scripts/build_portable.ps1`
+- 新建：`tests/integration/packaging/test_frozen_smoke.py`
+- 修改：`.gitignore`
 
-**Interfaces:**
-- Produces: `dist/GameShelf/GameShelf.exe` plus `_internal` and no embedded writable `data`.
-- `GameShelf.exe --smoke-test --json` emits JSON with app version, schema version, app root, data dir, frozen state, runtime selection, and success.
-- Build script accepts `-SkipRuntime` for the smaller development artifact only.
+**接口：**
+- 产出：`dist/GameShelf/GameShelf.exe` 及 `_internal`，不内嵌可写 `data`。
+- `GameShelf.exe --smoke-test --json` 输出 JSON，包含应用版本、架构版本、应用根目录、data 目录、冻结状态、运行时选择及成功状态。
+- 构建脚本接受 `-SkipRuntime`，但只用于较小的开发产物。
 
-- [ ] **Step 1: Write a failing frozen-smoke artifact test**
+- [ ] **步骤 1：编写会失败的冻结产物冒烟测试**
 
 ```python
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows packaging")
@@ -173,19 +173,19 @@ def test_frozen_smoke_uses_executable_adjacent_data(built_app: Path, tmp_path: P
     assert (copied / "data" / "library.db").exists()
 ```
 
-- [ ] **Step 2: Add PyInstaller and run the test to verify missing artifact**
+- [ ] **步骤 2：添加 PyInstaller 并运行测试以确认产物缺失**
 
-Add `PyInstaller>=6.21,<7` to dev dependencies, reinstall, then run:
+将 `PyInstaller>=6.21,<7` 添加到开发依赖，重新安装，然后运行：
 
 ```powershell
 python -m pytest tests/integration/packaging/test_frozen_smoke.py -v
 ```
 
-Expected: FAIL/skip fixture setup because no packaged artifact exists.
+预期：因为不存在打包产物，测试失败或跳过夹具设置。
 
-- [ ] **Step 3: Implement spec and guarded build script**
+- [ ] **步骤 3：实现 spec 与带保护的构建脚本**
 
-The spec must use `console=False`, one EXE, `COLLECT` onedir, icon/version metadata, pywebview hidden imports collected through PyInstaller hooks, and immutable data trees:
+spec 必须使用 `console=False`、单个 EXE、`COLLECT` onedir、图标/版本元数据、通过 PyInstaller hook 收集的 pywebview 隐藏导入，以及以下不可变数据树：
 
 ```python
 datas = [
@@ -195,50 +195,50 @@ datas = [
 ]
 ```
 
-Do not include a source/development `data` directory. `build_portable.ps1` resolves and validates `<repo>\build` and `<repo>\dist\GameShelf` before removing those build outputs, runs UI staging/input verification/backend tests, then:
+不要包含源码/开发用 `data` 目录。`build_portable.ps1` 在删除构建输出前解析并验证 `<repo>\build` 和 `<repo>\dist\GameShelf`，然后运行 UI 暂存/输入校验/后端测试，之后：
 
 ```powershell
 python -m PyInstaller --noconfirm --clean packaging\GameShelf.spec
 ```
 
-Add JSON smoke mode without opening pywebview.
+添加不打开 pywebview 的 JSON 冒烟模式。
 
-- [ ] **Step 4: Build the development onedir and run frozen smoke**
+- [ ] **步骤 4：构建开发用 onedir 并运行冻结冒烟测试**
 
-Run:
+运行：
 
 ```powershell
 .\scripts\build_portable.ps1 -SkipRuntime
 python -m pytest tests/integration/packaging/test_frozen_smoke.py -v --built-app dist\GameShelf
 ```
 
-Expected: package builds and the copied Unicode-path smoke test passes.
+预期：安装包构建成功，复制到 Unicode 路径后的冒烟测试通过。
 
-- [ ] **Step 5: Commit onedir packaging**
+- [ ] **步骤 5：提交 onedir 打包功能**
 
 ```powershell
 git add pyproject.toml packaging scripts/build_portable.ps1 src/gameshelf/app.py tests/integration/packaging .gitignore
 git commit -m "build: package GameShelf as Windows onedir"
 ```
 
-### Task 4: Stage and Select a Fixed WebView2 Runtime
+### 任务 4：暂存并选择固定版 WebView2 运行时
 
-**Files:**
-- Create: `scripts/stage_webview2_runtime.ps1`
-- Create: `packaging/runtime/README.md`
-- Create: `src/gameshelf/bootstrap/webview2.py`
-- Create: `tests/unit/bootstrap/test_webview2.py`
-- Modify: `src/gameshelf/app.py`
-- Modify: `scripts/build_portable.ps1`
-- Modify: `.gitignore`
+**文件：**
+- 新建：`scripts/stage_webview2_runtime.ps1`
+- 新建：`packaging/runtime/README.md`
+- 新建：`src/gameshelf/bootstrap/webview2.py`
+- 新建：`tests/unit/bootstrap/test_webview2.py`
+- 修改：`src/gameshelf/app.py`
+- 修改：`scripts/build_portable.ps1`
+- 修改：`.gitignore`
 
-**Interfaces:**
-- Staging script accepts mandatory `-ArchivePath`, `-Version`, and `-SourceUrl`; produces `packaging/runtime/staged/` and `runtime-manifest.json`.
-- Produces: `select_webview2_runtime(resources, platform) -> RuntimeSelection`.
-- Produces: `ensure_windows10_runtime_acl(runtime_dir) -> AclResult`.
-- Complete build copies staged runtime to `dist/GameShelf/runtime`.
+**接口：**
+- 暂存脚本接受必需参数 `-ArchivePath`、`-Version` 和 `-SourceUrl`；产出 `packaging/runtime/staged/` 和 `runtime-manifest.json`。
+- 产出：`select_webview2_runtime(resources, platform) -> RuntimeSelection`。
+- 产出：`ensure_windows10_runtime_acl(runtime_dir) -> AclResult`。
+- 完整构建将暂存运行时复制到 `dist/GameShelf/runtime`。
 
-- [ ] **Step 1: Write failing runtime selection, UNC, and ACL-command tests**
+- [ ] **步骤 1：编写会失败的运行时选择、UNC 与 ACL 命令测试**
 
 ```python
 def test_local_fixed_runtime_is_selected_when_manifest_and_exe_exist(tmp_path) -> None:
@@ -264,34 +264,34 @@ def test_windows10_acl_uses_well_known_sids(fake_command_runner, runtime_dir) ->
     ]
 ```
 
-- [ ] **Step 2: Run runtime tests and verify failure**
+- [ ] **步骤 2：运行运行时测试并确认失败**
 
-Run: `python -m pytest tests/unit/bootstrap/test_webview2.py -v`
+运行：`python -m pytest tests/unit/bootstrap/test_webview2.py -v`
 
-Expected: FAIL because runtime selection/staging are absent.
+预期：失败，因为运行时选择/暂存尚不存在。
 
-- [ ] **Step 3: Implement official archive staging, manifest verification, ACL, and pywebview selection**
+- [ ] **步骤 3：实现官方归档暂存、清单校验、ACL 与 pywebview 选择**
 
-The PowerShell staging script must:
+PowerShell 暂存脚本必须：
 
-1. require a local official x64 Fixed Version `.cab`/archive supplied by the maintainer;
-2. resolve input/output paths and verify output remains `packaging/runtime/staged`;
-3. expand with Windows `expand.exe` or the documented archive format;
-4. find `msedgewebview2.exe` beneath the extracted root;
-5. write manifest fields `version`, `architecture: x64`, `archiveSha256`, `sourceUrl`, and `stagedAt`;
-6. never download or execute the runtime.
+1. 要求维护者提供本地官方 x64 Fixed Version `.cab`/归档；
+2. 解析输入/输出路径，并验证输出仍位于 `packaging/runtime/staged`；
+3. 使用 Windows `expand.exe` 或文档规定的归档格式展开；
+4. 在解压根目录下查找 `msedgewebview2.exe`；
+5. 写入清单字段 `version`、`architecture: x64`、`archiveSha256`、`sourceUrl` 和 `stagedAt`；
+6. 绝不下载或执行运行时。
 
-At startup, validate the manifest/version/executable and configure:
+启动时校验清单/版本/可执行文件，并配置：
 
 ```python
 webview.settings["WEBVIEW2_RUNTIME_PATH"] = str(selection.browser_executable_folder)
 ```
 
-On Windows 10, apply the documented two SID grants using a command argument array, hidden window, timeout 30 seconds, and no shell. If ACL setup fails, try a valid installed Evergreen runtime; otherwise show an actionable startup error. On Windows 11 the ACL call is unnecessary. Never run from UNC with Fixed Runtime.
+在 Windows 10 上，使用命令参数数组、隐藏窗口、30 秒超时且不使用 shell，应用文档规定的两个 SID 授权。ACL 设置失败时尝试使用有效的已安装 Evergreen 运行时；否则显示可操作的启动错误。Windows 11 无需调用 ACL。绝不从 UNC 路径运行固定版运行时。
 
-- [ ] **Step 4: Stage an official runtime and build the complete artifact**
+- [ ] **步骤 4：暂存官方运行时并构建完整产物**
 
-Run after downloading the current x64 Fixed Version package from Microsoft's official WebView2 download page:
+从 Microsoft 官方 WebView2 下载页面下载当前 x64 Fixed Version 软件包后运行：
 
 ```powershell
 .\scripts\stage_webview2_runtime.ps1 `
@@ -301,28 +301,28 @@ Run after downloading the current x64 Fixed Version package from Microsoft's off
 .\scripts\build_portable.ps1
 ```
 
-Expected: staging fails if the version argument does not match the extracted runtime; complete build contains `dist/GameShelf/runtime/msedgewebview2.exe` and a matching manifest. Version `150.0.4078.44` is the current stable Release-SDK runtime baseline when this plan was written. If Microsoft has replaced the downloadable Fixed Version before execution, use the exact new stable version in both arguments and let the generated manifest record it; do not add the version to application source code.
+预期：版本参数与解压出的运行时不匹配时暂存失败；完整构建包含 `dist/GameShelf/runtime/msedgewebview2.exe` 和匹配的清单。本计划编写时，版本 `150.0.4078.44` 是当前稳定 Release-SDK 运行时基线。如果执行前 Microsoft 已替换可下载的 Fixed Version，则在两个参数中使用精确的新稳定版本，并让生成的清单记录它；不要将版本写入应用源代码。
 
-- [ ] **Step 5: Commit runtime tooling, not runtime binaries**
+- [ ] **步骤 5：提交运行时工具，但不提交运行时二进制文件**
 
 ```powershell
 git add scripts/stage_webview2_runtime.ps1 packaging/runtime/README.md src/gameshelf/bootstrap/webview2.py src/gameshelf/app.py scripts/build_portable.ps1 tests/unit/bootstrap/test_webview2.py .gitignore
 git commit -m "build: support bundled fixed WebView2 runtime"
 ```
 
-### Task 5: Audit Portable Writes and Database Copy Consistency
+### 任务 5：审计便携写入与数据库复制一致性
 
-**Files:**
-- Create: `src/gameshelf/bootstrap/portable_audit.py`
-- Create: `scripts/test_portable_copy.ps1`
-- Create: `tests/integration/packaging/test_portable_writes.py`
-- Create: `tests/integration/packaging/test_database_copy.py`
+**文件：**
+- 新建：`src/gameshelf/bootstrap/portable_audit.py`
+- 新建：`scripts/test_portable_copy.ps1`
+- 新建：`tests/integration/packaging/test_portable_writes.py`
+- 新建：`tests/integration/packaging/test_database_copy.py`
 
-**Interfaces:**
-- `GameShelf.exe --portable-audit --json` initializes application services, creates representative managed files, checkpoints SQLite, reports them, cleans test records, and exits without GUI.
-- Copy script runs only against a temporary copy of `dist/GameShelf` and verifies all reported owned paths lie below copied `data`.
+**接口：**
+- `GameShelf.exe --portable-audit --json` 初始化应用服务，创建有代表性的受管理文件，对 SQLite 执行 checkpoint，报告结果，清理测试记录，并在不打开 GUI 的情况下退出。
+- 复制脚本只针对 `dist/GameShelf` 的临时副本运行，并验证报告的所有应用自有路径均位于复制后的 `data` 下。
 
-- [ ] **Step 1: Write failing portable audit tests**
+- [ ] **步骤 1：编写会失败的便携审计测试**
 
 ```python
 def test_audit_rejects_owned_path_outside_data(tmp_path) -> None:
@@ -340,52 +340,52 @@ def test_checkpointed_database_copy_opens_without_wal(tmp_path, migrated_databas
         assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
 ```
 
-- [ ] **Step 2: Run audit/copy tests and verify failure**
+- [ ] **步骤 2：运行审计/复制测试并确认失败**
 
-Run: `python -m pytest tests/integration/packaging/test_portable_writes.py tests/integration/packaging/test_database_copy.py -v`
+运行：`python -m pytest tests/integration/packaging/test_portable_writes.py tests/integration/packaging/test_database_copy.py -v`
 
-Expected: FAIL because audit/checkpoint helpers are absent.
+预期：失败，因为审计/checkpoint 辅助功能尚不存在。
 
-- [ ] **Step 3: Implement application-owned path registry and safe copy test**
+- [ ] **步骤 3：实现应用自有路径注册表与安全复制测试**
 
-Register owned path categories centrally: database/WAL/SHM, config, covers, manifests, webview, backups, logs, and temp. The audit reports resolved paths and refuses anything outside data. It must not claim to audit operating-system logs/runtime caches that GameShelf does not own.
+集中登记应用自有路径类别：数据库/WAL/SHM、配置、封面、清单、WebView、备份、日志和临时文件。审计报告解析后的路径，并拒绝任何位于 data 之外的路径。不得声称审计 GameShelf 不拥有的操作系统日志/运行时缓存。
 
-`test_portable_copy.ps1` creates a unique temp directory, copies the complete onedir, runs smoke and audit, shuts down, copies it again to a second Unicode/spaced local path, reruns smoke, and asserts the database schema/cover fixture survive. It removes only its resolved temp directory in `finally`.
+`test_portable_copy.ps1` 创建唯一临时目录，复制完整 onedir，运行冒烟测试和审计，关闭后再次复制到第二个带 Unicode/空格的本地路径，重新运行冒烟测试，并断言数据库架构/封面夹具仍然存在。它在 `finally` 中只删除自己解析后的临时目录。
 
-- [ ] **Step 4: Run source and packaged portable-copy tests**
+- [ ] **步骤 4：运行源码与打包产物的便携复制测试**
 
-Run:
+运行：
 
 ```powershell
 python -m pytest tests/integration/packaging/test_portable_writes.py tests/integration/packaging/test_database_copy.py -v
 .\scripts\test_portable_copy.ps1 -BuiltApp .\dist\GameShelf
 ```
 
-Expected: all pass; second copied app retains the audit fixture and schema.
+预期：全部通过；第二次复制的应用仍保留审计夹具和架构。
 
-- [ ] **Step 5: Commit portability auditing**
+- [ ] **步骤 5：提交便携性审计**
 
 ```powershell
 git add src/gameshelf/bootstrap/portable_audit.py scripts/test_portable_copy.ps1 tests/integration/packaging
 git commit -m "test: audit portable data and directory copies"
 ```
 
-### Task 6: Add Third-Party Notices, Release Metadata, and Clean-VM Checklist
+### 任务 6：添加第三方声明、发布元数据与干净虚拟机检查清单
 
-**Files:**
-- Modify: `THIRD_PARTY_NOTICES.md`
-- Create: `packaging/release-manifest.json`
-- Create: `docs/release/windows-clean-vm-checklist.md`
-- Create: `scripts/create_release_archive.ps1`
-- Create: `scripts/write_release_manifest.py`
-- Create: `tests/unit/scripts/test_release_manifest.py`
-- Modify: `README.md`
+**文件：**
+- 修改：`THIRD_PARTY_NOTICES.md`
+- 新建：`packaging/release-manifest.json`
+- 新建：`docs/release/windows-clean-vm-checklist.md`
+- 新建：`scripts/create_release_archive.ps1`
+- 新建：`scripts/write_release_manifest.py`
+- 新建：`tests/unit/scripts/test_release_manifest.py`
+- 修改：`README.md`
 
-**Interfaces:**
-- Embedded release manifest records app version, schema version, engine-rule version, Ludusavi SHA-256/source commit, WebView2 version/hash, Python/Node versions, and build time. A sibling `.sha256` and external release record store the final ZIP hash.
-- Archive script produces `artifacts/GameShelf-<version>-windows-x64-portable.zip` but never uploads it.
+**接口：**
+- 内嵌发布清单记录应用版本、架构版本、引擎规则版本、Ludusavi SHA-256/源提交、WebView2 版本/哈希、Python/Node 版本和构建时间。同目录 `.sha256` 文件及外部发布记录存储最终 ZIP 哈希。
+- 归档脚本产出 `artifacts/GameShelf-<version>-windows-x64-portable.zip`，但绝不上传。
 
-- [ ] **Step 1: Write failing release-manifest completeness test**
+- [ ] **步骤 1：编写会失败的发布清单完整性测试**
 
 ```python
 def test_release_manifest_contains_reproducibility_fields(release_manifest) -> None:
@@ -401,17 +401,17 @@ def test_external_release_record_contains_final_archive_hash(release_record) -> 
     assert len(release_record["artifactSha256"]) == 64
 ```
 
-- [ ] **Step 2: Run manifest tests and verify failure**
+- [ ] **步骤 2：运行清单测试并确认失败**
 
-Run: `python -m pytest tests/unit/scripts/test_release_manifest.py -v`
+运行：`python -m pytest tests/unit/scripts/test_release_manifest.py -v`
 
-Expected: FAIL because release metadata is incomplete/absent.
+预期：失败，因为发布元数据不完整或不存在。
 
-- [ ] **Step 3: Implement notices, local archive creation, and manual clean-VM procedure**
+- [ ] **步骤 3：实现声明、本地归档创建与手动干净虚拟机流程**
 
-`THIRD_PARTY_NOTICES.md` must enumerate direct runtime/build dependencies and licenses, including pywebview BSD-3-Clause, Vue/Pinia/Vite MIT, Pillow HPND, watchdog Apache-2.0, psutil BSD-3-Clause, pefile MIT, PyYAML MIT, RapidFuzz MIT, Ludusavi manifest MIT, PyInstaller GPL exception, and Microsoft WebView2 redistribution terms/link. Copy upstream license texts where redistribution requires them.
+`THIRD_PARTY_NOTICES.md` 必须列出直接运行时/构建依赖及其许可证，包括 pywebview BSD-3-Clause、Vue/Pinia/Vite MIT、Pillow HPND、watchdog Apache-2.0、psutil BSD-3-Clause、pefile MIT、PyYAML MIT、RapidFuzz MIT、Ludusavi manifest MIT、PyInstaller GPL exception，以及 Microsoft WebView2 再分发条款/链接。再分发要求附带许可证正文时，复制上游许可证文本。
 
-The clean-VM checklist must verify:
+干净虚拟机检查清单必须验证：
 
 ```text
 Windows 10 x64 with no installed Evergreen WebView2 -> complete package starts
@@ -424,37 +424,37 @@ UNC path -> fixed runtime is not selected; actionable fallback/error appears
 first migration + interrupted/invalid migration recovery -> old DB preserved
 ```
 
-`write_release_manifest.py` gathers dependency/runtime/rule/source fields and writes `packaging/release-manifest.json` into the staged app with `artifactSha256` omitted; the archive script then creates the ZIP and writes a sibling `artifacts/GameShelf-<version>-windows-x64-portable.zip.sha256` plus an external release record containing the archive hash. This avoids the impossible self-referential requirement of embedding a ZIP's final hash inside the same ZIP. The script checks a clean Git worktree, runs all automated gates, checkpoints test DBs, creates and hashes the ZIP, and verifies its contents. It does not tag, push, upload, or create a GitHub release.
+`write_release_manifest.py` 收集依赖/运行时/规则/源字段，将省略 `artifactSha256` 的 `packaging/release-manifest.json` 写入暂存应用；归档脚本随后创建 ZIP，并写入同目录的 `artifacts/GameShelf-<version>-windows-x64-portable.zip.sha256`，以及包含归档哈希的外部发布记录。这样避免了将 ZIP 最终哈希嵌入同一 ZIP 的不可能自引用要求。脚本检查干净的 Git 工作树，运行全部自动化门禁，对测试数据库执行 checkpoint，创建 ZIP、计算哈希并验证内容。它不打标签、不推送、不上传，也不创建 GitHub release。
 
-- [ ] **Step 4: Run release checks and create a local candidate archive**
+- [ ] **步骤 4：运行发布检查并创建本地候选归档**
 
-Run:
+运行：
 
 ```powershell
 python -m pytest tests/unit/scripts/test_release_manifest.py -v
 .\scripts\create_release_archive.ps1 -BuiltApp .\dist\GameShelf -Version '0.1.0'
 ```
 
-Expected: local ZIP and SHA-256 are created under `artifacts`; nothing is uploaded.
+预期：在 `artifacts` 下创建本地 ZIP 和 SHA-256；不上传任何内容。
 
-- [ ] **Step 5: Commit release documentation/tooling**
+- [ ] **步骤 5：提交发布文档/工具**
 
 ```powershell
 git add THIRD_PARTY_NOTICES.md packaging/release-manifest.json docs/release scripts/create_release_archive.ps1 scripts/write_release_manifest.py tests/unit/scripts README.md
 git commit -m "build: prepare verified portable release artifacts"
 ```
 
-### Task 7: Run Final Verification Before Claiming V1 Complete
+### 任务 7：在宣告 V1 完成前运行最终验证
 
-**Files:**
-- Modify only files required by failures found during verification.
-- Record: `docs/release/v0.1.0-verification.md`
+**文件：**
+- 只修改为修复验证过程中发现的失败所必需的文件。
+- 记录：`docs/release/v0.1.0-verification.md`
 
-**Interfaces:**
-- Produces an evidence record with command, timestamp, exit status, and clean-VM checklist results.
-- Does not publish the artifact.
+**接口：**
+- 产出：包含命令、时间戳、退出状态和干净虚拟机检查结果的证据记录。
+- 不发布产物。
 
-- [ ] **Step 1: Run every automated backend/frontend/build gate from a clean worktree**
+- [ ] **步骤 1：从干净工作树运行每个自动化后端/前端/构建门禁**
 
 ```powershell
 python -m pytest
@@ -468,15 +468,15 @@ npm --prefix frontend run build
 .\scripts\test_portable_copy.ps1 -BuiltApp .\dist\GameShelf
 ```
 
-Expected: every command exits `0`. If any command fails, diagnose and fix it before proceeding; do not write a success record.
+预期：每条命令均以 `0` 退出。任何命令失败时，先诊断并修复再继续；不得写入成功记录。
 
-- [ ] **Step 2: Execute the clean-VM checklist on Windows 10 and Windows 11**
+- [ ] **步骤 2：在 Windows 10 和 Windows 11 上执行干净虚拟机检查清单**
 
-Use fresh x64 VMs and a standard user. Record OS build, whether Evergreen was present before the test, package hash, runtime selected, and result for every checklist item. Do not use developer machines as a substitute for the no-runtime Windows 10 case.
+使用全新的 x64 虚拟机和标准用户。记录操作系统构建号、测试前是否存在 Evergreen、软件包哈希、选中的运行时及每个检查项结果。不得用开发机器代替无运行时的 Windows 10 用例。
 
-- [ ] **Step 3: Run representative manual acceptance scenarios**
+- [ ] **步骤 3：运行有代表性的手动验收场景**
 
-Use synthetic/free test fixtures, not redistributed commercial assets:
+使用合成/免费测试夹具，不得再分发商业资源：
 
 ```text
 multiple roots with nested game c
@@ -489,26 +489,26 @@ Ren'Py/Unity orphan fixtures
 copy complete app directory and reopen
 ```
 
-Expected: all approved V1 acceptance criteria are observed.
+预期：所有已确认的 V1 验收条件均得到验证。
 
-- [ ] **Step 4: Write and verify the evidence record**
+- [ ] **步骤 4：编写并验证证据记录**
 
-The record must list exact commits, dependency-lock hashes, artifact hash, commands/results, VM results, known limitations (including fixed-runtime size and UNC behavior), and explicitly state that save backup/restore and translation are not included.
+记录必须列出精确提交、依赖锁文件哈希、产物哈希、命令/结果、虚拟机结果、已知限制（包括固定运行时大小和 UNC 行为），并明确说明不包含存档备份/恢复和翻译功能。
 
-- [ ] **Step 5: Commit verification evidence only after all gates pass**
+- [ ] **步骤 5：仅在全部门禁通过后提交验证证据**
 
 ```powershell
 git add docs/release/v0.1.0-verification.md
 git commit -m "docs: record GameShelf v0.1.0 verification"
 ```
 
-## Portable Release Acceptance Gate
+## 便携发布验收门禁
 
-- Complete onedir starts on clean Windows 10/11 x64 without requiring a WebView2 installation.
-- Windows 10 fixed-runtime ACL requirement is handled without asking users to run GameShelf permanently as administrator.
-- A copied, closed application directory retains database, covers, manifests, settings, and webview state.
-- Application-owned persistent paths audit below `data`; run-in-progress copying is explicitly unsupported.
-- Artifact includes validated UI, rules, Ludusavi metadata/license, runtime manifest, and third-party notices.
-- UNC behavior is detected and explained rather than failing as an unexplained blank window.
-- Local archive creation does not publish, tag, push, or choose the project license.
-- Completion is claimed only after automated gates and both clean-VM records pass.
+- 完整 onedir 可在干净的 Windows 10/11 x64 上启动，无需安装 WebView2。
+- Windows 10 固定运行时 ACL 要求得到处理，无需让用户长期以管理员身份运行 GameShelf。
+- 复制已关闭的应用目录后，数据库、封面、清单、设置和 WebView 状态均保留。
+- 应用自有持久化路径审计均位于 `data` 下；明确不支持在应用运行期间复制。
+- 产物包含已校验 UI、规则、Ludusavi 元数据/许可证、运行时清单和第三方声明。
+- UNC 情况会被检测并解释，而不是出现原因不明的空白窗口。
+- 创建本地归档不会发布、打标签、推送或选择项目许可证。
+- 只有自动化门禁和两份干净虚拟机记录都通过后，才能宣告完成。

@@ -1,52 +1,52 @@
-# GameShelf Foundation and Desktop Shell Implementation Plan
+# GameShelf 基础设施与桌面外壳实施计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **供智能体执行者使用：** 必须使用子技能 `superpowers:subagent-driven-development`（推荐）或 `superpowers:executing-plans`，按任务逐项实施本计划。各步骤使用复选框（`- [ ]`）跟踪进度。
 
-**Goal:** Produce a runnable empty GameShelf desktop application with portable paths, migrated SQLite storage, serialized writes, cancellable background tasks, and a typed Vue↔Python bridge.
+**目标：** 产出一个可运行的空白 GameShelf 桌面应用，具备便携路径、已迁移的 SQLite 存储、串行化写入、可取消的后台任务，以及类型化的 Vue↔Python 桥接层。
 
-**Architecture:** Python is the composition root and owns all persistence. Vue renders a minimal shell and receives only JSON-safe envelopes through the pywebview whitelist; mutable database work and long-running tasks have dedicated concurrency boundaries from the first increment.
+**架构：** Python 作为组合根并负责全部持久化。Vue 渲染最小应用外壳，只通过 pywebview 白名单接收可安全序列化为 JSON 的响应封装；从第一个增量起，可变数据库操作和长时间任务就拥有各自独立的并发边界。
 
-**Tech Stack:** Python 3.12, pywebview 6.2.x, SQLite, Vue 3, TypeScript, Vite, Pinia, Vitest, Vue Test Utils, pytest, Ruff, mypy, Node.js 24 LTS.
+**技术栈：** Python 3.12、pywebview 6.2.x、SQLite、Vue 3、TypeScript、Vite、Pinia、Vitest、Vue Test Utils、pytest、Ruff、mypy、Node.js 24 LTS。
 
-## Global Constraints
+## 全局约束
 
-- Target Windows 10/11 x64 and PyInstaller onedir.
-- Keep all application-owned persistent state beneath executable-adjacent `data/`.
-- Use Python 3.12.x and Node.js 24 LTS; commit Python and npm lock results produced during this task.
-- The UI receives only `ApiResult<T>` JSON envelopes from a white-listed bridge.
-- SQLite writes must be serialized and foreign keys enabled.
-- Do not implement scanning, covers, engines, saves, translation, injection, or backup/restore in this increment.
-- Follow TDD and commit after each task.
+- 目标平台为 Windows 10/11 x64，使用 PyInstaller onedir 打包。
+- 应用自身的所有持久化状态都必须位于可执行文件旁的 `data/` 下。
+- 使用 Python 3.12.x 和 Node.js 24 LTS；提交本任务生成的 Python 与 npm 锁定结果。
+- UI 只能从白名单桥接层接收 `ApiResult<T>` JSON 响应封装。
+- SQLite 写入必须串行化，并启用外键。
+- 本增量不实现扫描、封面、引擎、存档、翻译、注入或备份/恢复。
+- 遵循 TDD，并在每个任务完成后提交。
 
 ---
 
-### Task 1: Scaffold the Python and Vue Workspaces
+### 任务 1：搭建 Python 与 Vue 工作区
 
-**Files:**
-- Create: `.editorconfig`
-- Create: `.gitignore`
-- Create: `README.md`
-- Create: `pyproject.toml`
-- Create: `src/gameshelf/__init__.py`
-- Create: `tests/unit/test_package_import.py`
-- Create: `frontend/package.json`
-- Create: `frontend/tsconfig.json`
-- Create: `frontend/tsconfig.app.json`
-- Create: `frontend/vite.config.ts`
-- Create: `frontend/vitest.config.ts`
-- Create: `frontend/index.html`
-- Create: `frontend/src/main.ts`
-- Create: `frontend/src/App.vue`
-- Create: `frontend/src/styles/base.css`
-- Create: `frontend/tests/App.spec.ts`
-- Generate: `frontend/package-lock.json`
+**文件：**
+- 新建：`.editorconfig`
+- 新建：`.gitignore`
+- 新建：`README.md`
+- 新建：`pyproject.toml`
+- 新建：`src/gameshelf/__init__.py`
+- 新建：`tests/unit/test_package_import.py`
+- 新建：`frontend/package.json`
+- 新建：`frontend/tsconfig.json`
+- 新建：`frontend/tsconfig.app.json`
+- 新建：`frontend/vite.config.ts`
+- 新建：`frontend/vitest.config.ts`
+- 新建：`frontend/index.html`
+- 新建：`frontend/src/main.ts`
+- 新建：`frontend/src/App.vue`
+- 新建：`frontend/src/styles/base.css`
+- 新建：`frontend/tests/App.spec.ts`
+- 生成：`frontend/package-lock.json`
 
-**Interfaces:**
-- Produces: importable package `gameshelf`.
-- Produces: Vite entry `frontend/src/main.ts` and testable root component `App.vue`.
-- Produces: commands `pytest`, `ruff`, `mypy`, `npm run test:unit`, `npm run type-check`, and `npm run build`.
+**接口：**
+- 产出：可导入的软件包 `gameshelf`。
+- 产出：Vite 入口 `frontend/src/main.ts` 和可测试的根组件 `App.vue`。
+- 产出：`pytest`、`ruff`、`mypy`、`npm run test:unit`、`npm run type-check` 及 `npm run build` 命令。
 
-- [ ] **Step 1: Write the failing Python and Vue smoke tests**
+- [ ] **步骤 1：编写会失败的 Python 与 Vue 冒烟测试**
 
 ```python
 # tests/unit/test_package_import.py
@@ -71,20 +71,20 @@ describe('App', () => {
 })
 ```
 
-- [ ] **Step 2: Run the tests and verify that the unscaffolded project fails**
+- [ ] **步骤 2：运行测试，确认尚未搭建的项目会失败**
 
-Run:
+运行：
 
 ```powershell
 python -m pytest tests/unit/test_package_import.py -v
 npm --prefix frontend run test:unit -- --run
 ```
 
-Expected: Python fails to import `gameshelf`; npm fails because `frontend/package.json` does not exist.
+预期：Python 因无法导入 `gameshelf` 而失败；npm 因 `frontend/package.json` 不存在而失败。
 
-- [ ] **Step 3: Create the minimal workspace and root UI**
+- [ ] **步骤 3：创建最小工作区与根 UI**
 
-Use this Python configuration:
+使用以下 Python 配置：
 
 ```toml
 # pyproject.toml
@@ -129,9 +129,9 @@ strict = true
 packages = ["gameshelf"]
 ```
 
-Use scripts `dev`, `build`, `type-check`, and `test:unit` in `frontend/package.json`, with runtime dependencies `vue` and `pinia`, and dev dependencies `@vitejs/plugin-vue`, `@vue/test-utils`, `jsdom`, `typescript`, `vite`, `vitest`, and `vue-tsc`. Set `engines.node` to `>=24 <25` and generate the lock with `npm --prefix frontend install`.
+在 `frontend/package.json` 中配置 `dev`、`build`、`type-check` 和 `test:unit` 脚本；运行时依赖为 `vue` 与 `pinia`，开发依赖为 `@vitejs/plugin-vue`、`@vue/test-utils`、`jsdom`、`typescript`、`vite`、`vitest` 和 `vue-tsc`。将 `engines.node` 设为 `>=24 <25`，并通过 `npm --prefix frontend install` 生成锁文件。
 
-The initial `App.vue` must render this semantic structure:
+初始 `App.vue` 必须渲染以下语义结构：
 
 ```vue
 <script setup lang="ts"></script>
@@ -147,9 +147,9 @@ The initial `App.vue` must render this semantic structure:
 </template>
 ```
 
-- [ ] **Step 4: Install dependencies and run all scaffold checks**
+- [ ] **步骤 4：安装依赖并运行全部脚手架检查**
 
-Run:
+运行：
 
 ```powershell
 python -m pip install -e ".[dev]"
@@ -162,32 +162,32 @@ npm --prefix frontend run type-check
 npm --prefix frontend run build
 ```
 
-Expected: all commands exit `0`; Vite creates `frontend/dist/index.html`.
+预期：所有命令均以 `0` 退出；Vite 创建 `frontend/dist/index.html`。
 
-- [ ] **Step 5: Commit the scaffold**
+- [ ] **步骤 5：提交脚手架**
 
 ```powershell
 git add .editorconfig .gitignore README.md pyproject.toml src tests frontend
 git commit -m "build: scaffold GameShelf workspaces"
 ```
 
-### Task 2: Resolve and Create the Portable Data Layout
+### 任务 2：解析并创建便携数据目录结构
 
-**Files:**
-- Create: `src/gameshelf/bootstrap/__init__.py`
-- Create: `src/gameshelf/bootstrap/paths.py`
-- Create: `src/gameshelf/bootstrap/config.py`
-- Create: `tests/unit/bootstrap/test_paths.py`
-- Create: `tests/unit/bootstrap/test_config.py`
+**文件：**
+- 新建：`src/gameshelf/bootstrap/__init__.py`
+- 新建：`src/gameshelf/bootstrap/paths.py`
+- 新建：`src/gameshelf/bootstrap/config.py`
+- 新建：`tests/unit/bootstrap/test_paths.py`
+- 新建：`tests/unit/bootstrap/test_config.py`
 
-**Interfaces:**
-- Produces: `AppPaths.from_root(app_root: Path) -> AppPaths`.
-- Produces: `AppPaths.for_runtime() -> AppPaths`.
-- Produces: `AppPaths.ensure_writable() -> None`, raising `DataDirectoryError`.
-- Produces: `JsonConfigStore.load() -> AppConfig` and `save(config: AppConfig) -> None` using `data/config.json`.
-- Later tasks consume every directory field from `AppPaths`; no feature may invent its own persistent root.
+**接口：**
+- 产出：`AppPaths.from_root(app_root: Path) -> AppPaths`。
+- 产出：`AppPaths.for_runtime() -> AppPaths`。
+- 产出：`AppPaths.ensure_writable() -> None`，失败时抛出 `DataDirectoryError`。
+- 产出：使用 `data/config.json` 的 `JsonConfigStore.load() -> AppConfig` 和 `save(config: AppConfig) -> None`。
+- 后续任务使用 `AppPaths` 中的每个目录字段；任何功能都不得自行另设持久化根目录。
 
-- [ ] **Step 1: Write failing tests for source, frozen, and unwritable layouts**
+- [ ] **步骤 1：为源码、冻结构建和不可写目录结构编写失败测试**
 
 ```python
 from pathlib import Path
@@ -234,13 +234,13 @@ def test_config_store_recovers_invalid_json_without_overwriting_it(tmp_path: Pat
     assert path.read_text(encoding="utf-8") == "{invalid"
 ```
 
-- [ ] **Step 2: Run the focused tests and verify failure**
+- [ ] **步骤 2：运行针对性测试并确认失败**
 
-Run: `python -m pytest tests/unit/bootstrap/test_paths.py -v`
+运行：`python -m pytest tests/unit/bootstrap/test_paths.py -v`
 
-Expected: FAIL because `gameshelf.bootstrap.paths` does not exist.
+预期：失败，因为 `gameshelf.bootstrap.paths` 尚不存在。
 
-- [ ] **Step 3: Implement the immutable path model**
+- [ ] **步骤 3：实现不可变路径模型**
 
 ```python
 @dataclass(frozen=True)
@@ -276,13 +276,13 @@ class AppPaths:
         )
 ```
 
-`runtime_root` must use `Path(sys.executable).parent` when `sys.frozen` is true, and the repository root derived from `paths.py` during source development. `ensure_writable` creates every required directory, writes and removes a UUID-named probe beneath `data`, and converts `OSError` into a Chinese `DataDirectoryError` without recommending administrator mode.
+当 `sys.frozen` 为 true 时，`runtime_root` 必须使用 `Path(sys.executable).parent`；源码开发时则使用根据 `paths.py` 推导出的仓库根目录。`ensure_writable` 创建所有必需目录，在 `data` 下写入并删除一个以 UUID 命名的探测文件，并将 `OSError` 转换为中文 `DataDirectoryError`，且不得建议用户以管理员模式运行。
 
-`AppConfig` starts with `{version: 1, language: "zh-CN", startupQuickScan: true, orphanScanExclusions: []}`. `JsonConfigStore.save` writes UTF-8 JSON to `data/temp`, flushes/fsyncs, and atomically replaces `config.json`. Missing config returns defaults; invalid config raises `InvalidConfigError` and preserves the original for manual recovery.
+`AppConfig` 的初始值为 `{version: 1, language: "zh-CN", startupQuickScan: true, orphanScanExclusions: []}`。`JsonConfigStore.save` 先将 UTF-8 JSON 写入 `data/temp`，执行 flush/fsync，再原子替换 `config.json`。配置不存在时返回默认值；配置无效时抛出 `InvalidConfigError`，并保留原文件供手动恢复。
 
-- [ ] **Step 4: Run path tests and static checks**
+- [ ] **步骤 4：运行路径测试与静态检查**
 
-Run:
+运行：
 
 ```powershell
 python -m pytest tests/unit/bootstrap/test_paths.py tests/unit/bootstrap/test_config.py -v
@@ -290,30 +290,30 @@ python -m ruff check src/gameshelf/bootstrap tests/unit/bootstrap
 python -m mypy src/gameshelf/bootstrap
 ```
 
-Expected: all pass.
+预期：全部通过。
 
-- [ ] **Step 5: Commit portable path resolution**
+- [ ] **步骤 5：提交便携路径解析功能**
 
 ```powershell
 git add src/gameshelf/bootstrap tests/unit/bootstrap
 git commit -m "feat: add portable application paths"
 ```
 
-### Task 3: Create the Initial SQLite Schema and Migrator
+### 任务 3：创建初始 SQLite 架构与迁移器
 
-**Files:**
-- Create: `src/gameshelf/db/__init__.py`
-- Create: `src/gameshelf/db/connection.py`
-- Create: `src/gameshelf/db/migrator.py`
-- Create: `src/gameshelf/db/migrations/0001_initial.sql`
-- Create: `tests/unit/db/test_migrator.py`
+**文件：**
+- 新建：`src/gameshelf/db/__init__.py`
+- 新建：`src/gameshelf/db/connection.py`
+- 新建：`src/gameshelf/db/migrator.py`
+- 新建：`src/gameshelf/db/migrations/0001_initial.sql`
+- 新建：`tests/unit/db/test_migrator.py`
 
-**Interfaces:**
-- Produces: `ConnectionFactory(database_file: Path).connect(*, readonly: bool = False) -> sqlite3.Connection`.
-- Produces: `Migrator(factory: ConnectionFactory, backups_dir: Path).migrate() -> int` returning schema version.
-- Produces: schema version `1` with the tables used by all later plans.
+**接口：**
+- 产出：`ConnectionFactory(database_file: Path).connect(*, readonly: bool = False) -> sqlite3.Connection`。
+- 产出：返回架构版本的 `Migrator(factory: ConnectionFactory, backups_dir: Path).migrate() -> int`。
+- 产出：架构版本 `1`，包含后续所有计划使用的表。
 
-- [ ] **Step 1: Write failing migration tests**
+- [ ] **步骤 1：编写会失败的迁移测试**
 
 ```python
 from pathlib import Path
@@ -373,17 +373,17 @@ def test_failed_migration_preserves_original_and_does_not_advance_version(
         assert connection.execute("SELECT value FROM legacy").fetchone()[0] == "kept"
 ```
 
-- [ ] **Step 2: Run the migration tests and verify failure**
+- [ ] **步骤 2：运行迁移测试并确认失败**
 
-Run: `python -m pytest tests/unit/db/test_migrator.py -v`
+运行：`python -m pytest tests/unit/db/test_migrator.py -v`
 
-Expected: FAIL because database infrastructure is absent.
+预期：失败，因为数据库基础设施尚不存在。
 
-- [ ] **Step 3: Implement connection policy, migration discovery, backup, and V1 DDL**
+- [ ] **步骤 3：实现连接策略、迁移发现、备份和 V1 DDL**
 
-Every connection must set `row_factory=sqlite3.Row`, `PRAGMA foreign_keys=ON`, `PRAGMA busy_timeout=5000`, and `PRAGMA journal_mode=WAL` for writable connections. Read-only connections use the SQLite URI `mode=ro`.
+每个连接都必须设置 `row_factory=sqlite3.Row`、`PRAGMA foreign_keys=ON` 和 `PRAGMA busy_timeout=5000`；可写连接还要设置 `PRAGMA journal_mode=WAL`。只读连接使用 SQLite URI `mode=ro`。
 
-Create these V1 tables and constraints in `0001_initial.sql`:
+在 `0001_initial.sql` 中创建以下 V1 数据表及约束：
 
 ```sql
 CREATE TABLE scan_roots (
@@ -515,11 +515,11 @@ CREATE TABLE settings (
 PRAGMA user_version = 1;
 ```
 
-Before migrating a non-empty database, run `PRAGMA wal_checkpoint(TRUNCATE)` and use `sqlite3.Connection.backup` into `backups_dir`. Apply each migration in a transaction and never increase `user_version` if its SQL fails. Keep the five newest automatic DB backups and delete only older files matching GameShelf's exact `library-before-v*-*.db` naming pattern. A failed migration preserves the source DB, leaves the application in a non-writing recovery state, and reports the backup path.
+迁移非空数据库前，运行 `PRAGMA wal_checkpoint(TRUNCATE)`，并使用 `sqlite3.Connection.backup` 将数据库备份到 `backups_dir`。每个迁移都在事务中执行；SQL 失败时绝不能提高 `user_version`。保留最新五个自动数据库备份，只删除严格匹配 GameShelf `library-before-v*-*.db` 命名模式的更早文件。迁移失败时保留源数据库，使应用进入禁止写入的恢复状态，并报告备份路径。
 
-- [ ] **Step 4: Run focused tests and inspect the created schema**
+- [ ] **步骤 4：运行针对性测试并检查生成的架构**
 
-Run:
+运行：
 
 ```powershell
 python -m pytest tests/unit/db/test_migrator.py -v
@@ -527,27 +527,27 @@ python -m ruff check src/gameshelf/db tests/unit/db
 python -m mypy src/gameshelf/db
 ```
 
-Expected: all pass; both migration tests assert version `1`.
+预期：全部通过；两个迁移测试均断言版本为 `1`。
 
-- [ ] **Step 5: Commit the initial database**
+- [ ] **步骤 5：提交初始数据库**
 
 ```powershell
 git add src/gameshelf/db tests/unit/db
 git commit -m "feat: add versioned SQLite storage"
 ```
 
-### Task 4: Serialize SQLite Writes
+### 任务 4：串行化 SQLite 写入
 
-**Files:**
-- Create: `src/gameshelf/db/writer.py`
-- Create: `tests/unit/db/test_writer.py`
+**文件：**
+- 新建：`src/gameshelf/db/writer.py`
+- 新建：`tests/unit/db/test_writer.py`
 
-**Interfaces:**
-- Consumes: `ConnectionFactory.connect()` from Task 3.
-- Produces: `DbWriter(factory).start()`, `submit(operation) -> Future[T]`, and `close(timeout: float = 5.0) -> None`.
-- Operations receive one writer-owned `sqlite3.Connection`; callers never pass connections across threads.
+**接口：**
+- 使用：任务 3 的 `ConnectionFactory.connect()`。
+- 产出：`DbWriter(factory).start()`、`submit(operation) -> Future[T]` 和 `close(timeout: float = 5.0) -> None`。
+- 操作接收由写入器持有的单个 `sqlite3.Connection`；调用方绝不在线程之间传递连接。
 
-- [ ] **Step 1: Write a failing serialized-write test**
+- [ ] **步骤 1：编写会失败的串行写入测试**
 
 ```python
 from concurrent.futures import Future
@@ -579,15 +579,15 @@ def test_writer_commits_operations_in_submission_order(tmp_path: Path) -> None:
         )] == list(range(20))
 ```
 
-- [ ] **Step 2: Run the test and verify failure**
+- [ ] **步骤 2：运行测试并确认失败**
 
-Run: `python -m pytest tests/unit/db/test_writer.py -v`
+运行：`python -m pytest tests/unit/db/test_writer.py -v`
 
-Expected: FAIL because `DbWriter` does not exist.
+预期：失败，因为 `DbWriter` 尚不存在。
 
-- [ ] **Step 3: Implement one connection on one daemon thread**
+- [ ] **步骤 3：在单个守护线程上实现单一连接**
 
-Use a `queue.Queue` of `(operation, Future)` records and a unique sentinel. For each operation: begin a transaction, call `operation(connection)`, commit and resolve the future; on exception, roll back and set the exception on the future. Reject new work after closing, and join the thread with the caller-provided timeout.
+使用保存 `(operation, Future)` 记录的 `queue.Queue` 和唯一的哨兵对象。对每项操作：开启事务、调用 `operation(connection)`、提交并完成 future；发生异常时回滚，并将异常设置到 future。关闭后拒绝新任务，并按调用方提供的超时时间等待线程结束。
 
 ```python
 T = TypeVar("T")
@@ -597,35 +597,35 @@ class DbWriter:
     def submit(self, operation: WriteOperation[T]) -> Future[T]: ...
 ```
 
-Do not expose the writer connection or allow an operation to call `commit` itself.
+不得暴露写入器连接，也不得允许操作自行调用 `commit`。
 
-- [ ] **Step 4: Run writer tests and the database suite**
+- [ ] **步骤 4：运行写入器测试与数据库测试套件**
 
-Run: `python -m pytest tests/unit/db -v`
+运行：`python -m pytest tests/unit/db -v`
 
-Expected: all pass with no locked-database errors.
+预期：全部通过，不出现数据库锁定错误。
 
-- [ ] **Step 5: Commit the writer boundary**
+- [ ] **步骤 5：提交写入边界**
 
 ```powershell
 git add src/gameshelf/db/writer.py tests/unit/db/test_writer.py
 git commit -m "feat: serialize database writes"
 ```
 
-### Task 5: Add Cancellable Background Task State
+### 任务 5：添加可取消的后台任务状态
 
-**Files:**
-- Create: `src/gameshelf/bridge/__init__.py`
-- Create: `src/gameshelf/bridge/tasks.py`
-- Create: `tests/unit/bridge/test_tasks.py`
+**文件：**
+- 新建：`src/gameshelf/bridge/__init__.py`
+- 新建：`src/gameshelf/bridge/tasks.py`
+- 新建：`tests/unit/bridge/test_tasks.py`
 
-**Interfaces:**
-- Produces: `TaskRegistry.submit(kind, operation) -> UUID string`.
-- Produces: `TaskContext.report(completed: int, total: int | None, message: str) -> None` and `raise_if_cancelled()`.
-- Produces: immutable `TaskSnapshot` with `id`, `kind`, `status`, `progress`, `message`, `result`, and `error`.
-- Status values: `queued`, `running`, `completed`, `cancelled`, `failed`.
+**接口：**
+- 产出：`TaskRegistry.submit(kind, operation) -> UUID string`。
+- 产出：`TaskContext.report(completed: int, total: int | None, message: str) -> None` 和 `raise_if_cancelled()`。
+- 产出：不可变的 `TaskSnapshot`，包含 `id`、`kind`、`status`、`progress`、`message`、`result` 和 `error`。
+- 状态值：`queued`、`running`、`completed`、`cancelled`、`failed`。
 
-- [ ] **Step 1: Write failing state-transition and cancellation tests**
+- [ ] **步骤 1：编写会失败的状态转换与取消测试**
 
 ```python
 from threading import Event
@@ -663,19 +663,19 @@ def test_task_can_be_cancelled_cooperatively() -> None:
     registry.close()
 ```
 
-- [ ] **Step 2: Run the task tests and verify failure**
+- [ ] **步骤 2：运行任务测试并确认失败**
 
-Run: `python -m pytest tests/unit/bridge/test_tasks.py -v`
+运行：`python -m pytest tests/unit/bridge/test_tasks.py -v`
 
-Expected: FAIL because the task registry is absent.
+预期：失败，因为任务注册表尚不存在。
 
-- [ ] **Step 3: Implement thread-safe snapshots and cooperative cancellation**
+- [ ] **步骤 3：实现线程安全的快照与协作式取消**
 
-Use `ThreadPoolExecutor`, a `threading.RLock`, per-task `threading.Event`, and `dataclasses.replace` to publish immutable snapshots. Catch only the project-specific `TaskCancelled` as cancellation; convert other exceptions into `failed` with a stable error code and user-safe message while logging the traceback later through the composition root.
+使用 `ThreadPoolExecutor`、一个 `threading.RLock`、每任务一个 `threading.Event` 以及 `dataclasses.replace` 发布不可变快照。只有项目专用的 `TaskCancelled` 才按取消处理；其他异常转为 `failed`，包含稳定的错误码和对用户安全的消息，之后再由组合根记录 traceback。
 
-- [ ] **Step 4: Run focused and static checks**
+- [ ] **步骤 4：运行针对性测试与静态检查**
 
-Run:
+运行：
 
 ```powershell
 python -m pytest tests/unit/bridge/test_tasks.py -v
@@ -683,34 +683,34 @@ python -m ruff check src/gameshelf/bridge tests/unit/bridge
 python -m mypy src/gameshelf/bridge
 ```
 
-Expected: all pass.
+预期：全部通过。
 
-- [ ] **Step 5: Commit background task infrastructure**
+- [ ] **步骤 5：提交后台任务基础设施**
 
 ```powershell
 git add src/gameshelf/bridge tests/unit/bridge
 git commit -m "feat: add cancellable task registry"
 ```
 
-### Task 6: Define the Bridge Envelope and Frontend Client
+### 任务 6：定义桥接响应封装与前端客户端
 
-**Files:**
-- Create: `src/gameshelf/bridge/contracts.py`
-- Create: `src/gameshelf/bridge/api.py`
-- Create: `tests/unit/bridge/test_api.py`
-- Create: `frontend/src/api/contracts.ts`
-- Create: `frontend/src/api/bridge.ts`
-- Create: `frontend/src/api/mockBridge.ts`
-- Create: `frontend/src/api/window.d.ts`
-- Create: `frontend/tests/bridge.spec.ts`
-- Modify: `frontend/src/App.vue`
+**文件：**
+- 新建：`src/gameshelf/bridge/contracts.py`
+- 新建：`src/gameshelf/bridge/api.py`
+- 新建：`tests/unit/bridge/test_api.py`
+- 新建：`frontend/src/api/contracts.ts`
+- 新建：`frontend/src/api/bridge.ts`
+- 新建：`frontend/src/api/mockBridge.ts`
+- 新建：`frontend/src/api/window.d.ts`
+- 新建：`frontend/tests/bridge.spec.ts`
+- 修改：`frontend/src/App.vue`
 
-**Interfaces:**
-- Consumes: `AppPaths` and `TaskRegistry`.
-- Produces Python methods: `bootstrap`, `task_snapshot`, and `cancel_task`.
-- Produces TypeScript `GameShelfBridge` with the same methods and `ApiResult<T>` envelope.
+**接口：**
+- 使用：`AppPaths` 和 `TaskRegistry`。
+- 产出 Python 方法：`bootstrap`、`task_snapshot` 和 `cancel_task`。
+- 产出：具有相同方法和 `ApiResult<T>` 响应封装的 TypeScript `GameShelfBridge`。
 
-- [ ] **Step 1: Write failing backend and frontend contract tests**
+- [ ] **步骤 1：编写会失败的后端与前端契约测试**
 
 ```python
 def test_bootstrap_returns_json_safe_success(api: BridgeApi) -> None:
@@ -737,20 +737,20 @@ it('uses the development mock when pywebview is absent', async () => {
 })
 ```
 
-- [ ] **Step 2: Run both contract suites and verify failure**
+- [ ] **步骤 2：运行两组契约测试并确认失败**
 
-Run:
+运行：
 
 ```powershell
 python -m pytest tests/unit/bridge/test_api.py -v
 npm --prefix frontend run test:unit -- --run tests/bridge.spec.ts
 ```
 
-Expected: both fail because the contracts and clients do not exist.
+预期：两者都失败，因为契约和客户端尚不存在。
 
-- [ ] **Step 3: Implement matching Python and TypeScript contracts**
+- [ ] **步骤 3：实现相互匹配的 Python 与 TypeScript 契约**
 
-Use this exact envelope:
+使用以下精确的响应封装：
 
 ```ts
 export type ApiError = { code: string; message: string; details?: unknown }
@@ -771,11 +771,11 @@ export interface GameShelfBridge {
 }
 ```
 
-`createBridge` uses `window.pywebview.api` only after the `pywebviewready` event; development and component tests receive `createMockBridge()`. `App.vue` shows “正在连接本地数据库…” during bootstrap and the existing empty state after success. A failed bootstrap renders the error message and a retry button.
+`createBridge` 只能在 `pywebviewready` 事件之后使用 `window.pywebview.api`；开发和组件测试使用 `createMockBridge()`。`App.vue` 在引导期间显示“正在连接本地数据库…”，成功后显示现有空状态。引导失败时渲染错误消息和重试按钮。
 
-- [ ] **Step 4: Run bridge tests, frontend tests, and type checking**
+- [ ] **步骤 4：运行桥接测试、前端测试和类型检查**
 
-Run:
+运行：
 
 ```powershell
 python -m pytest tests/unit/bridge -v
@@ -783,33 +783,33 @@ npm --prefix frontend run test:unit -- --run
 npm --prefix frontend run type-check
 ```
 
-Expected: all pass.
+预期：全部通过。
 
-- [ ] **Step 5: Commit the typed bridge**
+- [ ] **步骤 5：提交类型化桥接层**
 
 ```powershell
 git add src/gameshelf/bridge tests/unit/bridge frontend/src frontend/tests
 git commit -m "feat: add typed desktop bridge"
 ```
 
-### Task 7: Compose the Desktop Application and CI Baseline
+### 任务 7：组装桌面应用与 CI 基线
 
-**Files:**
-- Create: `src/gameshelf/bootstrap/logging.py`
-- Create: `src/gameshelf/bootstrap/application.py`
-- Create: `src/gameshelf/app.py`
-- Create: `src/gameshelf/__main__.py`
-- Create: `tests/integration/test_application_bootstrap.py`
-- Create: `.github/workflows/ci.yml`
-- Modify: `README.md`
+**文件：**
+- 新建：`src/gameshelf/bootstrap/logging.py`
+- 新建：`src/gameshelf/bootstrap/application.py`
+- 新建：`src/gameshelf/app.py`
+- 新建：`src/gameshelf/__main__.py`
+- 新建：`tests/integration/test_application_bootstrap.py`
+- 新建：`.github/workflows/ci.yml`
+- 修改：`README.md`
 
-**Interfaces:**
-- Consumes: all previous foundation interfaces.
-- Produces: `build_application(paths: AppPaths) -> Application` with `api`, `database`, `writer`, and `tasks`.
-- Produces: `python -m gameshelf --smoke-test` and `gameshelf --smoke-test`, which initialize paths/schema and exit without opening a window.
-- Produces: normal `python -m gameshelf`, which opens the pywebview window.
+**接口：**
+- 使用：此前所有基础设施接口。
+- 产出：具有 `api`、`database`、`writer` 和 `tasks` 的 `build_application(paths: AppPaths) -> Application`。
+- 产出：`python -m gameshelf --smoke-test` 和 `gameshelf --smoke-test`，用于初始化路径/架构并在不打开窗口的情况下退出。
+- 产出：正常的 `python -m gameshelf`，用于打开 pywebview 窗口。
 
-- [ ] **Step 1: Write a failing bootstrap smoke test**
+- [ ] **步骤 1：编写会失败的引导冒烟测试**
 
 ```python
 from pathlib import Path
@@ -830,26 +830,26 @@ def test_application_bootstrap_creates_only_portable_state(tmp_path: Path) -> No
         application.close()
 ```
 
-- [ ] **Step 2: Run the integration test and verify failure**
+- [ ] **步骤 2：运行集成测试并确认失败**
 
-Run: `python -m pytest tests/integration/test_application_bootstrap.py -v`
+运行：`python -m pytest tests/integration/test_application_bootstrap.py -v`
 
-Expected: FAIL because the composition root does not exist.
+预期：失败，因为组合根尚不存在。
 
-- [ ] **Step 3: Implement lifecycle, logging, smoke mode, and pywebview startup**
+- [ ] **步骤 3：实现生命周期、日志、冒烟模式与 pywebview 启动**
 
-`build_application` must:
+`build_application` 必须：
 
-1. call `paths.ensure_writable()`;
-2. configure a rotating UTF-8 log at `data/logs/gameshelf.log`;
-3. run `Migrator.migrate()`;
-4. start `DbWriter` and `TaskRegistry`;
-5. construct `BridgeApi`;
-6. expose one idempotent `close()` that stops tasks before the writer.
+1. 调用 `paths.ensure_writable()`；
+2. 在 `data/logs/gameshelf.log` 配置滚动 UTF-8 日志；
+3. 运行 `Migrator.migrate()`；
+4. 启动 `DbWriter` 和 `TaskRegistry`；
+5. 构造 `BridgeApi`；
+6. 提供幂等的 `close()`，先停止任务，再停止写入器。
 
-Logging must never include bridge payload bytes, clipboard data, registry values, or save-file contents. Normal logs may include user-visible paths needed for local diagnosis; diagnostic export is outside V1 and therefore no external upload/export occurs.
+日志绝不能包含桥接载荷字节、剪贴板数据、注册表值或存档文件内容。普通日志可以包含本地诊断所需的用户可见路径；诊断导出不属于 V1，因此不会发生任何外部上传或导出。
 
-Normal startup must build the frontend first during development, then use:
+开发期间正常启动前必须先构建前端，然后使用：
 
 ```python
 window = webview.create_window(
@@ -868,13 +868,13 @@ webview.start(
 )
 ```
 
-In source development, accept `GAMESHELF_DEV_SERVER_URL` only when the process is not frozen; otherwise always load packaged UI. `--smoke-test` prints `GameShelf bootstrap OK (schema 1)` and exits `0`.
+源码开发时，只有进程未被冻结打包时才接受 `GAMESHELF_DEV_SERVER_URL`；否则始终加载已打包 UI。`--smoke-test` 输出 `GameShelf bootstrap OK (schema 1)` 并以 `0` 退出。
 
-Add a Windows CI workflow that installs Python 3.12 and Node 24, runs the roadmap integration gate, and never opens the GUI.
+添加 Windows CI 工作流：安装 Python 3.12 与 Node 24，运行路线图中的集成门禁，并且绝不打开 GUI。
 
-- [ ] **Step 4: Build UI and run the full foundation gate**
+- [ ] **步骤 4：构建 UI 并运行完整基础设施门禁**
 
-Run:
+运行：
 
 ```powershell
 npm --prefix frontend run build
@@ -889,20 +889,20 @@ npm --prefix frontend run type-check
 npm --prefix frontend run build
 ```
 
-Expected: smoke output includes schema `1`; all checks exit `0`.
+预期：冒烟输出包含架构版本 `1`；所有检查均以 `0` 退出。
 
-- [ ] **Step 5: Commit the runnable foundation**
+- [ ] **步骤 5：提交可运行的基础设施**
 
 ```powershell
 git add src tests frontend README.md .github resources/ui
 git commit -m "feat: boot portable GameShelf shell"
 ```
 
-## Foundation Acceptance Gate
+## 基础设施验收门禁
 
-- `python -m gameshelf --smoke-test` initializes an arbitrary writable app root without touching user profile storage.
-- Normal startup opens an empty GameShelf window and persists webview state under `data/webview`.
-- Schema version is `1`; foreign keys and WAL are enabled.
-- Background task cancellation and database serialization are covered by deterministic tests.
-- Python and TypeScript bridge method names and envelopes match.
-- Full backend/frontend test, lint, type-check, and build commands pass.
+- `python -m gameshelf --smoke-test` 能初始化任意可写的应用根目录，且不接触用户配置文件存储位置。
+- 正常启动会打开一个空的 GameShelf 窗口，并将 WebView 状态持久化到 `data/webview` 下。
+- 架构版本为 `1`；外键和 WAL 已启用。
+- 后台任务取消和数据库串行化均由确定性测试覆盖。
+- Python 与 TypeScript 桥接方法名称及响应封装相互匹配。
+- 完整的后端/前端测试、lint、类型检查及构建命令全部通过。

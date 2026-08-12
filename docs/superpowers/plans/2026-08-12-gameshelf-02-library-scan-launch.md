@@ -1,41 +1,41 @@
-# GameShelf Library Scan and Launch Implementation Plan
+# GameShelf 游戏库扫描与启动实施计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **供智能体执行者使用：** 必须使用子技能 `superpowers:subagent-driven-development`（推荐）或 `superpowers:executing-plans`，按任务逐项实施本计划。各步骤使用复选框（`- [ ]`）跟踪进度。
 
-**Goal:** Turn the empty shell into a persistent multi-root game library that safely discovers folders, recommends executables, reconciles missing games, launches confirmed programs, and opens folders.
+**目标：** 将空白外壳变为持久化的多根目录游戏库，能够安全发现文件夹、推荐可执行文件、核对失效游戏、启动已确认的程序以及打开文件夹。
 
-**Architecture:** Root configuration and games are repository-backed domain records. Scanning is a cancellable two-stage pipeline—enumerate deterministic candidate directories, then rank EXEs—followed by transactional reconciliation that updates missing state only after a successful scan boundary.
+**架构：** 根目录配置和游戏都是由仓储支持的领域记录。扫描采用可取消的两阶段流水线——先以确定性方式枚举候选目录，再对 EXE 排名——之后执行事务化核对，只有成功到达扫描边界后才更新失效状态。
 
-**Tech Stack:** Existing foundation plus Python `pefile`, pathlib/ntpath, SQLite, Vue 3/Pinia, Vitest, pytest.
+**技术栈：** 现有基础设施，加上 Python `pefile`、pathlib/ntpath、SQLite、Vue 3/Pinia、Vitest、pytest。
 
-## Global Constraints
+## 全局约束
 
-- Unknown-engine games and direct child folders without an EXE remain valid library entries.
-- Multiple roots have independent mode, depth, exclusions, enabled state, status, and errors.
-- Do not mark games missing after root unavailability, permission error, cancellation, or failed scan.
-- Preserve manual title and main-EXE choices.
-- Deduplicate normalized Windows paths; for a new overlapping candidate choose the longest containing root.
-- Do not follow directory junctions/symlinks during recursive scanning.
-- Never execute an EXE during scanning.
-- Launch with argument arrays and `shell=False` only after explicit user action.
-- Follow TDD and commit after every task.
+- 引擎未知的游戏，以及没有 EXE 的直接子文件夹，仍然是有效的游戏库条目。
+- 多个根目录分别拥有独立的模式、深度、排除规则、启用状态、运行状态和错误。
+- 根目录不可用、发生权限错误、取消或扫描失败后，不得将游戏标记为失效。
+- 保留用户手动设置的标题和主 EXE。
+- 按规范化的 Windows 路径去重；新候选项处于多个重叠根目录时，选择包含它且路径最长的根目录。
+- 递归扫描时不跟随目录联接点或符号链接。
+- 扫描期间绝不执行 EXE。
+- 只有用户明确操作后，才以参数数组和 `shell=False` 启动程序。
+- 遵循 TDD，并在每个任务完成后提交。
 
 ---
 
-### Task 1: Normalize Windows Paths Without Touching the Filesystem
+### 任务 1：在不访问文件系统的情况下规范化 Windows 路径
 
-**Files:**
-- Create: `src/gameshelf/scanning/__init__.py`
-- Create: `src/gameshelf/scanning/path_keys.py`
-- Create: `tests/unit/scanning/test_path_keys.py`
+**文件：**
+- 新建：`src/gameshelf/scanning/__init__.py`
+- 新建：`src/gameshelf/scanning/path_keys.py`
+- 新建：`tests/unit/scanning/test_path_keys.py`
 
-**Interfaces:**
-- Produces: `windows_path_key(path: str | Path) -> str`.
-- Produces: `is_same_or_child(path_key: str, root_key: str) -> bool`.
-- Produces: `portable_relative(path: Path, root: Path) -> str` using `/` in storage.
-- Produces: `expand_relative(root: Path, relative: str) -> Path` with traversal rejection.
+**接口：**
+- 产出：`windows_path_key(path: str | Path) -> str`。
+- 产出：`is_same_or_child(path_key: str, root_key: str) -> bool`。
+- 产出：`portable_relative(path: Path, root: Path) -> str`，存储时使用 `/`。
+- 产出：拒绝路径穿越的 `expand_relative(root: Path, relative: str) -> Path`。
 
-- [ ] **Step 1: Write failing normalization and traversal tests**
+- [ ] **步骤 1：编写会失败的规范化与路径穿越测试**
 
 ```python
 import pytest
@@ -69,21 +69,21 @@ def test_relative_paths_are_portable_and_cannot_escape(tmp_path) -> None:
         expand_relative(root, "../outside")
 ```
 
-- [ ] **Step 2: Run the focused tests and verify failure**
+- [ ] **步骤 2：运行针对性测试并确认失败**
 
-Run: `python -m pytest tests/unit/scanning/test_path_keys.py -v`
+运行：`python -m pytest tests/unit/scanning/test_path_keys.py -v`
 
-Expected: FAIL because `path_keys` does not exist.
+预期：失败，因为 `path_keys` 尚不存在。
 
-- [ ] **Step 3: Implement lexical Windows normalization and safe expansion**
+- [ ] **步骤 3：实现按字面处理的 Windows 路径规范化与安全展开**
 
-Strip a leading `\\?\`, convert `/` to `\`, apply `ntpath.normpath`, remove trailing spaces/dots from each non-root component, and `casefold()` the result. Preserve UNC server/share boundaries. Do not call `Path.resolve()` to create the deduplication key because unavailable removable drives must still normalize.
+移除开头的 `\\?\`，将 `/` 转为 `\`，应用 `ntpath.normpath`，去掉每个非根路径分段末尾的空格/句点，并对结果执行 `casefold()`。保留 UNC 服务器/共享边界。生成去重键时不要调用 `Path.resolve()`，因为暂时不可用的可移动驱动器仍需能够规范化。
 
-`expand_relative` must reject absolute paths, drive-qualified paths, `..` components, and a final path whose lexical Windows key is outside the root key.
+`expand_relative` 必须拒绝绝对路径、带驱动器限定的路径、`..` 分段，以及按字面生成的 Windows 键位于根目录键之外的最终路径。
 
-- [ ] **Step 4: Run path tests and static checks**
+- [ ] **步骤 4：运行路径测试与静态检查**
 
-Run:
+运行：
 
 ```powershell
 python -m pytest tests/unit/scanning/test_path_keys.py -v
@@ -91,32 +91,32 @@ python -m ruff check src/gameshelf/scanning tests/unit/scanning
 python -m mypy src/gameshelf/scanning
 ```
 
-Expected: all pass.
+预期：全部通过。
 
-- [ ] **Step 5: Commit path identity rules**
+- [ ] **步骤 5：提交路径标识规则**
 
 ```powershell
 git add src/gameshelf/scanning tests/unit/scanning
 git commit -m "feat: normalize portable Windows paths"
 ```
 
-### Task 2: Add Scan-Root and Game Domain Repositories
+### 任务 2：添加扫描根目录与游戏领域仓储
 
-**Files:**
-- Create: `src/gameshelf/library/__init__.py`
-- Create: `src/gameshelf/library/models.py`
-- Create: `src/gameshelf/library/repository.py`
-- Create: `src/gameshelf/library/service.py`
-- Create: `tests/unit/library/test_repository.py`
-- Create: `tests/unit/library/test_service.py`
+**文件：**
+- 新建：`src/gameshelf/library/__init__.py`
+- 新建：`src/gameshelf/library/models.py`
+- 新建：`src/gameshelf/library/repository.py`
+- 新建：`src/gameshelf/library/service.py`
+- 新建：`tests/unit/library/test_repository.py`
+- 新建：`tests/unit/library/test_service.py`
 
-**Interfaces:**
-- Produces immutable `ScanRoot` and `Game` dataclasses matching schema columns.
-- Produces `LibraryRepository` read methods using short-lived read connections.
-- Produces `LibraryService.add_root`, `update_root`, `remove_root`, `remap_root`, `list_roots`, `list_games`, and `get_game`.
-- All mutations submit one transaction to `DbWriter`.
+**接口：**
+- 产出：与架构列对应的不可变 `ScanRoot` 和 `Game` 数据类。
+- 产出：使用短生命周期只读连接的 `LibraryRepository` 读取方法。
+- 产出：`LibraryService.add_root`、`update_root`、`remove_root`、`remap_root`、`list_roots`、`list_games` 和 `get_game`。
+- 所有变更都向 `DbWriter` 提交一个事务。
 
-- [ ] **Step 1: Write failing repository/service tests**
+- [ ] **步骤 1：编写会失败的仓储/服务测试**
 
 ```python
 def test_add_root_deduplicates_by_windows_key(library_service: LibraryService) -> None:
@@ -143,15 +143,15 @@ def test_remove_root_preserves_games_as_missing_records(library_service: Library
     assert preserved.status == "missing"
 ```
 
-- [ ] **Step 2: Run tests and verify failure**
+- [ ] **步骤 2：运行测试并确认失败**
 
-Run: `python -m pytest tests/unit/library -v`
+运行：`python -m pytest tests/unit/library -v`
 
-Expected: FAIL because the library domain is absent.
+预期：失败，因为游戏库领域尚不存在。
 
-- [ ] **Step 3: Implement immutable models and transactional service methods**
+- [ ] **步骤 3：实现不可变模型与事务化服务方法**
 
-Use these public request/value types:
+使用以下公开请求/值类型：
 
 ```python
 ScanMode = Literal["children", "recursive"]
@@ -189,35 +189,35 @@ class Game:
     missing_since: str | None
 ```
 
-Validate root mode/depth (`children` always stores depth `1`; recursive depth range is `1..8`). Normalize exclusions as relative directory names or glob patterns and reject absolute/parent-traversal entries. Removing a root updates its games to `scan_root_id=NULL`, `status='missing'`, and sets `missing_since` in the same transaction before deleting the root.
+校验根目录模式/深度（`children` 始终存储深度 `1`；递归深度范围为 `1..8`）。将排除项规范化为相对目录名或 glob 模式，并拒绝绝对路径或向父级穿越的条目。删除根目录时，必须先在同一事务内将其游戏更新为 `scan_root_id=NULL`、`status='missing'` 并设置 `missing_since`，然后再删除根目录。
 
-- [ ] **Step 4: Run library tests and the database suite**
+- [ ] **步骤 4：运行游戏库测试与数据库测试套件**
 
-Run: `python -m pytest tests/unit/library tests/unit/db -v`
+运行：`python -m pytest tests/unit/library tests/unit/db -v`
 
-Expected: all pass.
+预期：全部通过。
 
-- [ ] **Step 5: Commit library persistence**
+- [ ] **步骤 5：提交游戏库持久化**
 
 ```powershell
 git add src/gameshelf/library tests/unit/library
 git commit -m "feat: persist game roots and library records"
 ```
 
-### Task 3: Enumerate Candidate Game Directories
+### 任务 3：枚举候选游戏目录
 
-**Files:**
-- Create: `src/gameshelf/scanning/models.py`
-- Create: `src/gameshelf/scanning/discovery.py`
-- Create: `tests/unit/scanning/test_discovery.py`
+**文件：**
+- 新建：`src/gameshelf/scanning/models.py`
+- 新建：`src/gameshelf/scanning/discovery.py`
+- 新建：`tests/unit/scanning/test_discovery.py`
 
-**Interfaces:**
-- Consumes: `ScanRoot`, `windows_path_key`, `portable_relative`, and `TaskContext`.
-- Produces: `DirectoryCandidate(path, relative_dir, depth, reason)`.
-- Produces: `enumerate_candidates(root: ScanRoot, context: TaskContext) -> Iterator[DirectoryCandidate]`.
-- `reason` is `direct_child` or `generic_executable` in this increment.
+**接口：**
+- 使用：`ScanRoot`、`windows_path_key`、`portable_relative` 和 `TaskContext`。
+- 产出：`DirectoryCandidate(path, relative_dir, depth, reason)`。
+- 产出：`enumerate_candidates(root: ScanRoot, context: TaskContext) -> Iterator[DirectoryCandidate]`。
+- 本增量中 `reason` 为 `direct_child` 或 `generic_executable`。
 
-- [ ] **Step 1: Write failing direct-child, recursive, exclusion, and junction tests**
+- [ ] **步骤 1：编写会失败的直接子目录、递归、排除和联接点测试**
 
 ```python
 def test_children_mode_keeps_every_direct_directory_even_without_exe(tmp_path, task_context) -> None:
@@ -243,49 +243,49 @@ def test_recursive_mode_finds_nested_exe_and_stops_below_game(tmp_path, task_con
     ]
 ```
 
-Also test case-insensitive exclusions, inaccessible child directories, cancellation after enumeration begins, and a mocked `DirEntry.is_symlink()` returning true.
+还要测试不区分大小写的排除项、不可访问的子目录、枚举开始后的取消，以及模拟 `DirEntry.is_symlink()` 返回 true 的情况。
 
-- [ ] **Step 2: Run discovery tests and verify failure**
+- [ ] **步骤 2：运行发现测试并确认失败**
 
-Run: `python -m pytest tests/unit/scanning/test_discovery.py -v`
+运行：`python -m pytest tests/unit/scanning/test_discovery.py -v`
 
-Expected: FAIL because discovery is absent.
+预期：失败，因为发现功能尚不存在。
 
-- [ ] **Step 3: Implement deterministic `os.scandir` traversal**
+- [ ] **步骤 3：实现确定性的 `os.scandir` 遍历**
 
-Sort entries by `name.casefold()` before yielding. In children mode, yield every accessible direct directory. In recursive mode, descend only to `max_depth`; yield a directory when it contains at least one `.exe` regular file, then do not descend below it. Skip symlinks and reparse-point directories. Convert per-child access errors into warning evidence while continuing; inability to open the root raises `RootUnavailableError` and yields nothing.
+产出条目前先按 `name.casefold()` 排序。子目录模式下，产出每个可访问的直接子目录。递归模式下只深入到 `max_depth`；目录中至少包含一个 `.exe` 普通文件时就产出该目录，并停止向其下层继续深入。跳过符号链接和重解析点目录。单个子项的访问错误转为警告证据并继续扫描；无法打开根目录时抛出 `RootUnavailableError`，且不产出任何内容。
 
-Call `context.raise_if_cancelled()` before opening each directory and every 64 entries. Do not read executable contents in this task.
+打开每个目录前以及每处理 64 个条目时调用 `context.raise_if_cancelled()`。本任务不读取可执行文件内容。
 
-- [ ] **Step 4: Run discovery tests and static checks**
+- [ ] **步骤 4：运行发现测试与静态检查**
 
-Run: `python -m pytest tests/unit/scanning/test_discovery.py -v`
+运行：`python -m pytest tests/unit/scanning/test_discovery.py -v`
 
-Expected: all pass.
+预期：全部通过。
 
-- [ ] **Step 5: Commit directory discovery**
+- [ ] **步骤 5：提交目录发现功能**
 
 ```powershell
 git add src/gameshelf/scanning/models.py src/gameshelf/scanning/discovery.py tests/unit/scanning/test_discovery.py
 git commit -m "feat: discover game directory candidates"
 ```
 
-### Task 4: Rank Main Executables Without Launching Them
+### 任务 4：在不启动程序的情况下为主可执行文件排名
 
-**Files:**
-- Modify: `pyproject.toml`
-- Create: `src/gameshelf/scanning/pe_metadata.py`
-- Create: `src/gameshelf/scanning/executable_ranker.py`
-- Create: `tests/unit/scanning/test_executable_ranker.py`
-- Create: `tests/fixtures/pe/README.md`
+**文件：**
+- 修改：`pyproject.toml`
+- 新建：`src/gameshelf/scanning/pe_metadata.py`
+- 新建：`src/gameshelf/scanning/executable_ranker.py`
+- 新建：`tests/unit/scanning/test_executable_ranker.py`
+- 新建：`tests/fixtures/pe/README.md`
 
-**Interfaces:**
-- Produces: `PeMetadata(product_name, file_description, company_name, architecture)`.
-- Produces: `read_pe_metadata(path: Path) -> PeMetadata`, returning empty/unknown fields for malformed files.
-- Produces: `ExecutableCandidate(relative_path, score, architecture, evidence)`.
-- Produces: `rank_executables(game_dir: Path) -> tuple[ExecutableCandidate, ...]`.
+**接口：**
+- 产出：`PeMetadata(product_name, file_description, company_name, architecture)`。
+- 产出：`read_pe_metadata(path: Path) -> PeMetadata`，文件格式错误时返回空字段或未知字段。
+- 产出：`ExecutableCandidate(relative_path, score, architecture, evidence)`。
+- 产出：`rank_executables(game_dir: Path) -> tuple[ExecutableCandidate, ...]`。
 
-- [ ] **Step 1: Write failing ranking tests with a mocked metadata reader**
+- [ ] **步骤 1：使用模拟元数据读取器编写会失败的排名测试**
 
 ```python
 def test_ranker_rejects_installers_and_prefers_title_match(tmp_path, monkeypatch) -> None:
@@ -312,21 +312,21 @@ def test_malformed_pe_is_never_executed_and_remains_low_confidence(tmp_path) -> 
     assert ranked[0].architecture == "unknown"
 ```
 
-- [ ] **Step 2: Add `pefile` and run tests to verify failure**
+- [ ] **步骤 2：添加 `pefile` 并运行测试以确认失败**
 
-Add `pefile>=2024.8.26,<2027` to project dependencies, reinstall editable dependencies, then run: `python -m pytest tests/unit/scanning/test_executable_ranker.py -v`.
+将 `pefile>=2024.8.26,<2027` 添加到项目依赖，重新安装可编辑依赖，然后运行：`python -m pytest tests/unit/scanning/test_executable_ranker.py -v`。
 
-Expected: FAIL because the ranker does not exist.
+预期：失败，因为排名器尚不存在。
 
-- [ ] **Step 3: Implement defensive PE metadata reading and scoring**
+- [ ] **步骤 3：实现防御性的 PE 元数据读取与评分**
 
-Exclude basename patterns `unins*`, `uninstall*`, `setup*`, `install*`, `update*`, `updater*`, `crash*`, `report*`, and executables under directories named `redist`, `_commonredist`, `runtime`, `tools`, or `support`. Do not exclude `config.exe`, but give it a strong negative score and label it an auxiliary tool.
+排除基本文件名匹配 `unins*`、`uninstall*`、`setup*`、`install*`、`update*`、`updater*`、`crash*`、`report*` 的程序，以及位于名为 `redist`、`_commonredist`、`runtime`、`tools` 或 `support` 目录下的可执行文件。不要排除 `config.exe`，但要给予较大的负分，并将其标记为辅助工具。
 
-Score root-level location, normalized directory/title similarity, PE product/description similarity, and executable size. Catch `pefile.PEFormatError`, `OSError`, and invalid resource strings. Parse only PE headers/resources; never call `subprocess`, `os.startfile`, or `ShellExecute` in this module.
+根据是否位于根层级、规范化后的目录/标题相似度、PE 产品/描述相似度以及可执行文件大小进行评分。捕获 `pefile.PEFormatError`、`OSError` 和无效资源字符串。只解析 PE 标头/资源；本模块绝不调用 `subprocess`、`os.startfile` 或 `ShellExecute`。
 
-- [ ] **Step 4: Run ranking tests and dependency checks**
+- [ ] **步骤 4：运行排名测试与依赖检查**
 
-Run:
+运行：
 
 ```powershell
 python -m pytest tests/unit/scanning/test_executable_ranker.py -v
@@ -334,29 +334,29 @@ python -m ruff check src/gameshelf/scanning tests/unit/scanning
 python -m mypy src/gameshelf/scanning
 ```
 
-Expected: all pass.
+预期：全部通过。
 
-- [ ] **Step 5: Commit executable ranking**
+- [ ] **步骤 5：提交可执行文件排名功能**
 
 ```powershell
 git add pyproject.toml src/gameshelf/scanning tests/unit/scanning tests/fixtures/pe
 git commit -m "feat: rank game executables safely"
 ```
 
-### Task 5: Reconcile Successful, Cancelled, and Unavailable Scans
+### 任务 5：核对成功、已取消及不可用的扫描
 
-**Files:**
-- Create: `src/gameshelf/scanning/reconcile.py`
-- Create: `src/gameshelf/scanning/service.py`
-- Create: `tests/integration/scanning/test_scan_service.py`
+**文件：**
+- 新建：`src/gameshelf/scanning/reconcile.py`
+- 新建：`src/gameshelf/scanning/service.py`
+- 新建：`tests/integration/scanning/test_scan_service.py`
 
-**Interfaces:**
-- Consumes: root repository, game repository, `DbWriter`, discovery, ranker, and task context.
-- Produces: `ScanService.scan_root(root_id: str, scan_kind: Literal['quick','full'], context: TaskContext) -> ScanSummary`.
-- Produces: `ScanSummary(session_id, status, discovered, added, updated, missing, warnings, move_suggestions)`.
-- Produces: `MoveSuggestion(existing_game_id, candidate_relative_dir, confidence, evidence)`; it never relocates automatically.
+**接口：**
+- 使用：根目录仓储、游戏仓储、`DbWriter`、发现器、排名器和任务上下文。
+- 产出：`ScanService.scan_root(root_id: str, scan_kind: Literal['quick','full'], context: TaskContext) -> ScanSummary`。
+- 产出：`ScanSummary(session_id, status, discovered, added, updated, missing, warnings, move_suggestions)`。
+- 产出：`MoveSuggestion(existing_game_id, candidate_relative_dir, confidence, evidence)`；绝不自动执行迁移。
 
-- [ ] **Step 1: Write failing end-to-end scan-state tests**
+- [ ] **步骤 1：编写会失败的端到端扫描状态测试**
 
 ```python
 def test_successful_full_scan_adds_games_and_marks_removed_game_missing(scan_harness) -> None:
@@ -393,34 +393,34 @@ def test_manual_executable_survives_new_auto_recommendation(scan_harness) -> Non
     assert refreshed.detected_main_exe_relpath is not None
 ```
 
-Also cover cancellation, recursive discovery, overlapping roots choosing the longest root, and a child directory without EXE.
+还要覆盖取消、递归发现、根目录重叠时选择最长根目录，以及不含 EXE 的子目录。
 
-- [ ] **Step 2: Run integration tests and verify failure**
+- [ ] **步骤 2：运行集成测试并确认失败**
 
-Run: `python -m pytest tests/integration/scanning/test_scan_service.py -v`
+运行：`python -m pytest tests/integration/scanning/test_scan_service.py -v`
 
-Expected: FAIL because scan reconciliation is absent.
+预期：失败，因为扫描核对功能尚不存在。
 
-- [ ] **Step 3: Implement session-bound reconciliation**
+- [ ] **步骤 3：实现以会话为边界的核对**
 
-Create the `scan_sessions` record as `running` and stream candidate observations into the internal `scan_observations` table in batches of 200 through `DbWriter`; this avoids holding a large library in memory without changing visible game state early. When discovery completes, apply one reconciliation transaction that:
+以 `running` 状态创建 `scan_sessions` 记录，并通过 `DbWriter` 每批 200 条地将候选观察结果流式写入内部 `scan_observations` 表；这样无需将大型游戏库全部保留在内存中，也不会过早改变可见游戏状态。发现完成后，执行一个核对事务：
 
-1. upsert candidates by `install_path_key`;
-2. update detected title and detected EXE while preserving manual fields;
-3. set observed records to `installed` and clear `missing_since`;
-4. for a successful full scan, mark unobserved records assigned to that root `missing`;
-5. for quick recursive scans, verify known records but do not claim discovery completeness for new nested games;
-6. update root/session success metadata last.
+1. 按 `install_path_key` 插入或更新候选项；
+2. 更新检测到的标题和 EXE，同时保留手动字段；
+3. 将已观察记录设为 `installed` 并清除 `missing_since`；
+4. 完整扫描成功时，将分配给该根目录但未观察到的记录标记为 `missing`；
+5. 快速递归扫描时，只核验已知记录，不声称已完整发现新的嵌套游戏；
+6. 最后更新根目录/会话的成功元数据。
 
-Delete that session's staged observations after successful reconciliation. On failure/cancellation/unavailability, delete staged observations and preserve visible games; keep only the session/error summary.
+成功核对后删除该会话的暂存观察记录。失败、取消或不可用时，删除暂存观察记录并保留可见游戏，只留下会话/错误摘要。
 
-On `RootUnavailableError`, cancellation, or any exception, update only session/root status and error; do not reconcile missing states.
+发生 `RootUnavailableError`、取消或任意异常时，只更新会话/根目录状态与错误；不得核对失效状态。
 
-Generate move suggestions when a newly observed candidate resembles a missing record by EXE basename, file size, PE product name, and directory-title similarity. Confidence below `0.75` is not returned.
+当新观察到的候选项在 EXE 基本文件名、文件大小、PE 产品名及目录-标题相似度上接近某条失效记录时，生成移动建议。置信度低于 `0.75` 的建议不返回。
 
-- [ ] **Step 4: Run integration and regression tests**
+- [ ] **步骤 4：运行集成测试与回归测试**
 
-Run:
+运行：
 
 ```powershell
 python -m pytest tests/integration/scanning tests/unit/library tests/unit/scanning -v
@@ -428,31 +428,31 @@ python -m ruff check src tests
 python -m mypy src
 ```
 
-Expected: all pass.
+预期：全部通过。
 
-- [ ] **Step 5: Commit transactional scanning**
+- [ ] **步骤 5：提交事务化扫描功能**
 
 ```powershell
 git add src/gameshelf/scanning tests/integration/scanning
 git commit -m "feat: reconcile cancellable library scans"
 ```
 
-### Task 6: Launch Games and Open Folders Safely
+### 任务 6：安全启动游戏并打开文件夹
 
-**Files:**
-- Create: `src/gameshelf/platform/__init__.py`
-- Create: `src/gameshelf/platform/windows/__init__.py`
-- Create: `src/gameshelf/platform/windows/shell.py`
-- Create: `src/gameshelf/platform/windows/processes.py`
-- Create: `src/gameshelf/library/launcher.py`
-- Create: `tests/unit/library/test_launcher.py`
+**文件：**
+- 新建：`src/gameshelf/platform/__init__.py`
+- 新建：`src/gameshelf/platform/windows/__init__.py`
+- 新建：`src/gameshelf/platform/windows/shell.py`
+- 新建：`src/gameshelf/platform/windows/processes.py`
+- 新建：`src/gameshelf/library/launcher.py`
+- 新建：`tests/unit/library/test_launcher.py`
 
-**Interfaces:**
-- Produces: `WindowsShell.open_directory(path: Path) -> None`.
-- Produces: `WindowsProcessLauncher.launch(executable, arguments, cwd, environment) -> LaunchedProcess(pid)`.
-- Produces: `GameLauncher.launch(game_id) -> LaunchReceipt` and `open_install_directory(game_id) -> None`.
+**接口：**
+- 产出：`WindowsShell.open_directory(path: Path) -> None`。
+- 产出：`WindowsProcessLauncher.launch(executable, arguments, cwd, environment) -> LaunchedProcess(pid)`。
+- 产出：`GameLauncher.launch(game_id) -> LaunchReceipt` 和 `open_install_directory(game_id) -> None`。
 
-- [ ] **Step 1: Write failing safety tests against fakes**
+- [ ] **步骤 1：使用假对象编写会失败的安全测试**
 
 ```python
 def test_launch_uses_array_cwd_and_shell_false(game_launcher, fake_process_launcher) -> None:
@@ -476,15 +476,15 @@ def test_launch_rejects_relative_exe_that_escapes_install_dir(game_launcher) -> 
         game_launcher.launch(game.id)
 ```
 
-- [ ] **Step 2: Run launch tests and verify failure**
+- [ ] **步骤 2：运行启动测试并确认失败**
 
-Run: `python -m pytest tests/unit/library/test_launcher.py -v`
+运行：`python -m pytest tests/unit/library/test_launcher.py -v`
 
-Expected: FAIL because launcher adapters do not exist.
+预期：失败，因为启动器适配器尚不存在。
 
-- [ ] **Step 3: Implement safe resolution and Windows adapters**
+- [ ] **步骤 3：实现安全路径解析与 Windows 适配器**
 
-Resolve install, executable, and working directory with `expand_relative`; require the EXE to exist and end in `.exe`. Merge only validated string environment entries over `os.environ`. Use:
+使用 `expand_relative` 解析安装目录、可执行文件和工作目录；要求 EXE 存在且以 `.exe` 结尾。只将校验过的字符串环境变量条目合并到 `os.environ`。使用：
 
 ```python
 subprocess.Popen(
@@ -496,46 +496,46 @@ subprocess.Popen(
 )
 ```
 
-Use `os.startfile(path)` only in `WindowsShell.open_directory`, after checking the path is an existing directory. Update `last_launched_at` only after `Popen` returns a PID.
+只有 `WindowsShell.open_directory` 可以使用 `os.startfile(path)`，而且要先检查路径是已存在的目录。仅在 `Popen` 返回 PID 后更新 `last_launched_at`。
 
-- [ ] **Step 4: Run launcher and static checks**
+- [ ] **步骤 4：运行启动器测试与静态检查**
 
-Run: `python -m pytest tests/unit/library/test_launcher.py -v`
+运行：`python -m pytest tests/unit/library/test_launcher.py -v`
 
-Expected: all pass without starting a real external process.
+预期：全部通过，且不启动真实外部进程。
 
-- [ ] **Step 5: Commit launch/open behavior**
+- [ ] **步骤 5：提交启动/打开行为**
 
 ```powershell
 git add src/gameshelf/platform src/gameshelf/library/launcher.py tests/unit/library/test_launcher.py
 git commit -m "feat: launch games and open folders safely"
 ```
 
-### Task 7: Expose Library Commands Through the Typed Bridge
+### 任务 7：通过类型化桥接层公开游戏库命令
 
-**Files:**
-- Modify: `src/gameshelf/bridge/api.py`
-- Modify: `src/gameshelf/bootstrap/application.py`
-- Create: `tests/unit/bridge/test_library_api.py`
-- Modify: `frontend/src/api/contracts.ts`
-- Modify: `frontend/src/api/bridge.ts`
-- Modify: `frontend/src/api/mockBridge.ts`
-- Create: `frontend/src/features/library/libraryStore.ts`
-- Create: `frontend/src/features/scan-roots/ScanRootDialog.vue`
-- Create: `frontend/src/features/scan-roots/ScanRootList.vue`
-- Create: `frontend/src/features/library/GamePlaceholderGrid.vue`
-- Create: `frontend/src/features/library/GameSettingsPanel.vue`
-- Create: `frontend/tests/libraryStore.spec.ts`
-- Create: `frontend/tests/ScanRootDialog.spec.ts`
-- Modify: `frontend/src/App.vue`
+**文件：**
+- 修改：`src/gameshelf/bridge/api.py`
+- 修改：`src/gameshelf/bootstrap/application.py`
+- 新建：`tests/unit/bridge/test_library_api.py`
+- 修改：`frontend/src/api/contracts.ts`
+- 修改：`frontend/src/api/bridge.ts`
+- 修改：`frontend/src/api/mockBridge.ts`
+- 新建：`frontend/src/features/library/libraryStore.ts`
+- 新建：`frontend/src/features/scan-roots/ScanRootDialog.vue`
+- 新建：`frontend/src/features/scan-roots/ScanRootList.vue`
+- 新建：`frontend/src/features/library/GamePlaceholderGrid.vue`
+- 新建：`frontend/src/features/library/GameSettingsPanel.vue`
+- 新建：`frontend/tests/libraryStore.spec.ts`
+- 新建：`frontend/tests/ScanRootDialog.spec.ts`
+- 修改：`frontend/src/App.vue`
 
-**Interfaces:**
-- Adds bridge methods `list_roots`, `add_root`, `update_root`, `remove_root`, `remap_root`, `list_games`, `start_scan`, `confirm_move`, `launch_game`, and `open_install_directory`.
-- Adds bridge methods `choose_game_executable`, `set_game_executable`, `set_game_title`, and `update_launch_configuration`.
-- `start_scan` returns `{ taskId: string }`; progress uses the foundation task endpoint.
-- Produces Pinia `useLibraryStore()` with `load`, `scan`, and root mutation actions.
+**接口：**
+- 添加桥接方法 `list_roots`、`add_root`、`update_root`、`remove_root`、`remap_root`、`list_games`、`start_scan`、`confirm_move`、`launch_game` 和 `open_install_directory`。
+- 添加桥接方法 `choose_game_executable`、`set_game_executable`、`set_game_title` 和 `update_launch_configuration`。
+- `start_scan` 返回 `{ taskId: string }`；进度通过基础设施的任务端点获取。
+- 产出 Pinia `useLibraryStore()`，包含 `load`、`scan` 及根目录变更操作。
 
-- [ ] **Step 1: Write failing bridge and component tests**
+- [ ] **步骤 1：编写会失败的桥接与组件测试**
 
 ```python
 def test_start_scan_returns_task_id(library_api: BridgeApi) -> None:
@@ -568,38 +568,38 @@ it('validates recursive depth before calling the bridge', async () => {
 })
 ```
 
-- [ ] **Step 2: Run bridge and frontend tests and verify failure**
+- [ ] **步骤 2：运行桥接与前端测试并确认失败**
 
-Run:
+运行：
 
 ```powershell
 python -m pytest tests/unit/bridge/test_library_api.py -v
 npm --prefix frontend run test:unit -- --run tests/libraryStore.spec.ts tests/ScanRootDialog.spec.ts
 ```
 
-Expected: failures for missing methods/components.
+预期：因方法/组件缺失而失败。
 
-- [ ] **Step 3: Implement validated commands and a usable placeholder library UI**
+- [ ] **步骤 3：实现经过校验的命令和可用的占位游戏库 UI**
 
-All Python bridge methods accept one JSON object, validate required keys/types, call a service, and return camelCase DTOs. Do not expose repository objects directly.
+所有 Python 桥接方法都接收一个 JSON 对象，校验必需的键/类型，调用服务，并返回 camelCase DTO。不得直接暴露仓储对象。
 
-The UI must provide:
+UI 必须提供：
 
-- “添加游戏目录” action;
-- root list with enable state, mode/depth, last status, rescan, remap, and remove;
-- scan progress with cancel;
-- placeholder cards showing title and installed/missing/no-main-program state;
-- details actions for launch and open folder;
-- title editing; an EXE picker rooted at the game's installation directory; advanced working-directory, argument-array, and environment key/value editing;
-- a move-suggestion confirmation panel.
+- “添加游戏目录”操作；
+- 根目录列表，显示启用状态、模式/深度、最近状态，并提供重新扫描、重映射和删除；
+- 可取消的扫描进度；
+- 显示标题及已安装/失效/无主程序状态的占位卡片；
+- 详情中的启动和打开文件夹操作；
+- 标题编辑；以游戏安装目录为根的 EXE 选择器；高级工作目录、参数数组和环境变量键值编辑；
+- 移动建议确认面板。
 
-Use native pywebview folder selection through a white-listed `choose_directory` method; the backend returns a selected display path or `null`. Do not accept arbitrary JavaScript browsing of the filesystem.
+通过白名单 `choose_directory` 方法使用 pywebview 原生文件夹选择；后端返回选中的显示路径或 `null`。不得允许 JavaScript 任意浏览文件系统。
 
-`confirm_move` must require a still-missing existing game, an observed candidate from the referenced scan session, and an unclaimed target path. In one transaction it reassigns root/relative/install key, sets installed, clears missing state, and preserves title, cover, saves, manual EXE/engine, and launch configuration.
+`confirm_move` 必须要求：现有游戏仍处于失效状态、候选项确实来自所引用扫描会话的观察结果，并且目标路径未被占用。它在一个事务中重新分配根目录/相对路径/安装路径键，设为已安装、清除失效状态，同时保留标题、封面、存档、手动 EXE/引擎和启动配置。
 
-- [ ] **Step 4: Run all bridge/frontend checks**
+- [ ] **步骤 4：运行全部桥接/前端检查**
 
-Run:
+运行：
 
 ```powershell
 python -m pytest tests/unit/bridge tests/integration/scanning -v
@@ -608,30 +608,30 @@ npm --prefix frontend run type-check
 npm --prefix frontend run build
 ```
 
-Expected: all pass.
+预期：全部通过。
 
-- [ ] **Step 5: Commit the interactive library**
+- [ ] **步骤 5：提交可交互游戏库**
 
 ```powershell
 git add src frontend tests
 git commit -m "feat: manage and scan game roots from the UI"
 ```
 
-### Task 8: Add Startup Quick Scan and Complete the Increment
+### 任务 8：添加启动快速扫描并完成本增量
 
-**Files:**
-- Modify: `frontend/src/features/library/libraryStore.ts`
-- Modify: `frontend/src/App.vue`
-- Create: `frontend/tests/startupScan.spec.ts`
-- Create: `tests/integration/scanning/test_overlap_and_startup.py`
-- Modify: `README.md`
+**文件：**
+- 修改：`frontend/src/features/library/libraryStore.ts`
+- 修改：`frontend/src/App.vue`
+- 新建：`frontend/tests/startupScan.spec.ts`
+- 新建：`tests/integration/scanning/test_overlap_and_startup.py`
+- 修改：`README.md`
 
-**Interfaces:**
-- Consumes: `start_scan(kind='quick')`.
-- Produces: one startup quick-scan request after cached library rendering, never before.
-- Quick behavior: children roots enumerate direct children; recursive roots verify known game paths only.
+**接口：**
+- 使用：`start_scan(kind='quick')`。
+- 产出：缓存游戏库渲染完成后发起一次启动快速扫描请求，绝不提前发起。
+- 快速扫描行为：子目录模式的根目录枚举直接子目录；递归模式的根目录只核验已知游戏路径。
 
-- [ ] **Step 1: Write failing cached-first startup tests**
+- [ ] **步骤 1：编写会失败的缓存优先启动测试**
 
 ```ts
 it('renders cached games before requesting quick scans', async () => {
@@ -653,19 +653,19 @@ it('renders cached games before requesting quick scans', async () => {
 })
 ```
 
-- [ ] **Step 2: Run startup tests and verify failure**
+- [ ] **步骤 2：运行启动测试并确认失败**
 
-Run: `npm --prefix frontend run test:unit -- --run tests/startupScan.spec.ts`
+运行：`npm --prefix frontend run test:unit -- --run tests/startupScan.spec.ts`
 
-Expected: FAIL because startup scanning is not orchestrated.
+预期：失败，因为尚未编排启动扫描。
 
-- [ ] **Step 3: Implement cached-first startup and non-blocking errors**
+- [ ] **步骤 3：实现缓存优先启动与非阻塞错误**
 
-After `bootstrap`, load roots/games, render, then start quick scans for enabled roots. Do not clear existing cards while scanning. An unavailable root displays “根目录暂时无法访问，已有游戏状态未改变” and preserves cards. Scan errors appear in a dismissible status area and root detail, not a fatal application screen.
+`bootstrap` 后先加载根目录/游戏并完成渲染，再为已启用根目录启动快速扫描。扫描期间不得清除现有卡片。根目录不可用时显示“根目录暂时无法访问，已有游戏状态未改变”并保留卡片。扫描错误显示在可关闭的状态区域及根目录详情中，而不是显示致命应用错误页面。
 
-- [ ] **Step 4: Run the increment acceptance gate**
+- [ ] **步骤 4：运行本增量验收门禁**
 
-Run:
+运行：
 
 ```powershell
 python -m pytest
@@ -676,22 +676,22 @@ npm --prefix frontend run type-check
 npm --prefix frontend run build
 ```
 
-Expected: all pass.
+预期：全部通过。
 
-- [ ] **Step 5: Commit the completed library increment**
+- [ ] **步骤 5：提交完整的游戏库增量**
 
 ```powershell
 git add frontend tests README.md
 git commit -m "feat: refresh cached library in the background"
 ```
 
-## Library Increment Acceptance Gate
+## 游戏库增量验收门禁
 
-- Configure `D:\文件夹a` recursive depth 2 and `D:\文件夹b` children mode; discover games a, b, c, and d.
-- A direct child without an EXE is visible with “尚未选择主程序”.
-- Overlapping roots never create duplicate installed-path records.
-- Unavailable/cancelled roots preserve prior installed status.
-- Manual EXE and title choices survive rescans.
-- Scanning never executes an EXE.
-- Explicit launch uses the selected EXE, exact argument array, configured working directory, and `shell=False`.
-- Cached cards render before startup quick scanning begins.
+- 将 `D:\文件夹a` 配置为递归深度 2，将 `D:\文件夹b` 配置为子目录模式；能够发现游戏 a、b、c、d。
+- 不含 EXE 的直接子目录仍可见，并显示“尚未选择主程序”。
+- 重叠根目录绝不会生成重复的安装路径记录。
+- 不可用/已取消的根目录保留原有已安装状态。
+- 手动 EXE 和标题设置在重新扫描后仍保留。
+- 扫描绝不执行 EXE。
+- 明确启动时使用已选择 EXE、精确参数数组、已配置工作目录和 `shell=False`。
+- 启动快速扫描开始前先渲染缓存卡片。
