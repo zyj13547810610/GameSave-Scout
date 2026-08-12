@@ -1,0 +1,78 @@
+from pathlib import Path
+
+import pytest
+
+from gameshelf.engines.base import DetectionContext
+from gameshelf.engines.rule_detector import RuleDetector
+from gameshelf.engines.rule_schema import RuleSchemaError, load_engine_rules
+
+
+def test_rule_requires_all_and_scores_any_evidence(tmp_path: Path) -> None:
+    game = tmp_path / "game"
+    (game / "data" / "system").mkdir(parents=True)
+    (game / "data" / "system" / "Config.tjs").write_text(
+        ";projectID = sample\n;System.title = Sample", encoding="utf-8"
+    )
+    (game / "tyrano").mkdir()
+    (game / "tyrano" / "tyrano.js").write_text("TYRANO", encoding="utf-8")
+    rule = load_engine_rules(_write_rules(tmp_path, valid_rule()))[0]
+
+    match = RuleDetector(rule).inspect(DetectionContext(game, None))
+
+    assert match is not None
+    assert match.engine_id == "tyrano"
+    assert match.confidence >= 0.9
+
+
+def test_missing_required_evidence_never_matches(tmp_path: Path) -> None:
+    game = tmp_path / "game"
+    game.mkdir()
+    rule = load_engine_rules(_write_rules(tmp_path, valid_rule()))[0]
+
+    assert RuleDetector(rule).inspect(DetectionContext(game, None)) is None
+
+
+def test_unknown_rule_key_is_rejected(tmp_path: Path) -> None:
+    path = tmp_path / "rules.yaml"
+    path.write_text(
+        "version: '1'\nrules:\n- id: x\n  surprise: true\n", encoding="utf-8"
+    )
+    with pytest.raises(RuleSchemaError, match="surprise"):
+        load_engine_rules(path)
+
+
+def test_rule_paths_cannot_escape_game_root(tmp_path: Path) -> None:
+    content = valid_rule().replace("data/system/Config.tjs", "../outside")
+    with pytest.raises(RuleSchemaError, match="relative"):
+        load_engine_rules(_write_rules(tmp_path, content))
+
+
+def _write_rules(tmp_path: Path, rule: str) -> Path:
+    path = tmp_path / "rules.yaml"
+    path.write_text(f"version: 'test-1'\nrules:\n{rule}", encoding="utf-8")
+    return path
+
+
+def valid_rule() -> str:
+    return """- id: tyrano
+  label: TyranoScript
+  variant: TyranoBuilder/TyranoScript
+  experimental: false
+  threshold: 0.70
+  all:
+    - op: path_exists
+      path: data/system/Config.tjs
+      weight: 0.45
+  any:
+    - op: path_exists
+      path: tyrano/tyrano.js
+      weight: 0.45
+    - op: text_contains
+      path: data/system/Config.tjs
+      value: projectID
+      weight: 0.25
+  negative:
+    - op: path_exists
+      path: Editor.exe
+      weight: -0.10
+"""

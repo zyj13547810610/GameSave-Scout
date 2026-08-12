@@ -1,0 +1,23 @@
+version: "2026.08.12-1"
+rules:
+  - id: tyrano
+    label: TyranoScript
+    variant: TyranoBuilder/TyranoScript
+    experimental: false
+    threshold: 0.70
+    all:
+      - op: path_exists
+        path: data/system/Config.tjs
+        weight: 0.45
+    any:
+      - op: path_exists
+        path: tyrano/tyrano.js
+        weight: 0.45
+      - op: text_contains
+        path: data/system/Config.tjs
+        value: projectID
+        weight: 0.25
+    negative:
+      - op: path_exists
+        path: Editor.exe
+        weight: -0.10
