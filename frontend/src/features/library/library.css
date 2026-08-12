@@ -8,7 +8,9 @@
 .cover-frame .cover-placeholder { height: 100%; }
 .card-badge { position: absolute; left: .4375rem; bottom: .4375rem; border-radius: 999px; padding: .1875rem .4375rem; background: rgb(12 11 16 / 82%); font-size: .6875rem; }
 .card-badge.no-exe { right: .4375rem; left: auto; color: #f7ce82; }
-.game-drawer { position: fixed; z-index: 20; top: 0; right: 0; overflow-y: auto; width: min(26.25rem, 92vw); height: 100vh; border-left: 1px solid #393641; padding: 1.5rem; background: #15131a; box-shadow: -1.25rem 0 3.75rem rgb(0 0 0 / 40%); }
+.game-detail-layer { position: fixed; z-index: 20; inset: 0; }
+.drawer-backdrop { position: absolute; inset: 0; background: rgb(0 0 0 / 22%); }
+.game-drawer { position: absolute; z-index: 1; top: 0; right: 0; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-gutter: stable; width: min(26.25rem, 92vw); height: 100dvh; border-left: 1px solid #393641; padding: 1.5rem; background: #15131a; box-shadow: -1.25rem 0 3.75rem rgb(0 0 0 / 40%); }
 .drawer-close { position: absolute; z-index: 2; top: .75rem; right: .75rem; }
 .detail-cover-frame { display: grid; width: 100%; height: 22.5rem; place-items: center; border-radius: .75rem; background: #0e0d12; }
 .detail-cover-frame img { width: 100%; height: 100%; object-fit: contain; }

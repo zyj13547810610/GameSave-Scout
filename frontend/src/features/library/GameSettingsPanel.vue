@@ -3,7 +3,7 @@ import { ref, watch } from 'vue'
 import type { Game, GameShelfBridge } from '../../api/contracts'
 
 const props = defineProps<{ game: Game; bridge: GameShelfBridge }>()
-const emit = defineEmits<{ updated: [game: Game]; close: [] }>()
+const emit = defineEmits<{ updated: [game: Game] }>()
 const title = ref('')
 const workingDir = ref('')
 const argsText = ref('')
@@ -53,7 +53,7 @@ async function launch() {
 
 <template>
   <aside class="settings-panel">
-    <div class="section-heading"><h2>游戏设置</h2><button class="icon-button" type="button" @click="$emit('close')">×</button></div>
+    <div class="section-heading"><h2>游戏设置</h2></div>
     <label>标题</label><div class="path-row"><input v-model="title" /><button type="button" @click="saveTitle">保存</button></div>
     <dl><dt>安装路径</dt><dd>{{ game.installPath ?? '未知' }}</dd><dt>主程序</dt><dd>{{ game.mainExeRelpath ?? '尚未选择' }}</dd></dl>
     <div class="dialog-actions"><button type="button" @click="chooseExecutable">选择主程序</button><button type="button" class="secondary" @click="bridge.open_install_directory({ gameId: game.id })">打开文件夹</button><button type="button" :disabled="game.status !== 'installed' || !game.mainExeRelpath" @click="launch">启动</button></div>

@@ -19,6 +19,11 @@ body {
   min-height: 100vh;
 }
 
+html.detail-open,
+html.detail-open body {
+  overflow: hidden;
+}
+
 button,
 input,
 textarea,
