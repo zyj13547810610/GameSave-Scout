@@ -66,3 +66,24 @@ def test_parser_rejects_alias_cycles_and_more_than_eight_hops() -> None:
     with pytest.raises(InvalidLudusaviManifest, match="8"):
         parse_manifest(StringIO(long_chain))
 
+
+def test_upstream_mode_skips_pcgw_free_text_and_legacy_linux_variables() -> None:
+    manifest = parse_manifest(
+        StringIO(
+            """
+Alice:
+  files:
+    <winAppData>/Alice: {tags: [save]}
+    $XDG_DATA_HOME/alice: {tags: [save]}
+    No local save games: {tags: [save]}
+  registry:
+    HKEY_CURRENT_USERSoftware/Studio/Alice: {tags: [save]}
+"""
+        ),
+        skip_invalid_paths=True,
+    )
+
+    assert [item.path for item in manifest.games["Alice"].files] == [
+        "<winAppData>/Alice"
+    ]
+    assert manifest.games["Alice"].registry == ()

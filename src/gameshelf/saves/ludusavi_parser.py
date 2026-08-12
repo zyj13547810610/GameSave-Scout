@@ -38,15 +38,29 @@ _RECOGNIZED_PATH_TOKENS = {
     "xdgData",
     "xdgConfig",
 }
+_LEGACY_NON_WINDOWS_PREFIXES = (
+    "$HOME/",
+    "$USER/",
+    "$XDG_CONFIG_HOME/",
+    "$XDG_DATA_HOME/",
+    "~/",
+)
 
 
 class InvalidLudusaviManifest(ValueError):
     """The manifest is malformed or outside GameShelf's safety limits."""
 
 
-def parse_manifest(stream: TextIO) -> LudusaviManifest:
+_SAFE_LOADER: type[yaml.SafeLoader] = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+
+
+def parse_manifest(
+    stream: TextIO,
+    *,
+    skip_invalid_paths: bool = False,
+) -> LudusaviManifest:
     try:
-        loaded: Any = yaml.safe_load(stream)
+        loaded: Any = yaml.load(stream, Loader=_SAFE_LOADER)
     except yaml.YAMLError as error:
         raise InvalidLudusaviManifest("Ludusavi 清单不是有效的 YAML。") from error
     if not isinstance(loaded, dict):
@@ -64,8 +78,18 @@ def parse_manifest(stream: TextIO) -> LudusaviManifest:
         if not isinstance(raw_game, dict):
             raise InvalidLudusaviManifest(f"游戏条目必须是映射：{name}")
         game_data = raw_game
-        files = _parse_locations(game_data.get("files"), name, registry=False)
-        registry = _parse_locations(game_data.get("registry"), name, registry=True)
+        files = _parse_locations(
+            game_data.get("files"),
+            name,
+            registry=False,
+            skip_invalid_paths=skip_invalid_paths,
+        )
+        registry = _parse_locations(
+            game_data.get("registry"),
+            name,
+            registry=True,
+            skip_invalid_paths=skip_invalid_paths,
+        )
         install_dirs = _parse_install_dirs(game_data.get("installDir"), name)
         alias_value = game_data.get("alias")
         if alias_value is not None and (
@@ -89,6 +113,7 @@ def _parse_locations(
     game_name: str,
     *,
     registry: bool,
+    skip_invalid_paths: bool = False,
 ) -> tuple[ManifestLocationRule, ...]:
     if value is None:
         return ()
@@ -102,10 +127,16 @@ def _parse_locations(
             raise InvalidLudusaviManifest(f"{game_name} 的路径必须是非空字符串。")
         path = raw_path.strip()
         if not registry:
+            if path.startswith(_LEGACY_NON_WINDOWS_PREFIXES):
+                continue
             token = _PATH_TOKEN.match(path)
             if token is None or token.group(1) not in _RECOGNIZED_PATH_TOKENS:
+                if skip_invalid_paths:
+                    continue
                 raise InvalidLudusaviManifest(f"文件路径必须以已知占位符开头：{path}")
         elif not _valid_registry_root(path):
+            if skip_invalid_paths:
+                continue
             raise InvalidLudusaviManifest(f"注册表路径根键不受支持：{path}")
 
         if raw_metadata is None:
