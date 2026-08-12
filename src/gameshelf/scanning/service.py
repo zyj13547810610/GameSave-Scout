@@ -171,9 +171,15 @@ class ScanService:
                 raise ConfirmMoveError("The suggested target is no longer available.")
 
             candidate_evidence = json.loads(candidate["engine_evidence_json"])
-            detection_failed = candidate["detected_engine_id"] is None and any(
-                isinstance(item, dict) and item.get("code") == "detector_error"
+            evidence_codes = {
+                str(item.get("code"))
                 for item in candidate_evidence
+                if isinstance(item, dict)
+            }
+            detection_failed = (
+                candidate["detected_engine_id"] is None
+                and "detector_error" in evidence_codes
+                and not any(code.startswith("candidate:") for code in evidence_codes)
             )
             connection.execute("DELETE FROM games WHERE id = ?", (candidate["id"],))
             now = _utc_now()

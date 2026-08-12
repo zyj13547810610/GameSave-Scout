@@ -223,6 +223,47 @@ def test_confirmed_move_refreshes_detection_and_preserves_manual_adoption(
     assert confirmed.engine_evidence[0].code == "unity_player"
 
 
+def test_confirmed_move_keeps_ambiguous_candidates_despite_unrelated_diagnostic(
+    scan_harness: "ScanHarness",
+) -> None:
+    original_root = scan_harness.add_root(mode="children")
+    scan_harness.mkdir("GameA", exes=["Game.exe"])
+    original = scan_harness.scan(original_root.id, "full").games[0]
+    scan_harness.set_engine_metadata(
+        original.id,
+        detected="renpy",
+        adopted="renpy",
+        manual=False,
+    )
+    scan_harness.remove_dir("GameA")
+    scan_harness.scan(original_root.id, "full")
+
+    moved_root_path = scan_harness.root_path.parent / "moved-ambiguous-games"
+    moved_game = moved_root_path / "GameA"
+    moved_game.mkdir(parents=True)
+    (moved_game / "Game.exe").write_bytes(b"not-a-real-pe")
+    moved_root = scan_harness.add_root(mode="children", path=moved_root_path)
+    summary = scan_harness.scan(moved_root.id, "full")
+    candidate = summary.games[0]
+    scan_harness.set_ambiguous_engine_metadata(candidate.id)
+    suggestion = summary.move_suggestions[0]
+
+    confirmed = scan_harness.scanner.confirm_move(
+        summary.session_id,
+        suggestion.existing_game_id,
+        suggestion.candidate_relative_dir,
+    )
+
+    assert confirmed.detected_engine_id is None
+    assert confirmed.engine_id is None
+    assert confirmed.engine_confidence == pytest.approx(0.82)
+    assert [item.code for item in confirmed.engine_evidence] == [
+        "candidate:unity",
+        "candidate:renpy",
+        "detector_error",
+    ]
+
+
 @dataclass
 class ScanHarness:
     root_path: Path
@@ -306,6 +347,30 @@ class ScanHarness:
                     '[{"code":"unity_player","detail":"Unity evidence",'
                     '"path":"UnityPlayer.dll","weight":0.97}]',
                     f"{detected}-test",
+                    game_id,
+                ),
+            ).rowcount
+        ).result()
+
+    def set_ambiguous_engine_metadata(self, game_id: str) -> None:
+        self.writer.submit(
+            lambda connection: connection.execute(
+                """
+                UPDATE games
+                SET detected_engine_id = NULL, detected_engine_variant = NULL,
+                    engine_id = NULL, engine_variant = NULL, engine_is_manual = 0,
+                    engine_confidence = 0.82,
+                    engine_evidence_json = json(?),
+                    engine_rules_version = 'ambiguous-test'
+                WHERE id = ?
+                """,
+                (
+                    '[{"code":"candidate:unity","detail":"Unity",'
+                    '"path":null,"weight":0.82},'
+                    '{"code":"candidate:renpy","detail":"RenPy",'
+                    '"path":null,"weight":0.78},'
+                    '{"code":"detector_error","detail":"OSError",'
+                    '"path":null,"weight":0.0}]',
                     game_id,
                 ),
             ).rowcount
