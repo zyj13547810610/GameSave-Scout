@@ -138,6 +138,11 @@ label {
   gap: 1.25rem;
 }
 
+.library-content {
+  min-width: 0;
+  container-type: inline-size;
+}
+
 .root-panel,
 .game-settings-panel {
   min-height: calc(100vh - 7.1875rem);

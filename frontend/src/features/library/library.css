@@ -17,4 +17,5 @@
 .detail-cover-frame .cover-placeholder { width: 15rem; height: 100%; }
 .detail-meta { color: #9893a4; }
 .game-drawer .game-settings-panel { min-height: auto; border: 0; padding: 0; background: transparent; }
+@container (max-width: 33rem) { .library-toolbar { grid-template-columns: 1fr; } }
 @media (max-width: 700px) { .library-toolbar { grid-template-columns: 1fr; } }

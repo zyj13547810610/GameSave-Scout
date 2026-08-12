@@ -13,8 +13,39 @@ function close() {
   emit('close')
 }
 
+function focusableElements(): HTMLElement[] {
+  if (!drawer.value) return []
+  return Array.from(drawer.value.querySelectorAll<HTMLElement>([
+    'button:not([disabled])',
+    'input:not([disabled])',
+    'select:not([disabled])',
+    'textarea:not([disabled])',
+    'summary',
+    'a[href]',
+    '[tabindex]:not([tabindex="-1"])',
+  ].join(',')))
+}
+
+function trapFocus(event: KeyboardEvent) {
+  const focusable = focusableElements()
+  const first = focusable.at(0) ?? drawer.value
+  const last = focusable.at(-1) ?? drawer.value
+  const active = document.activeElement
+  if (!drawer.value?.contains(active)) {
+    event.preventDefault()
+    first?.focus()
+  } else if (event.shiftKey && active === first) {
+    event.preventDefault()
+    last?.focus()
+  } else if (!event.shiftKey && active === last) {
+    event.preventDefault()
+    first?.focus()
+  }
+}
+
 function onKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape') close()
+  else if (event.key === 'Tab') trapFocus(event)
 }
 
 onMounted(async () => {

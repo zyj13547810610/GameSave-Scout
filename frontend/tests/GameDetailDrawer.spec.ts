@@ -63,4 +63,18 @@ describe('GameDetailDrawer', () => {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
     expect(wrapper.emitted('close')).toHaveLength(1)
   })
+
+  it('keeps keyboard focus inside the modal drawer', () => {
+    const outside = document.createElement('button')
+    document.body.append(outside)
+    const wrapper = mount(GameDetailDrawer, {
+      props: { game: fixtureGame(), bridge: createMockBridge() },
+      attachTo: document.body,
+    })
+    outside.focus()
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', cancelable: true }))
+
+    expect(document.activeElement).toBe(wrapper.get('[data-test="drawer-close"]').element)
+  })
 })

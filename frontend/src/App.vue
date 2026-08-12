@@ -8,7 +8,7 @@ import { filterGames } from './features/library/libraryFilters'
 import { useLibraryStore } from './features/library/libraryStore'
 import MoveSuggestionPanel from './features/library/MoveSuggestionPanel.vue'
 import UiScaleControl from './features/preferences/UiScaleControl.vue'
-import { applyUiScale, readUiScale, saveUiScale } from './features/preferences/uiScale'
+import { applyUiScale, getUiScaleStorage, readUiScale, saveUiScale } from './features/preferences/uiScale'
 import ScanRootDialog from './features/scan-roots/ScanRootDialog.vue'
 import ScanRootList from './features/scan-roots/ScanRootList.vue'
 import './features/library/library.css'
@@ -19,7 +19,8 @@ const { roots, games, error, scanTasks, moveSuggestions } = storeToRefs(store)
 const state = ref<'connecting' | 'ready' | 'failed'>('connecting')
 const errorMessage = ref('')
 const showAddRoot = ref(false)
-const uiScale = ref(readUiScale(window.localStorage))
+const uiScaleStorage = getUiScaleStorage(window)
+const uiScale = ref(readUiScale(uiScaleStorage))
 const filteredGames = computed(() => filterGames(games.value, {
   query: store.query,
   status: store.statusFilter,
@@ -29,7 +30,7 @@ const engines = computed(() => [...new Set(games.value.map((game) => game.engine
 
 watch(uiScale, (scale) => {
   applyUiScale(scale, document.documentElement)
-  saveUiScale(scale, window.localStorage)
+  saveUiScale(scale, uiScaleStorage)
 }, { immediate: true })
 
 async function bootstrap() {

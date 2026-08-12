@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { UI_SCALE_OPTIONS, type UiScale } from './uiScale'
+import { isUiScale, UI_SCALE_OPTIONS, type UiScale } from './uiScale'
 
 defineProps<{ modelValue: UiScale }>()
 const emit = defineEmits<{ 'update:modelValue': [value: UiScale] }>()
 
 function update(event: Event) {
-  emit('update:modelValue', Number((event.target as HTMLSelectElement).value) as UiScale)
+  const value = Number((event.target as HTMLSelectElement).value)
+  if (isUiScale(value)) emit('update:modelValue', value)
 }
 </script>
 
