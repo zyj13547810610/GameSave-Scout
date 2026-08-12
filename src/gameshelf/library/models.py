@@ -6,6 +6,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Literal
 
+from gameshelf.engines.models import EngineEvidence
+
 type ScanMode = Literal["children", "recursive"]
 type GameStatus = Literal["installed", "missing", "save_only"]
 type ExecutableArchitecture = Literal["x86", "x64", "unknown"]
@@ -34,8 +36,14 @@ class Game:
     install_path_key: str | None
     title: str
     status: GameStatus
+    detected_engine_id: str | None
+    detected_engine_variant: str | None
     engine_id: str | None
     engine_variant: str | None
+    engine_is_manual: bool
+    engine_confidence: float | None
+    engine_evidence: tuple[EngineEvidence, ...]
+    engine_rules_version: str | None
     main_exe_relpath: str | None
     main_exe_is_manual: bool
     working_dir_relpath: str | None

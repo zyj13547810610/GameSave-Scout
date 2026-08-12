@@ -8,6 +8,7 @@ from types import MappingProxyType
 from typing import Any, cast
 
 from gameshelf.db.connection import ConnectionFactory
+from gameshelf.engines.models import EngineEvidence
 from gameshelf.library.models import (
     ExecutableArchitecture,
     Game,
@@ -79,8 +80,18 @@ def game_from_row(row: sqlite3.Row) -> Game:
         install_path_key=row["install_path_key"],
         title=str(row["title"]),
         status=cast(GameStatus, row["status"]),
+        detected_engine_id=row["detected_engine_id"],
+        detected_engine_variant=row["detected_engine_variant"],
         engine_id=row["engine_id"],
         engine_variant=row["engine_variant"],
+        engine_is_manual=bool(row["engine_is_manual"]),
+        engine_confidence=(
+            float(row["engine_confidence"])
+            if row["engine_confidence"] is not None
+            else None
+        ),
+        engine_evidence=_engine_evidence(row["engine_evidence_json"]),
+        engine_rules_version=row["engine_rules_version"],
         main_exe_relpath=row["main_exe_relpath"],
         main_exe_is_manual=bool(row["main_exe_is_manual"]),
         working_dir_relpath=row["working_dir_relpath"],
@@ -109,3 +120,20 @@ def _json_object(value: str) -> dict[str, Any]:
     if not isinstance(loaded, dict):
         raise ValueError("Expected a JSON object in the library database.")
     return loaded
+
+
+def _engine_evidence(value: str) -> tuple[EngineEvidence, ...]:
+    entries = _json_list(value)
+    evidence: list[EngineEvidence] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise ValueError("Expected engine evidence objects in the library database.")
+        evidence.append(
+            EngineEvidence(
+                code=str(entry["code"]),
+                detail=str(entry["detail"]),
+                weight=float(entry["weight"]),
+                path=(str(entry["path"]) if entry.get("path") is not None else None),
+            )
+        )
+    return tuple(evidence)

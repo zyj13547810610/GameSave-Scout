@@ -13,6 +13,8 @@ from uuid import uuid4
 
 from gameshelf.bridge.tasks import TaskCancelled, TaskContext
 from gameshelf.db.writer import DbWriter
+from gameshelf.engines.models import DetectionOutcome, EngineEvidence
+from gameshelf.engines.service import EngineDetectionService
 from gameshelf.library.models import Game, ScanRoot
 from gameshelf.library.repository import LibraryRepository, game_from_row
 from gameshelf.library.service import RootNotFoundError
@@ -40,9 +42,15 @@ class ScanSummary:
 
 
 class ScanService:
-    def __init__(self, repository: LibraryRepository, writer: DbWriter) -> None:
+    def __init__(
+        self,
+        repository: LibraryRepository,
+        writer: DbWriter,
+        engine_detection: EngineDetectionService | None = None,
+    ) -> None:
         self._repository = repository
         self._writer = writer
+        self._engine_detection = engine_detection
 
     def scan_root(
         self, root_id: str, scan_kind: ScanKind, context: TaskContext
@@ -54,6 +62,7 @@ class ScanService:
             raise RootNotFoundError(root_id)
         session_id = self._create_session(root_id, scan_kind)
         discovered = 0
+        warnings = 0
         batch: list[tuple[str, str]] = []
         try:
             context.raise_if_cancelled()
@@ -64,6 +73,17 @@ class ScanService:
                     continue
                 ranked = rank_executables(candidate.path)
                 recommendation = ranked[0] if ranked else None
+                executable = (
+                    candidate.path.joinpath(*recommendation.relative_path.split("/"))
+                    if recommendation is not None
+                    else None
+                )
+                detection = (
+                    self._engine_detection.detect(candidate.path, executable)
+                    if self._engine_detection is not None
+                    else DetectionOutcome(None, (), False)
+                )
+                warnings += len(detection.diagnostics)
                 payload = {
                     "relativeDir": candidate.relative_dir,
                     "title": candidate.path.name,
@@ -73,6 +93,7 @@ class ScanService:
                     "exeArch": (
                         recommendation.architecture if recommendation is not None else "unknown"
                     ),
+                    **_engine_payload(detection),
                 }
                 batch.append(
                     (
@@ -108,7 +129,7 @@ class ScanService:
             added=result.added,
             updated=result.updated,
             missing=result.missing,
-            warnings=0,
+            warnings=warnings,
             move_suggestions=result.move_suggestions,
             games=result.games,
         )
@@ -284,6 +305,54 @@ def _empty_summary(
 
 def _utc_now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
+
+
+def _engine_payload(outcome: DetectionOutcome) -> dict[str, object]:
+    match = outcome.best
+    evidence: tuple[EngineEvidence, ...]
+    if match is not None:
+        evidence = match.evidence
+    elif outcome.ambiguous:
+        evidence = tuple(
+            EngineEvidence(
+                code=f"candidate:{candidate.engine_id}",
+                detail=candidate.variant or candidate.engine_id,
+                weight=candidate.confidence,
+            )
+            for candidate in outcome.alternatives
+        )
+    else:
+        evidence = ()
+    evidence_json = [
+        {
+            "code": item.code,
+            "detail": item.detail,
+            "path": item.path,
+            "weight": item.weight,
+        }
+        for item in (*evidence, *outcome.diagnostics)
+    ]
+    return {
+        "detectedEngineId": match.engine_id if match is not None else None,
+        "detectedEngineVariant": match.variant if match is not None else None,
+        "engineConfidence": (
+            match.confidence
+            if match is not None
+            else max(
+                (candidate.confidence for candidate in outcome.alternatives),
+                default=None,
+            )
+        ),
+        "engineEvidence": evidence_json,
+        "engineRulesVersion": (
+            match.rule_version
+            if match is not None
+            else ",".join(
+                dict.fromkeys(candidate.rule_version for candidate in outcome.alternatives)
+            )
+            or None
+        ),
+    }
 
 
 class ConfirmMoveError(ValueError):

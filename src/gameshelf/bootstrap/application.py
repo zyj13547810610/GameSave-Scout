@@ -15,6 +15,7 @@ from gameshelf.covers.service import CoverService
 from gameshelf.db.connection import ConnectionFactory
 from gameshelf.db.migrator import Migrator
 from gameshelf.db.writer import DbWriter
+from gameshelf.engines.service import EngineDetectionService
 from gameshelf.library.launcher import GameLauncher
 from gameshelf.library.repository import LibraryRepository
 from gameshelf.library.service import LibraryService
@@ -60,7 +61,10 @@ def build_application(paths: AppPaths) -> Application:
     tasks = TaskRegistry()
     repository = LibraryRepository(database)
     library = LibraryService(repository, writer)
-    scanner = ScanService(repository, writer)
+    engine_detection = EngineDetectionService.from_rules_file(
+        paths.app_root / "resources" / "rules" / "engines.yaml"
+    )
+    scanner = ScanService(repository, writer, engine_detection)
     launcher = GameLauncher(
         repository, writer, WindowsProcessLauncher(), WindowsShell()
     )

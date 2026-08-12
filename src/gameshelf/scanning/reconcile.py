@@ -66,9 +66,16 @@ def reconcile_session(
                 INSERT INTO games(
                     id, scan_root_id, relative_dir, install_path_key,
                     title, detected_title, status,
+                    detected_engine_id, detected_engine_variant,
+                    engine_id, engine_variant, engine_confidence,
+                    engine_evidence_json, engine_rules_version,
                     detected_main_exe_relpath, main_exe_relpath, exe_arch,
                     added_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, 'installed', ?, ?, ?, ?, ?)
+                ) VALUES (
+                    ?, ?, ?, ?, ?, ?, 'installed',
+                    ?, ?, ?, ?, ?, json(?), ?,
+                    ?, ?, ?, ?, ?
+                )
                 """,
                 (
                     game_id,
@@ -77,6 +84,13 @@ def reconcile_session(
                     install_key,
                     payload["title"],
                     payload["title"],
+                    payload["detectedEngineId"],
+                    payload["detectedEngineVariant"],
+                    payload["detectedEngineId"],
+                    payload["detectedEngineVariant"],
+                    payload["engineConfidence"],
+                    json.dumps(payload["engineEvidence"], ensure_ascii=False),
+                    payload["engineRulesVersion"],
                     payload["mainExeRelpath"],
                     payload["mainExeRelpath"],
                     payload["exeArch"],
@@ -94,6 +108,12 @@ def reconcile_session(
                     detected_title = ?,
                     title = CASE WHEN title_is_manual = 1 THEN title ELSE ? END,
                     status = 'installed',
+                    detected_engine_id = ?, detected_engine_variant = ?,
+                    engine_id = CASE WHEN engine_is_manual = 1 THEN engine_id ELSE ? END,
+                    engine_variant = CASE
+                        WHEN engine_is_manual = 1 THEN engine_variant ELSE ? END,
+                    engine_confidence = ?, engine_evidence_json = json(?),
+                    engine_rules_version = ?,
                     detected_main_exe_relpath = ?,
                     main_exe_relpath = CASE
                         WHEN main_exe_is_manual = 1 THEN main_exe_relpath ELSE ? END,
@@ -106,6 +126,13 @@ def reconcile_session(
                     install_key,
                     payload["title"],
                     payload["title"],
+                    payload["detectedEngineId"],
+                    payload["detectedEngineVariant"],
+                    payload["detectedEngineId"],
+                    payload["detectedEngineVariant"],
+                    payload["engineConfidence"],
+                    json.dumps(payload["engineEvidence"], ensure_ascii=False),
+                    payload["engineRulesVersion"],
                     payload["mainExeRelpath"],
                     payload["mainExeRelpath"],
                     payload["exeArch"],
