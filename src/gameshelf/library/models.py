@@ -40,5 +40,8 @@ class Game:
     launch_args: tuple[str, ...]
     environment: Mapping[str, str]
     exe_arch: ExecutableArchitecture
+    cover_original_relpath: str | None
+    cover_thumb_relpath: str | None
+    cover_revision: int
     last_launched_at: str | None
     missing_since: str | None

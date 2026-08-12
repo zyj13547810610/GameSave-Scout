@@ -87,6 +87,9 @@ def game_from_row(row: sqlite3.Row) -> Game:
             {str(key): str(value) for key, value in environment.items()}
         ),
         exe_arch=cast(ExecutableArchitecture, row["exe_arch"]),
+        cover_original_relpath=row["cover_original_relpath"],
+        cover_thumb_relpath=row["cover_thumb_relpath"],
+        cover_revision=int(row["cover_revision"]),
         last_launched_at=row["last_launched_at"],
         missing_since=row["missing_since"],
     )

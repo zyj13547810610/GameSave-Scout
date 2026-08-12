@@ -11,6 +11,7 @@ from gameshelf.bootstrap.logging import configure_logging
 from gameshelf.bootstrap.paths import AppPaths
 from gameshelf.bridge.api import BridgeApi
 from gameshelf.bridge.tasks import TaskRegistry
+from gameshelf.covers.service import CoverService
 from gameshelf.db.connection import ConnectionFactory
 from gameshelf.db.migrator import Migrator
 from gameshelf.db.writer import DbWriter
@@ -63,6 +64,7 @@ def build_application(paths: AppPaths) -> Application:
     launcher = GameLauncher(
         repository, writer, WindowsProcessLauncher(), WindowsShell()
     )
+    covers = CoverService(paths, repository, writer)
     def cover_lookup(game_id: str, variant: str) -> Path | None:
         column = "cover_original_relpath" if variant == "original" else "cover_thumb_relpath"
         with database.connect(readonly=True) as connection:
@@ -86,6 +88,7 @@ def build_application(paths: AppPaths) -> Application:
         library=library,
         scanner=scanner,
         launcher=launcher,
+        covers=covers,
         asset_session_token=asset_address.session_token,
     )
     return Application(

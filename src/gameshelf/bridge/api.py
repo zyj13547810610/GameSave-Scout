@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 from pathlib import Path
 from typing import Any, cast
 
 from gameshelf.bootstrap.paths import AppPaths
 from gameshelf.bridge.contracts import ApiResult, JSONValue, failure, success
 from gameshelf.bridge.tasks import TaskRegistry, TaskSnapshot
+from gameshelf.covers.image_pipeline import MAX_SOURCE_BYTES, InvalidCoverImage
+from gameshelf.covers.service import CoverService
 from gameshelf.library.launcher import (
     GameLauncher,
     InvalidLaunchConfiguration,
@@ -41,6 +45,7 @@ class BridgeApi:
         library: LibraryService | None = None,
         scanner: ScanService | None = None,
         launcher: GameLauncher | None = None,
+        covers: CoverService | None = None,
         asset_session_token: str | None = None,
     ) -> None:
         self._paths = paths
@@ -49,6 +54,7 @@ class BridgeApi:
         self._library = library
         self._scanner = scanner
         self._launcher = launcher
+        self._covers = covers
         self._asset_session_token = asset_session_token
         self._window: Any | None = None
 
@@ -222,6 +228,61 @@ class BridgeApi:
         except (InvalidLaunchConfiguration, LauncherGameNotFoundError) as error:
             return failure("launch_failed", str(error))
 
+    def choose_cover_file(self, request: object) -> ApiResult:
+        try:
+            _payload(request)
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        return success(
+            self._choose_native_path(
+                directory=False,
+                file_types=("Images (*.png;*.jpg;*.jpeg;*.webp;*.bmp)",),
+            )
+        )
+
+    def set_cover_from_file(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            game_id = _string(payload, "gameId")
+            self._require_covers().import_file(
+                game_id, Path(_string(payload, "selectedPath"))
+            )
+            return success(self._game_dto(self._require_game(game_id)))
+        except (InvalidRequest, InvalidCoverImage) as error:
+            return failure("invalid_cover", str(error))
+        except GameNotFoundError:
+            return failure("game_not_found", "没有找到对应的游戏。")
+
+    def set_cover_from_clipboard(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            game_id = _string(payload, "gameId")
+            encoded = _string(payload, "pngBase64")
+            if len(encoded) > (MAX_SOURCE_BYTES * 4 // 3) + 8:
+                raise InvalidCoverImage("Clipboard image exceeds the 50 MiB limit.")
+            try:
+                png_bytes = base64.b64decode(encoded, validate=True)
+            except (ValueError, binascii.Error) as error:
+                raise InvalidCoverImage("Clipboard image is not valid base64.") from error
+            if len(png_bytes) > MAX_SOURCE_BYTES:
+                raise InvalidCoverImage("Clipboard image exceeds the 50 MiB limit.")
+            self._require_covers().import_clipboard_png(game_id, png_bytes)
+            return success(self._game_dto(self._require_game(game_id)))
+        except (InvalidRequest, InvalidCoverImage) as error:
+            return failure("invalid_cover", str(error))
+        except GameNotFoundError:
+            return failure("game_not_found", "没有找到对应的游戏。")
+
+    def remove_cover(self, request: object) -> ApiResult:
+        try:
+            game_id = _string(_payload(request), "gameId")
+            self._require_covers().remove(game_id)
+            return success(self._game_dto(self._require_game(game_id)))
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except GameNotFoundError:
+            return failure("game_not_found", "没有找到对应的游戏。")
+
     def open_install_directory(self, request: object) -> ApiResult:
         try:
             self._require_launcher().open_install_directory(
@@ -261,7 +322,11 @@ class BridgeApi:
         return success({"cancelled": self._tasks.cancel(task_id)})
 
     def _choose_native_path(
-        self, *, directory: bool, initial: Path | None = None
+        self,
+        *,
+        directory: bool,
+        initial: Path | None = None,
+        file_types: tuple[str, ...] | None = None,
     ) -> str | None:
         if self._window is None:
             return None
@@ -272,7 +337,7 @@ class BridgeApi:
         if initial is not None:
             options["directory"] = str(initial)
         if not directory:
-            options["file_types"] = ("Windows 可执行文件 (*.exe)",)
+            options["file_types"] = file_types or ("Windows 可执行文件 (*.exe)",)
         selected = self._window.create_file_dialog(dialog_type, **options)
         if not selected:
             return None
@@ -297,6 +362,9 @@ class BridgeApi:
             "launchArgs": list(game.launch_args),
             "environment": dict(game.environment),
             "exeArch": game.exe_arch,
+            "coverRevision": game.cover_revision,
+            "coverThumbUrl": self._cover_url(game, "thumb"),
+            "coverOriginalUrl": self._cover_url(game, "original"),
             "lastLaunchedAt": game.last_launched_at,
             "missingSince": game.missing_since,
         }
@@ -315,6 +383,28 @@ class BridgeApi:
         if self._launcher is None:
             raise RuntimeError("Launch services are not configured.")
         return self._launcher
+
+    def _require_covers(self) -> CoverService:
+        if self._covers is None:
+            raise RuntimeError("Cover services are not configured.")
+        return self._covers
+
+    def _require_game(self, game_id: str) -> Game:
+        game = self._require_library().get_game(game_id)
+        if game is None:
+            raise GameNotFoundError(game_id)
+        return game
+
+    def _cover_url(self, game: Game, variant: str) -> str | None:
+        relative = (
+            game.cover_thumb_relpath if variant == "thumb" else game.cover_original_relpath
+        )
+        if relative is None or self._asset_session_token is None:
+            return None
+        return (
+            f"/session/{self._asset_session_token}/cover/{game.id}/{variant}"
+            f"?v={game.cover_revision}"
+        )
 
     @staticmethod
     def _snapshot_data(snapshot: TaskSnapshot) -> dict[str, JSONValue]:

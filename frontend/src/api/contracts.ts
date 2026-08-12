@@ -8,6 +8,7 @@ export type BootstrapState = {
   appName: 'GameShelf'
   schemaVersion: number
   portable: true
+  assetSessionToken?: string
 }
 
 export type ScanRoot = {
@@ -37,6 +38,9 @@ export type Game = {
   launchArgs: string[]
   environment: Record<string, string>
   exeArch: 'x86' | 'x64' | 'unknown'
+  coverRevision: number
+  coverThumbUrl: string | null
+  coverOriginalUrl: string | null
   lastLaunchedAt: string | null
   missingSince: string | null
 }
@@ -104,6 +108,10 @@ export interface GameShelfBridge {
   }): Promise<ApiResult<Game>>
   launch_game(input: { gameId: string }): Promise<ApiResult<{ gameId: string; pid: number; launchedAt: string }>>
   open_install_directory(input: { gameId: string }): Promise<ApiResult<{ opened: boolean }>>
+  choose_cover_file(input: Record<string, never>): Promise<ApiResult<string | null>>
+  set_cover_from_file(input: { gameId: string; selectedPath: string }): Promise<ApiResult<Game>>
+  set_cover_from_clipboard(input: { gameId: string; pngBase64: string }): Promise<ApiResult<Game>>
+  remove_cover(input: { gameId: string }): Promise<ApiResult<Game>>
   choose_directory(): Promise<ApiResult<string | null>>
   task_snapshot(taskId: string): Promise<ApiResult<TaskSnapshot>>
   cancel_task(taskId: string): Promise<ApiResult<{ cancelled: boolean }>>
