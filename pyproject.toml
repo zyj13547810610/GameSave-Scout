@@ -9,6 +9,7 @@ description = "Portable Windows game library and save-location manager"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+  "pefile>=2024.8.26,<2027",
   "pywebview>=6.2,<7",
 ]
 
