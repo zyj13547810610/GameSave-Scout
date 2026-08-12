@@ -43,7 +43,10 @@ CREATE TABLE games (
   updated_at TEXT NOT NULL,
   last_launched_at TEXT,
   missing_since TEXT,
-  CHECK (status = 'save_only' OR (scan_root_id IS NOT NULL AND relative_dir IS NOT NULL))
+  CHECK (
+    status IN ('missing', 'save_only')
+    OR (scan_root_id IS NOT NULL AND relative_dir IS NOT NULL)
+  )
 );
 
 CREATE UNIQUE INDEX games_install_path_key_unique

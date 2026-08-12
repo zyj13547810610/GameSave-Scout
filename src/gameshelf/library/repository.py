@@ -1,0 +1,106 @@
+"""Short-lived, read-only queries for scan roots and games."""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+from types import MappingProxyType
+from typing import Any, cast
+
+from gameshelf.db.connection import ConnectionFactory
+from gameshelf.library.models import (
+    ExecutableArchitecture,
+    Game,
+    GameStatus,
+    ScanMode,
+    ScanRoot,
+)
+
+
+class LibraryRepository:
+    def __init__(self, factory: ConnectionFactory) -> None:
+        self._factory = factory
+
+    @property
+    def factory(self) -> ConnectionFactory:
+        return self._factory
+
+    def list_roots(self) -> tuple[ScanRoot, ...]:
+        with self._factory.connect(readonly=True) as connection:
+            rows = connection.execute(
+                "SELECT * FROM scan_roots ORDER BY created_at, id"
+            ).fetchall()
+        return tuple(scan_root_from_row(row) for row in rows)
+
+    def get_root(self, root_id: str) -> ScanRoot | None:
+        with self._factory.connect(readonly=True) as connection:
+            row = connection.execute(
+                "SELECT * FROM scan_roots WHERE id = ?", (root_id,)
+            ).fetchone()
+        return None if row is None else scan_root_from_row(row)
+
+    def list_games(self) -> tuple[Game, ...]:
+        with self._factory.connect(readonly=True) as connection:
+            rows = connection.execute(
+                "SELECT * FROM games ORDER BY title COLLATE NOCASE, id"
+            ).fetchall()
+        return tuple(game_from_row(row) for row in rows)
+
+    def get_game(self, game_id: str) -> Game | None:
+        with self._factory.connect(readonly=True) as connection:
+            row = connection.execute(
+                "SELECT * FROM games WHERE id = ?", (game_id,)
+            ).fetchone()
+        return None if row is None else game_from_row(row)
+
+
+def scan_root_from_row(row: sqlite3.Row) -> ScanRoot:
+    return ScanRoot(
+        id=str(row["id"]),
+        display_path=str(row["display_path"]),
+        path_key=str(row["path_key"]),
+        enabled=bool(row["enabled"]),
+        scan_mode=cast(ScanMode, row["scan_mode"]),
+        max_depth=int(row["max_depth"]),
+        exclusions=tuple(str(item) for item in _json_list(row["exclusions_json"])),
+        last_scanned_at=row["last_scanned_at"],
+        last_scan_status=str(row["last_scan_status"]),
+        last_error=row["last_error"],
+        created_at=str(row["created_at"]),
+    )
+
+
+def game_from_row(row: sqlite3.Row) -> Game:
+    environment = _json_object(row["environment_json"])
+    return Game(
+        id=str(row["id"]),
+        scan_root_id=row["scan_root_id"],
+        relative_dir=row["relative_dir"],
+        install_path_key=row["install_path_key"],
+        title=str(row["title"]),
+        status=cast(GameStatus, row["status"]),
+        main_exe_relpath=row["main_exe_relpath"],
+        main_exe_is_manual=bool(row["main_exe_is_manual"]),
+        working_dir_relpath=row["working_dir_relpath"],
+        launch_args=tuple(str(item) for item in _json_list(row["launch_args_json"])),
+        environment=MappingProxyType(
+            {str(key): str(value) for key, value in environment.items()}
+        ),
+        exe_arch=cast(ExecutableArchitecture, row["exe_arch"]),
+        last_launched_at=row["last_launched_at"],
+        missing_since=row["missing_since"],
+    )
+
+
+def _json_list(value: str) -> list[Any]:
+    loaded = json.loads(value)
+    if not isinstance(loaded, list):
+        raise ValueError("Expected a JSON array in the library database.")
+    return loaded
+
+
+def _json_object(value: str) -> dict[str, Any]:
+    loaded = json.loads(value)
+    if not isinstance(loaded, dict):
+        raise ValueError("Expected a JSON object in the library database.")
+    return loaded
