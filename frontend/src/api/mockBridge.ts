@@ -74,6 +74,20 @@ export function createMockBridge(overrides: Partial<GameShelfBridge> = {}): Game
     async set_cover_from_file(input) { return ok(fixtureGame({ id: input.gameId, coverRevision: 1 })) },
     async set_cover_from_clipboard(input) { return ok(fixtureGame({ id: input.gameId, coverRevision: 1 })) },
     async remove_cover(input) { return ok(fixtureGame({ id: input.gameId, coverRevision: 2 })) },
+    async list_save_locations() { return ok([]) },
+    async choose_save_path() { return ok(null) },
+    async add_manual_save_location(input) {
+      return ok({
+        id: 'save-1', gameId: input.gameId, kind: input.kind,
+        pathTemplate: input.selectedPath, displayPath: input.selectedPath,
+        source: 'manual', confidence: 1, evidence: ['用户手动添加'],
+        confirmed: true, enabled: true, lastVerifiedAt: null, exists: true,
+        matchCount: null, matchesTruncated: false,
+      })
+    },
+    async remove_save_location() { return ok({ removed: true }) },
+    async verify_save_locations() { return ok([]) },
+    async open_save_location() { return ok({ opened: true }) },
     async choose_directory() { return ok(null) },
     async task_snapshot() { return { ok: false, error: { code: 'task_not_found', message: '没有找到对应的后台任务。' } } },
     async cancel_task() { return ok({ cancelled: false }) },

@@ -30,6 +30,13 @@ from gameshelf.library.service import (
     LibraryService,
     RootNotFoundError,
 )
+from gameshelf.saves.models import SaveLocation
+from gameshelf.saves.service import (
+    InvalidSaveLocation,
+    SaveLocationNotFoundError,
+    SaveLocationOpenError,
+    SaveLocationService,
+)
 from gameshelf.scanning.service import ConfirmMoveError, ScanService, ScanSummary
 
 
@@ -49,6 +56,7 @@ class BridgeApi:
         launcher: GameLauncher | None = None,
         covers: CoverService | None = None,
         engine_detection: EngineDetectionService | None = None,
+        save_locations: SaveLocationService | None = None,
         asset_session_token: str | None = None,
     ) -> None:
         self._paths = paths
@@ -59,6 +67,7 @@ class BridgeApi:
         self._launcher = launcher
         self._covers = covers
         self._engine_detection = engine_detection
+        self._save_locations = save_locations
         self._asset_session_token = asset_session_token
         self._window: Any | None = None
 
@@ -344,6 +353,88 @@ class BridgeApi:
         except (InvalidLaunchConfiguration, LauncherGameNotFoundError) as error:
             return failure("open_failed", str(error))
 
+    def list_save_locations(self, request: object) -> ApiResult:
+        try:
+            game_id = _string(_payload(request), "gameId")
+            locations = self._require_save_locations().list_for_game(game_id)
+            return success([_save_location_dto(location) for location in locations])
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except GameNotFoundError:
+            return failure("game_not_found", "没有找到对应的游戏。")
+
+    def choose_save_path(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _string(payload, "gameId")
+            kind = _save_kind(payload)
+            if kind == "registry":
+                raise InvalidSaveLocation("注册表位置请直接输入完整键路径。")
+            initial: Path | None = None
+            if self._library is not None:
+                try:
+                    initial = self._library.install_directory(_string(payload, "gameId"))
+                except (GameNotFoundError, InvalidGameConfiguration):
+                    initial = None
+            return success(
+                self._choose_native_path(
+                    directory=kind in {"directory", "glob"},
+                    initial=initial,
+                    file_types=("所有文件 (*.*)",),
+                )
+            )
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except InvalidSaveLocation as error:
+            return failure("invalid_save_location", str(error))
+
+    def add_manual_save_location(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            location = self._require_save_locations().add_manual(
+                _string(payload, "gameId"),
+                _save_kind(payload),
+                _string(payload, "selectedPath"),
+            )
+            return success(_save_location_dto(location))
+        except (InvalidRequest, InvalidSaveLocation) as error:
+            return failure("invalid_save_location", str(error))
+        except GameNotFoundError:
+            return failure("game_not_found", "没有找到对应的游戏。")
+
+    def remove_save_location(self, request: object) -> ApiResult:
+        try:
+            location_id = _string(_payload(request), "locationId")
+            self._require_save_locations().remove(location_id)
+            return success({"removed": True})
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except SaveLocationNotFoundError:
+            return failure("save_location_not_found", "没有找到对应的存档位置。")
+
+    def verify_save_locations(self, request: object) -> ApiResult:
+        try:
+            game_id = _string(_payload(request), "gameId")
+            locations = self._require_save_locations().verify_game(game_id)
+            return success([_save_location_dto(location) for location in locations])
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except GameNotFoundError:
+            return failure("game_not_found", "没有找到对应的游戏。")
+
+    def open_save_location(self, request: object) -> ApiResult:
+        try:
+            self._require_save_locations().open_location(
+                _string(_payload(request), "locationId")
+            )
+            return success({"opened": True})
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except SaveLocationNotFoundError:
+            return failure("save_location_not_found", "没有找到对应的存档位置。")
+        except (InvalidSaveLocation, SaveLocationOpenError, OSError) as error:
+            return failure("open_failed", str(error))
+
     def choose_directory(self) -> ApiResult:
         return success(self._choose_native_path(directory=True))
 
@@ -454,6 +545,11 @@ class BridgeApi:
             raise RuntimeError("Engine detection services are not configured.")
         return self._engine_detection
 
+    def _require_save_locations(self) -> SaveLocationService:
+        if self._save_locations is None:
+            raise RuntimeError("Save-location services are not configured.")
+        return self._save_locations
+
     def _engine_label(self, engine_id: str | None) -> str:
         if self._engine_detection is not None:
             return self._engine_detection.label_for(engine_id)
@@ -557,6 +653,25 @@ def _root_dto(root: ScanRoot) -> dict[str, JSONValue]:
     }
 
 
+def _save_location_dto(location: SaveLocation) -> dict[str, JSONValue]:
+    return {
+        "id": location.id,
+        "gameId": location.game_id,
+        "kind": location.kind,
+        "pathTemplate": location.path_template,
+        "displayPath": location.display_path,
+        "source": location.source,
+        "confidence": location.confidence,
+        "evidence": list(location.evidence),
+        "confirmed": location.confirmed,
+        "enabled": location.enabled,
+        "lastVerifiedAt": location.last_verified_at,
+        "exists": location.exists,
+        "matchCount": location.match_count,
+        "matchesTruncated": location.matches_truncated,
+    }
+
+
 def _scan_summary_dto(summary: ScanSummary) -> dict[str, JSONValue]:
     return {
         "sessionId": summary.session_id,
@@ -617,6 +732,13 @@ def _scan_mode(payload: dict[str, object]) -> Any:
     if mode not in {"children", "recursive"}:
         raise InvalidRequest("scanMode must be 'children' or 'recursive'.")
     return mode
+
+
+def _save_kind(payload: dict[str, object]) -> str:
+    kind = _string(payload, "kind")
+    if kind not in {"directory", "file", "glob", "registry"}:
+        raise InvalidSaveLocation(f"未知的存档位置类型：{kind}")
+    return kind
 
 
 def _confidence_label(value: float | None) -> str | None:

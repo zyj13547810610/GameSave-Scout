@@ -82,6 +82,26 @@ export type Game = {
   missingSince: string | null
 }
 
+export type SaveLocationKind = 'directory' | 'file' | 'glob' | 'registry'
+export type SaveLocationSource = 'manual' | 'dynamic' | 'ludusavi' | 'engine' | 'legacy_scan'
+
+export type SaveLocation = {
+  id: string
+  gameId: string
+  kind: SaveLocationKind
+  pathTemplate: string
+  displayPath: string
+  source: SaveLocationSource
+  confidence: number
+  evidence: string[]
+  confirmed: boolean
+  enabled: boolean
+  lastVerifiedAt: string | null
+  exists: boolean | null
+  matchCount: number | null
+  matchesTruncated: boolean
+}
+
 export type RootInput = {
   displayPath: string
   scanMode: 'children' | 'recursive'
@@ -152,6 +172,16 @@ export interface GameShelfBridge {
   set_cover_from_file(input: { gameId: string; selectedPath: string }): Promise<ApiResult<Game>>
   set_cover_from_clipboard(input: { gameId: string; pngBase64: string }): Promise<ApiResult<Game>>
   remove_cover(input: { gameId: string }): Promise<ApiResult<Game>>
+  list_save_locations(input: { gameId: string }): Promise<ApiResult<SaveLocation[]>>
+  choose_save_path(input: { gameId: string; kind: SaveLocationKind }): Promise<ApiResult<string | null>>
+  add_manual_save_location(input: {
+    gameId: string
+    kind: SaveLocationKind
+    selectedPath: string
+  }): Promise<ApiResult<SaveLocation>>
+  remove_save_location(input: { locationId: string }): Promise<ApiResult<{ removed: boolean }>>
+  verify_save_locations(input: { gameId: string }): Promise<ApiResult<SaveLocation[]>>
+  open_save_location(input: { locationId: string }): Promise<ApiResult<{ opened: boolean }>>
   choose_directory(): Promise<ApiResult<string | null>>
   task_snapshot(taskId: string): Promise<ApiResult<TaskSnapshot>>
   cancel_task(taskId: string): Promise<ApiResult<{ cancelled: boolean }>>

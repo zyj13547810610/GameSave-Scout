@@ -4,6 +4,7 @@ import type { Game, GameShelfBridge } from '../../api/contracts'
 import CoverActions from '../covers/CoverActions.vue'
 import EngineDetails from '../engines/EngineDetails.vue'
 import EnginePicker from '../engines/EnginePicker.vue'
+import SaveLocationList from '../saves/SaveLocationList.vue'
 import GameSettingsPanel from './GameSettingsPanel.vue'
 
 defineProps<{ game: Game; bridge: GameShelfBridge }>()
@@ -85,6 +86,7 @@ onBeforeUnmount(() => {
       />
       <EnginePicker :game="game" :bridge="bridge" @updated="$emit('updated', $event)" />
       <CoverActions :game-id="game.id" :has-cover="Boolean(game.coverOriginalUrl)" :bridge="bridge" @updated="$emit('updated', $event)" />
+      <SaveLocationList :game-id="game.id" :bridge="bridge" />
       <GameSettingsPanel :game="game" :bridge="bridge" @updated="$emit('updated', $event)" />
     </aside>
   </div>

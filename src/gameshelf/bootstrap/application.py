@@ -19,8 +19,13 @@ from gameshelf.engines.service import EngineDetectionService
 from gameshelf.library.launcher import GameLauncher
 from gameshelf.library.repository import LibraryRepository
 from gameshelf.library.service import LibraryService
+from gameshelf.platform.windows.known_folders import WindowsKnownFolderProvider
 from gameshelf.platform.windows.processes import WindowsProcessLauncher
+from gameshelf.platform.windows.registry import WindowsRegistry
 from gameshelf.platform.windows.shell import WindowsShell
+from gameshelf.saves.repository import SaveLocationRepository
+from gameshelf.saves.service import SaveLocationService
+from gameshelf.saves.templates import PathTemplateResolver
 from gameshelf.scanning.service import ScanService
 from gameshelf.web.asset_server import AssetServer, AssetServerAddress
 
@@ -63,10 +68,17 @@ def build_application(paths: AppPaths) -> Application:
     library = LibraryService(repository, writer)
     engine_detection = EngineDetectionService.from_rules_file(_engine_rules_file(paths))
     scanner = ScanService(repository, writer, engine_detection)
-    launcher = GameLauncher(
-        repository, writer, WindowsProcessLauncher(), WindowsShell()
-    )
+    shell = WindowsShell()
+    launcher = GameLauncher(repository, writer, WindowsProcessLauncher(), shell)
     covers = CoverService(paths, repository, writer)
+    save_locations = SaveLocationService(
+        SaveLocationRepository(database),
+        writer,
+        PathTemplateResolver(WindowsKnownFolderProvider().load()),
+        library,
+        shell,
+        WindowsRegistry(),
+    )
     def cover_lookup(game_id: str, variant: str) -> Path | None:
         column = "cover_original_relpath" if variant == "original" else "cover_thumb_relpath"
         with database.connect(readonly=True) as connection:
@@ -92,6 +104,7 @@ def build_application(paths: AppPaths) -> Application:
         launcher=launcher,
         covers=covers,
         engine_detection=engine_detection,
+        save_locations=save_locations,
         asset_session_token=asset_address.session_token,
     )
     return Application(

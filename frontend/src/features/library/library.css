@@ -36,5 +36,23 @@
 .engine-picker .secondary { color: #c7c1d0; background: #28242f; }
 .inline-error { margin: 0; color: #ff9c9c; }
 .game-drawer .game-settings-panel { min-height: auto; border: 0; padding: 0; background: transparent; }
+.save-locations { display: grid; gap: .75rem; margin-top: 1rem; border-top: 1px solid #302c38; padding-top: 1rem; }
+.save-location-heading, .save-dialog-heading, .save-location-title { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; }
+.save-location-heading h3, .save-dialog-heading h4 { margin: 0; }
+.save-location-card { display: grid; gap: .5rem; border: 1px solid #393641; border-radius: .65rem; padding: .75rem; background: #100f14; }
+.save-location-card p { margin: 0; }
+.save-location-title { justify-content: flex-start; font-size: .75rem; }
+.save-location-title span { border-radius: 999px; padding: .12rem .4rem; color: #cfc2f5; background: #292038; }
+.save-display-path, .save-location-card code { overflow-wrap: anywhere; }
+.save-location-meta, .empty-save-message { color: #918b9d; font-size: .75rem; }
+.save-missing { color: #ff9c9c; }
+.save-location-card details { font-size: .75rem; }
+.save-location-card summary { cursor: pointer; color: #aaa3b7; }
+.save-add-dialog { border: 1px solid #4b435e; border-radius: .75rem; padding: .8rem; background: #1b1822; }
+.save-add-dialog form, .save-add-dialog label { display: grid; gap: .6rem; }
+.save-add-dialog label { color: #aaa3b7; font-size: .8rem; }
+.save-add-dialog select, .save-add-dialog input { width: 100%; border: 1px solid #393641; border-radius: .5rem; padding: .6rem; color: #eceaf2; background: #17151e; }
+.path-picker-row { display: grid; gap: .45rem; }
+.path-picker-row span { color: #918b9d; overflow-wrap: anywhere; font-size: .75rem; }
 @container (max-width: 33rem) { .library-toolbar { grid-template-columns: 1fr; } }
 @media (max-width: 700px) { .library-toolbar { grid-template-columns: 1fr; } }
