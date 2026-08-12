@@ -44,4 +44,34 @@ describe('EnginePicker', () => {
     expect(setGameEngine).not.toHaveBeenCalled()
     expect(wrapper.get('[role="alert"]').text()).toContain('请输入自定义引擎名称')
   })
+
+  it('synchronizes the form when the updated game prop restores automatic detection', async () => {
+    const wrapper = mount(EnginePicker, {
+      props: {
+        game: fixtureGame({
+          engineId: 'custom:Mine',
+          engineLabel: 'Mine',
+          engineIsManual: true,
+        }),
+        bridge: createMockBridge({
+          list_engine_options: async () => ok([
+            { id: 'unity', label: 'Unity', experimental: false },
+          ]),
+        }),
+      },
+    })
+    await flushPromises()
+    expect(wrapper.get('select').element.value).toBe('custom')
+
+    await wrapper.setProps({
+      game: fixtureGame({
+        engineId: 'unity',
+        engineLabel: 'Unity',
+        engineIsManual: false,
+      }),
+    })
+
+    expect(wrapper.get('select').element.value).toBe('unity')
+    expect(wrapper.find('input').exists()).toBe(false)
+  })
 })

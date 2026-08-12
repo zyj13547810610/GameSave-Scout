@@ -409,6 +409,11 @@ class BridgeApi:
             "engineId": game.engine_id,
             "engineVariant": game.engine_variant,
             "engineLabel": self._engine_label(game.engine_id),
+            "engineExperimental": (
+                self._engine_detection.is_experimental(game.engine_id)
+                if self._engine_detection is not None
+                else False
+            ),
             "engineIsManual": game.engine_is_manual,
             "detectedEngine": self._detected_engine_dto(game),
             "mainExeRelpath": game.main_exe_relpath,

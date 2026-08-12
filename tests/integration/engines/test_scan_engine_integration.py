@@ -8,6 +8,7 @@ from gameshelf.bridge.tasks import TaskContext
 from gameshelf.db.connection import ConnectionFactory
 from gameshelf.db.migrator import Migrator
 from gameshelf.db.writer import DbWriter
+from gameshelf.engines.registry import DetectorRegistry
 from gameshelf.engines.service import EngineDetectionService
 from gameshelf.library.models import Game
 from gameshelf.library.repository import LibraryRepository
@@ -70,6 +71,29 @@ def test_scan_refreshes_suggestion_but_preserves_manual_engine(
     assert refreshed.detected_engine_id == "unity"
     assert refreshed.engine_id == "custom:my-engine"
     assert refreshed.engine_is_manual is True
+
+
+def test_detector_failure_preserves_previous_detected_and_adopted_engine(
+    engine_scan_harness: "EngineScanHarness",
+) -> None:
+    game = engine_scan_harness.scan_fixture("renpy")
+    engine_scan_harness.scanner = ScanService(
+        LibraryRepository(engine_scan_harness.factory),
+        engine_scan_harness.writer,
+        EngineDetectionService(DetectorRegistry([BrokenDetector()])),
+    )
+
+    summary = engine_scan_harness.scanner.scan_root(
+        engine_scan_harness.root_id,
+        "full",
+        TaskContext(Event(), lambda *_: None),
+    )
+    refreshed = summary.games[0]
+
+    assert summary.warnings == 1
+    assert refreshed.detected_engine_id == "renpy"
+    assert refreshed.engine_id == "renpy"
+    assert refreshed.engine_evidence == game.engine_evidence
 
 
 class EngineScanHarness:
@@ -141,3 +165,11 @@ def _remove_tree(path: Path) -> None:
         else:
             child.unlink()
     path.rmdir()
+
+
+class BrokenDetector:
+    def cheap_probe(self, _context: object) -> bool:
+        return True
+
+    def inspect(self, _context: object) -> None:
+        raise OSError("synthetic detector failure")

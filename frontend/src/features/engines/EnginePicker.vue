@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import type { EngineOption, Game, GameShelfBridge } from '../../api/contracts'
 
 const props = defineProps<{ game: Game; bridge: GameShelfBridge }>()
 const emit = defineEmits<{ updated: [game: Game] }>()
 const options = ref<EngineOption[]>([])
-const selected = ref(initialSelection())
+const selected = ref(selectionFor(props.game))
 const customLabel = ref(props.game.engineId?.startsWith('custom:') ? props.game.engineLabel : '')
 const loading = ref(true)
 const saving = ref(false)
@@ -15,11 +15,21 @@ const groupedOptions = computed(() => ({
   experimental: options.value.filter((item) => item.experimental),
 }))
 
-function initialSelection() {
-  if (props.game.engineIsManual && props.game.engineId === null) return 'unknown'
-  if (props.game.engineId?.startsWith('custom:')) return 'custom'
-  return props.game.engineId ?? 'unknown'
+function selectionFor(game: Game) {
+  if (game.engineIsManual && game.engineId === null) return 'unknown'
+  if (game.engineId?.startsWith('custom:')) return 'custom'
+  return game.engineId ?? 'unknown'
 }
+
+function syncForm(game: Game) {
+  selected.value = selectionFor(game)
+  customLabel.value = game.engineId?.startsWith('custom:') ? game.engineLabel : ''
+}
+
+watch(
+  () => [props.game.engineId, props.game.engineIsManual, props.game.engineLabel],
+  () => syncForm(props.game),
+)
 
 onMounted(async () => {
   const result = await props.bridge.list_engine_options()
@@ -42,7 +52,10 @@ async function save() {
   const result = await props.bridge.set_game_engine(request)
   saving.value = false
   if (!result.ok) error.value = result.error.message
-  else emit('updated', result.data)
+  else {
+    syncForm(result.data)
+    emit('updated', result.data)
+  }
 }
 
 async function restoreAutomatic() {
@@ -51,7 +64,10 @@ async function restoreAutomatic() {
   const result = await props.bridge.clear_manual_engine({ gameId: props.game.id })
   saving.value = false
   if (!result.ok) error.value = result.error.message
-  else emit('updated', result.data)
+  else {
+    syncForm(result.data)
+    emit('updated', result.data)
+  }
 }
 </script>
 

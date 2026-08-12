@@ -108,12 +108,19 @@ def reconcile_session(
                     detected_title = ?,
                     title = CASE WHEN title_is_manual = 1 THEN title ELSE ? END,
                     status = 'installed',
-                    detected_engine_id = ?, detected_engine_variant = ?,
-                    engine_id = CASE WHEN engine_is_manual = 1 THEN engine_id ELSE ? END,
+                    detected_engine_id = CASE WHEN ? THEN detected_engine_id ELSE ? END,
+                    detected_engine_variant = CASE
+                        WHEN ? THEN detected_engine_variant ELSE ? END,
+                    engine_id = CASE
+                        WHEN engine_is_manual = 1 OR ? THEN engine_id ELSE ? END,
                     engine_variant = CASE
-                        WHEN engine_is_manual = 1 THEN engine_variant ELSE ? END,
-                    engine_confidence = ?, engine_evidence_json = json(?),
-                    engine_rules_version = ?,
+                        WHEN engine_is_manual = 1 OR ? THEN engine_variant ELSE ? END,
+                    engine_confidence = CASE
+                        WHEN ? THEN engine_confidence ELSE ? END,
+                    engine_evidence_json = CASE
+                        WHEN ? THEN engine_evidence_json ELSE json(?) END,
+                    engine_rules_version = CASE
+                        WHEN ? THEN engine_rules_version ELSE ? END,
                     detected_main_exe_relpath = ?,
                     main_exe_relpath = CASE
                         WHEN main_exe_is_manual = 1 THEN main_exe_relpath ELSE ? END,
@@ -126,12 +133,19 @@ def reconcile_session(
                     install_key,
                     payload["title"],
                     payload["title"],
+                    payload["engineDetectionFailed"],
                     payload["detectedEngineId"],
+                    payload["engineDetectionFailed"],
                     payload["detectedEngineVariant"],
+                    payload["engineDetectionFailed"],
                     payload["detectedEngineId"],
+                    payload["engineDetectionFailed"],
                     payload["detectedEngineVariant"],
+                    payload["engineDetectionFailed"],
                     payload["engineConfidence"],
+                    payload["engineDetectionFailed"],
                     json.dumps(payload["engineEvidence"], ensure_ascii=False),
+                    payload["engineDetectionFailed"],
                     payload["engineRulesVersion"],
                     payload["mainExeRelpath"],
                     payload["mainExeRelpath"],

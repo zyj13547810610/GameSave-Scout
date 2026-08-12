@@ -55,6 +55,32 @@ describe('library states', () => {
 
     expect(wrapper.text()).toContain("Ren'Py")
   })
+
+  it('does not label a manual adopted engine from an experimental suggestion', () => {
+    const wrapper = mount(GameCard, {
+      props: {
+        game: fixtureGame({
+          engineId: 'custom:Mine',
+          engineLabel: 'Mine',
+          engineIsManual: true,
+          engineExperimental: false,
+          detectedEngine: {
+            id: 'qlie',
+            label: 'QLIE',
+            variant: null,
+            confidence: '高',
+            evidence: [],
+            ambiguous: false,
+            experimental: true,
+            alternatives: [],
+          },
+        }),
+      },
+    })
+
+    expect(wrapper.text()).toContain('Mine')
+    expect(wrapper.text()).not.toContain('实验性')
+  })
 })
 
 function mountApp(bridge: ReturnType<typeof createMockBridge>, pinia: ReturnType<typeof createPinia>) {

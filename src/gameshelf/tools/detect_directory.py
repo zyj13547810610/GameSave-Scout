@@ -22,6 +22,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     if not game_dir.is_dir():
         _write_json(sys.stderr, {"error": "directory_not_found", "path": str(game_dir)})
         return 2
+    try:
+        next(game_dir.iterdir(), None)
+    except OSError:
+        _write_json(
+            sys.stderr,
+            {"error": "directory_unreadable", "path": str(game_dir)},
+        )
+        return 2
     executable = args.executable.resolve(strict=False) if args.executable else None
     if executable is not None and (
         not executable.is_file() or executable.parent != game_dir

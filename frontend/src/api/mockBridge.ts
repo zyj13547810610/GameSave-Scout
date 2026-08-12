@@ -32,6 +32,7 @@ export function fixtureGame(overrides: Partial<Game> = {}): Game {
     engineId: null,
     engineVariant: null,
     engineLabel: '未知引擎',
+    engineExperimental: false,
     engineIsManual: false,
     detectedEngine: null,
     mainExeRelpath: null,

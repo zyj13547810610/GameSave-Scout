@@ -66,6 +66,7 @@ export type Game = {
   engineId: string | null
   engineVariant: string | null
   engineLabel: string
+  engineExperimental: boolean
   engineIsManual: boolean
   detectedEngine: EngineDetection | null
   mainExeRelpath: string | null

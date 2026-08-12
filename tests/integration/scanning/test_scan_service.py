@@ -173,6 +173,56 @@ def test_confirmed_move_preserves_original_game_id_and_removes_temporary_candida
     assert scan_harness.games() == (confirmed,)
 
 
+@pytest.mark.parametrize(
+    ("manual", "original_engine", "expected_engine"),
+    [(False, "renpy", "unity"), (True, "custom:mine", "custom:mine")],
+)
+def test_confirmed_move_refreshes_detection_and_preserves_manual_adoption(
+    scan_harness: "ScanHarness",
+    manual: bool,
+    original_engine: str,
+    expected_engine: str,
+) -> None:
+    original_root = scan_harness.add_root(mode="children")
+    scan_harness.mkdir("GameA", exes=["Game.exe"])
+    original = scan_harness.scan(original_root.id, "full").games[0]
+    scan_harness.set_engine_metadata(
+        original.id,
+        detected="renpy",
+        adopted=original_engine,
+        manual=manual,
+    )
+    scan_harness.remove_dir("GameA")
+    scan_harness.scan(original_root.id, "full")
+
+    moved_root_path = scan_harness.root_path.parent / "moved-engine-games"
+    moved_game = moved_root_path / "GameA"
+    moved_game.mkdir(parents=True)
+    (moved_game / "Game.exe").write_bytes(b"not-a-real-pe")
+    moved_root = scan_harness.add_root(mode="children", path=moved_root_path)
+    summary = scan_harness.scan(moved_root.id, "full")
+    candidate = summary.games[0]
+    scan_harness.set_engine_metadata(
+        candidate.id,
+        detected="unity",
+        adopted="unity",
+        manual=False,
+    )
+    suggestion = summary.move_suggestions[0]
+
+    confirmed = scan_harness.scanner.confirm_move(
+        summary.session_id,
+        suggestion.existing_game_id,
+        suggestion.candidate_relative_dir,
+    )
+
+    assert confirmed.detected_engine_id == "unity"
+    assert confirmed.engine_id == expected_engine
+    assert confirmed.engine_confidence == pytest.approx(0.97)
+    assert confirmed.engine_rules_version == "unity-test"
+    assert confirmed.engine_evidence[0].code == "unity_player"
+
+
 @dataclass
 class ScanHarness:
     root_path: Path
@@ -227,6 +277,37 @@ class ScanHarness:
                 WHERE id = ?
                 """,
                 (relative_path, game_id),
+            ).rowcount
+        ).result()
+
+    def set_engine_metadata(
+        self,
+        game_id: str,
+        *,
+        detected: str,
+        adopted: str,
+        manual: bool,
+    ) -> None:
+        self.writer.submit(
+            lambda connection: connection.execute(
+                """
+                UPDATE games
+                SET detected_engine_id = ?, detected_engine_variant = NULL,
+                    engine_id = ?, engine_variant = NULL, engine_is_manual = ?,
+                    engine_confidence = 0.97,
+                    engine_evidence_json = json(?),
+                    engine_rules_version = ?
+                WHERE id = ?
+                """,
+                (
+                    detected,
+                    adopted,
+                    manual,
+                    '[{"code":"unity_player","detail":"Unity evidence",'
+                    '"path":"UnityPlayer.dll","weight":0.97}]',
+                    f"{detected}-test",
+                    game_id,
+                ),
             ).rowcount
         ).result()
 

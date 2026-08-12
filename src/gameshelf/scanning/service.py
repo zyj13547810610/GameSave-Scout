@@ -170,6 +170,11 @@ class ScanService:
             if candidate is None or candidate["id"] == existing_game_id:
                 raise ConfirmMoveError("The suggested target is no longer available.")
 
+            candidate_evidence = json.loads(candidate["engine_evidence_json"])
+            detection_failed = candidate["detected_engine_id"] is None and any(
+                isinstance(item, dict) and item.get("code") == "detector_error"
+                for item in candidate_evidence
+            )
             connection.execute("DELETE FROM games WHERE id = ?", (candidate["id"],))
             now = _utc_now()
             connection.execute(
@@ -180,6 +185,20 @@ class ScanService:
                     detected_title = ?, detected_main_exe_relpath = ?,
                     main_exe_relpath = CASE WHEN main_exe_is_manual = 1
                         THEN main_exe_relpath ELSE ? END,
+                    detected_engine_id = CASE
+                        WHEN ? THEN detected_engine_id ELSE ? END,
+                    detected_engine_variant = CASE
+                        WHEN ? THEN detected_engine_variant ELSE ? END,
+                    engine_id = CASE
+                        WHEN engine_is_manual = 1 OR ? THEN engine_id ELSE ? END,
+                    engine_variant = CASE
+                        WHEN engine_is_manual = 1 OR ? THEN engine_variant ELSE ? END,
+                    engine_confidence = CASE
+                        WHEN ? THEN engine_confidence ELSE ? END,
+                    engine_evidence_json = CASE
+                        WHEN ? THEN engine_evidence_json ELSE ? END,
+                    engine_rules_version = CASE
+                        WHEN ? THEN engine_rules_version ELSE ? END,
                     exe_arch = ?, updated_at = ?
                 WHERE id = ?
                 """,
@@ -190,6 +209,20 @@ class ScanService:
                     candidate["detected_title"],
                     candidate["detected_main_exe_relpath"],
                     candidate["main_exe_relpath"],
+                    detection_failed,
+                    candidate["detected_engine_id"],
+                    detection_failed,
+                    candidate["detected_engine_variant"],
+                    detection_failed,
+                    candidate["detected_engine_id"],
+                    detection_failed,
+                    candidate["detected_engine_variant"],
+                    detection_failed,
+                    candidate["engine_confidence"],
+                    detection_failed,
+                    candidate["engine_evidence_json"],
+                    detection_failed,
+                    candidate["engine_rules_version"],
                     candidate["exe_arch"],
                     now,
                     existing_game_id,
@@ -333,6 +366,9 @@ def _engine_payload(outcome: DetectionOutcome) -> dict[str, object]:
         for item in (*evidence, *outcome.diagnostics)
     ]
     return {
+        "engineDetectionFailed": bool(outcome.diagnostics)
+        and match is None
+        and not outcome.ambiguous,
         "detectedEngineId": match.engine_id if match is not None else None,
         "detectedEngineVariant": match.variant if match is not None else None,
         "engineConfidence": (

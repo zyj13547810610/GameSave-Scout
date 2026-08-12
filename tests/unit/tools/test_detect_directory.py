@@ -29,3 +29,21 @@ def test_detect_directory_rejects_missing_directory(
     payload = json.loads(capsys.readouterr().err)
     assert exit_code == 2
     assert payload["error"] == "directory_not_found"
+
+
+def test_detect_directory_rejects_unreadable_directory(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    game = tmp_path / "unreadable"
+    game.mkdir()
+
+    def fail_iterdir(_path: Path):
+        raise PermissionError("denied")
+
+    monkeypatch.setattr(type(game), "iterdir", fail_iterdir)
+
+    exit_code = main([str(game)])
+
+    payload = json.loads(capsys.readouterr().err)
+    assert exit_code == 2
+    assert payload["error"] == "directory_unreadable"
