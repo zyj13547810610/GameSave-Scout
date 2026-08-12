@@ -102,6 +102,41 @@ export type SaveLocation = {
   matchesTruncated: boolean
 }
 
+export type SaveSuggestionEvidence = {
+  source: 'custom' | 'ludusavi' | 'engine'
+  detail: string
+}
+
+export type SaveSuggestion = {
+  suggestionId: string
+  kind: SaveLocationKind
+  pathTemplate: string
+  displayPath: string
+  source: SaveLocationSource
+  confidence: number
+  evidence: string[]
+  sourceEvidence: SaveSuggestionEvidence[]
+  preselected: boolean
+  category: 'save' | 'config' | 'other'
+  group: 'exact' | 'possible' | 'experimental'
+}
+
+export type LudusaviStatus = {
+  sourceUrl: string
+  downloadedAt: string
+  sha256: string
+  etag: string | null
+  upstreamCommit?: string | null
+  customDirectory: string
+  customErrors: { sourceName: string; message: string }[]
+}
+
+export type LudusaviUpdateResult = {
+  status: 'updated' | 'not_modified' | 'invalid' | 'failed'
+  message: string
+  metadata: Omit<LudusaviStatus, 'customDirectory' | 'customErrors'> | null
+}
+
 export type RootInput = {
   displayPath: string
   scanMode: 'children' | 'recursive'
@@ -182,6 +217,15 @@ export interface GameShelfBridge {
   remove_save_location(input: { locationId: string }): Promise<ApiResult<{ removed: boolean }>>
   verify_save_locations(input: { gameId: string }): Promise<ApiResult<SaveLocation[]>>
   open_save_location(input: { locationId: string }): Promise<ApiResult<{ opened: boolean }>>
+  suggest_save_locations(input: { gameId: string }): Promise<ApiResult<SaveSuggestion[]>>
+  accept_save_suggestions(input: {
+    gameId: string
+    suggestionIds: string[]
+    confirmRegistry: boolean
+  }): Promise<ApiResult<SaveLocation[]>>
+  ludusavi_status(): Promise<ApiResult<LudusaviStatus>>
+  update_ludusavi(input: Record<string, never>): Promise<ApiResult<{ taskId: string }>>
+  open_custom_manifest_directory(): Promise<ApiResult<{ opened: boolean }>>
   choose_directory(): Promise<ApiResult<string | null>>
   task_snapshot(taskId: string): Promise<ApiResult<TaskSnapshot>>
   cancel_task(taskId: string): Promise<ApiResult<{ cancelled: boolean }>>

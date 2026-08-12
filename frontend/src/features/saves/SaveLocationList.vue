@@ -2,7 +2,9 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import type { GameShelfBridge, SaveLocation } from '../../api/contracts'
 import AddSaveLocationDialog from './AddSaveLocationDialog.vue'
+import LudusaviSettings from './LudusaviSettings.vue'
 import { confidenceLabel, saveKindLabel, saveSourceLabel } from './saveLocationLabels'
+import SaveSuggestionList from './SaveSuggestionList.vue'
 
 const props = defineProps<{
   gameId: string
@@ -102,6 +104,11 @@ function verifiedLabel(value: string | null): string {
     </article>
 
     <p class="status-message" aria-live="polite">{{ loading ? '正在读取存档位置…' : message }}</p>
+    <SaveSuggestionList :game-id="gameId" :bridge="bridge" @accepted="refresh" />
+    <details class="ludusavi-settings-details">
+      <summary>存档规则设置</summary>
+      <LudusaviSettings :bridge="bridge" />
+    </details>
     <AddSaveLocationDialog
       v-if="showAdd"
       :game-id="gameId"
@@ -111,4 +118,3 @@ function verifiedLabel(value: string | null): string {
     />
   </section>
 </template>
-

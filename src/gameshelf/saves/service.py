@@ -156,7 +156,13 @@ class SaveLocationService:
             path_key=path_key,
             source=source,
             confidence=confidence,
-            evidence=suggestion.evidence,
+            evidence=(
+                *suggestion.evidence,
+                *(
+                    f"[{item.source}] {item.detail}"
+                    for item in suggestion.source_evidence
+                ),
+            ),
         )
 
     def list_for_game(self, game_id: str) -> tuple[SaveLocation, ...]:
@@ -407,4 +413,3 @@ def _nearest_existing_glob_parent(path: Path) -> Path | None:
 
 def _utc_now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
-

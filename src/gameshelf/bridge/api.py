@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import base64
 import binascii
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
 from gameshelf.bootstrap.paths import AppPaths
 from gameshelf.bridge.contracts import ApiResult, JSONValue, failure, success
-from gameshelf.bridge.tasks import TaskRegistry, TaskSnapshot
+from gameshelf.bridge.tasks import TaskContext, TaskRegistry, TaskSnapshot
 from gameshelf.covers.image_pipeline import MAX_SOURCE_BYTES, InvalidCoverImage
 from gameshelf.covers.service import CoverService
 from gameshelf.engines.service import EngineDetectionService
@@ -30,13 +31,20 @@ from gameshelf.library.service import (
     LibraryService,
     RootNotFoundError,
 )
-from gameshelf.saves.models import SaveLocation
+from gameshelf.saves.custom_manifest_provider import CustomManifestProvider
+from gameshelf.saves.ludusavi_provider import (
+    LudusaviProvider,
+    SnapshotUpdateError,
+    UpdateResult,
+)
+from gameshelf.saves.models import SaveLocation, SaveLocationSuggestion
 from gameshelf.saves.service import (
     InvalidSaveLocation,
     SaveLocationNotFoundError,
     SaveLocationOpenError,
     SaveLocationService,
 )
+from gameshelf.saves.static_discovery import StaticSaveDiscovery
 from gameshelf.scanning.service import ConfirmMoveError, ScanService, ScanSummary
 
 
@@ -57,6 +65,11 @@ class BridgeApi:
         covers: CoverService | None = None,
         engine_detection: EngineDetectionService | None = None,
         save_locations: SaveLocationService | None = None,
+        static_discovery: StaticSaveDiscovery | None = None,
+        ludusavi_provider: LudusaviProvider | None = None,
+        custom_provider: CustomManifestProvider | None = None,
+        custom_manifest_directory: Path | None = None,
+        directory_opener: Callable[[Path], None] | None = None,
         asset_session_token: str | None = None,
     ) -> None:
         self._paths = paths
@@ -68,6 +81,11 @@ class BridgeApi:
         self._covers = covers
         self._engine_detection = engine_detection
         self._save_locations = save_locations
+        self._static_discovery = static_discovery
+        self._ludusavi_provider = ludusavi_provider
+        self._custom_provider = custom_provider
+        self._custom_manifest_directory = custom_manifest_directory
+        self._directory_opener = directory_opener
         self._asset_session_token = asset_session_token
         self._window: Any | None = None
 
@@ -435,6 +453,105 @@ class BridgeApi:
         except (InvalidSaveLocation, SaveLocationOpenError, OSError) as error:
             return failure("open_failed", str(error))
 
+    def suggest_save_locations(self, request: object) -> ApiResult:
+        try:
+            game_id = _string(_payload(request), "gameId")
+            suggestions = self._require_static_discovery().suggest_for_game(game_id)
+            return success([_save_suggestion_dto(item) for item in suggestions])
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except GameNotFoundError:
+            return failure("game_not_found", "没有找到对应的游戏。")
+        except (SnapshotUpdateError, OSError, ValueError) as error:
+            return failure("save_discovery_failed", str(error))
+
+    def accept_save_suggestions(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            game_id = _string(payload, "gameId")
+            requested_ids = _string_list(payload, "suggestionIds")
+            if not requested_ids:
+                raise InvalidRequest("suggestionIds 至少需要一个项目。")
+            suggestions = {
+                item.suggestion_id: item
+                for item in self._require_static_discovery().suggest_for_game(game_id)
+                if item.suggestion_id is not None
+            }
+            if any(item_id not in suggestions for item_id in requested_ids):
+                raise InvalidRequest("存档建议已经失效，请刷新后重试。")
+            selected = [suggestions[item_id] for item_id in dict.fromkeys(requested_ids)]
+            if any(item.kind == "registry" for item in selected) and not _optional_boolean(
+                payload, "confirmRegistry", default=False
+            ):
+                return failure(
+                    "registry_confirmation_required",
+                    "注册表建议需要额外确认后才能接受。",
+                )
+            accepted = [
+                self._require_save_locations().accept_suggestion(game_id, suggestion)
+                for suggestion in selected
+            ]
+            return success([_save_location_dto(item) for item in accepted])
+        except (InvalidRequest, InvalidSaveLocation) as error:
+            return failure("invalid_save_location", str(error))
+        except GameNotFoundError:
+            return failure("game_not_found", "没有找到对应的游戏。")
+
+    def ludusavi_status(self) -> ApiResult:
+        try:
+            metadata = self._require_ludusavi_provider().metadata()
+            custom = self._require_custom_provider().load_all()
+            directory = self._require_custom_manifest_directory()
+            return success(
+                {
+                    "sourceUrl": metadata.source_url,
+                    "downloadedAt": metadata.downloaded_at,
+                    "sha256": metadata.sha256,
+                    "etag": metadata.etag,
+                    "upstreamCommit": metadata.upstream_commit,
+                    "customDirectory": str(directory),
+                    "customErrors": [
+                        {
+                            "sourceName": error.source_name,
+                            "message": error.message,
+                        }
+                        for error in custom.errors
+                    ],
+                }
+            )
+        except (SnapshotUpdateError, OSError, ValueError) as error:
+            return failure("ludusavi_status_failed", str(error))
+
+    def update_ludusavi(self, request: object) -> ApiResult:
+        try:
+            _payload(request)
+            provider = self._require_ludusavi_provider()
+            discovery = self._require_static_discovery()
+
+            def operation(context: TaskContext) -> dict[str, JSONValue]:
+                context.report(0, 1, "正在检查 Ludusavi 清单更新……")
+                result = provider.update_explicitly()
+                if result.status == "updated":
+                    discovery.invalidate_ludusavi()
+                context.report(1, 1, result.message)
+                return _update_result_dto(result)
+
+            task_id = self._tasks.submit("ludusavi_update", operation)
+            return success({"taskId": task_id})
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+
+    def open_custom_manifest_directory(self) -> ApiResult:
+        try:
+            directory = self._require_custom_manifest_directory()
+            directory.mkdir(parents=True, exist_ok=True)
+            if self._directory_opener is None:
+                raise OSError("未配置目录打开器。")
+            self._directory_opener(directory)
+            return success({"opened": True})
+        except OSError as error:
+            return failure("open_failed", str(error))
+
     def choose_directory(self) -> ApiResult:
         return success(self._choose_native_path(directory=True))
 
@@ -549,6 +666,26 @@ class BridgeApi:
         if self._save_locations is None:
             raise RuntimeError("Save-location services are not configured.")
         return self._save_locations
+
+    def _require_static_discovery(self) -> StaticSaveDiscovery:
+        if self._static_discovery is None:
+            raise RuntimeError("Static save discovery is not configured.")
+        return self._static_discovery
+
+    def _require_ludusavi_provider(self) -> LudusaviProvider:
+        if self._ludusavi_provider is None:
+            raise RuntimeError("Ludusavi provider is not configured.")
+        return self._ludusavi_provider
+
+    def _require_custom_provider(self) -> CustomManifestProvider:
+        if self._custom_provider is None:
+            raise RuntimeError("Custom manifest provider is not configured.")
+        return self._custom_provider
+
+    def _require_custom_manifest_directory(self) -> Path:
+        if self._custom_manifest_directory is None:
+            raise RuntimeError("Custom manifest directory is not configured.")
+        return self._custom_manifest_directory
 
     def _engine_label(self, engine_id: str | None) -> str:
         if self._engine_detection is not None:
@@ -672,6 +809,43 @@ def _save_location_dto(location: SaveLocation) -> dict[str, JSONValue]:
     }
 
 
+def _save_suggestion_dto(suggestion: SaveLocationSuggestion) -> dict[str, JSONValue]:
+    return {
+        "suggestionId": suggestion.suggestion_id,
+        "kind": suggestion.kind,
+        "pathTemplate": suggestion.path_template,
+        "displayPath": suggestion.display_path,
+        "source": suggestion.source,
+        "confidence": suggestion.confidence,
+        "evidence": list(suggestion.evidence),
+        "sourceEvidence": [
+            {"source": item.source, "detail": item.detail}
+            for item in suggestion.source_evidence
+        ],
+        "preselected": suggestion.preselected,
+        "category": suggestion.category,
+        "group": suggestion.group,
+    }
+
+
+def _update_result_dto(result: UpdateResult) -> dict[str, JSONValue]:
+    return {
+        "status": result.status,
+        "message": result.message,
+        "metadata": (
+            None
+            if result.metadata is None
+            else {
+                "etag": result.metadata.etag,
+                "sha256": result.metadata.sha256,
+                "downloadedAt": result.metadata.downloaded_at,
+                "sourceUrl": result.metadata.source_url,
+                "upstreamCommit": result.metadata.upstream_commit,
+            }
+        ),
+    }
+
+
 def _scan_summary_dto(summary: ScanSummary) -> dict[str, JSONValue]:
     return {
         "sessionId": summary.session_id,
@@ -715,6 +889,15 @@ def _integer(payload: dict[str, object], key: str) -> int:
 
 def _boolean(payload: dict[str, object], key: str) -> bool:
     value = payload.get(key)
+    if not isinstance(value, bool):
+        raise InvalidRequest(f"{key} must be a boolean.")
+    return value
+
+
+def _optional_boolean(
+    payload: dict[str, object], key: str, *, default: bool
+) -> bool:
+    value = payload.get(key, default)
     if not isinstance(value, bool):
         raise InvalidRequest(f"{key} must be a boolean.")
     return value

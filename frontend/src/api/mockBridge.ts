@@ -88,6 +88,21 @@ export function createMockBridge(overrides: Partial<GameShelfBridge> = {}): Game
     async remove_save_location() { return ok({ removed: true }) },
     async verify_save_locations() { return ok([]) },
     async open_save_location() { return ok({ opened: true }) },
+    async suggest_save_locations() { return ok([]) },
+    async accept_save_suggestions() { return ok([]) },
+    async ludusavi_status() {
+      return ok({
+        sourceUrl: 'https://raw.githubusercontent.com/mtkennerly/ludusavi-manifest/master/data/manifest.yaml',
+        downloadedAt: '2026-08-12T00:00:00+00:00',
+        sha256: '0'.repeat(64),
+        etag: null,
+        upstreamCommit: null,
+        customDirectory: 'data\\manifests\\custom',
+        customErrors: [],
+      })
+    },
+    async update_ludusavi() { return ok({ taskId: 'ludusavi-update-1' }) },
+    async open_custom_manifest_directory() { return ok({ opened: true }) },
     async choose_directory() { return ok(null) },
     async task_snapshot() { return { ok: false, error: { code: 'task_not_found', message: '没有找到对应的后台任务。' } } },
     async cancel_task() { return ok({ cancelled: false }) },

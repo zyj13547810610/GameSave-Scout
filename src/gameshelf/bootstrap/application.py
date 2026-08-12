@@ -23,8 +23,12 @@ from gameshelf.platform.windows.known_folders import WindowsKnownFolderProvider
 from gameshelf.platform.windows.processes import WindowsProcessLauncher
 from gameshelf.platform.windows.registry import WindowsRegistry
 from gameshelf.platform.windows.shell import WindowsShell
+from gameshelf.saves.custom_manifest_provider import CustomManifestProvider
+from gameshelf.saves.engine_hints import EngineSaveHintProvider
+from gameshelf.saves.ludusavi_provider import LudusaviProvider
 from gameshelf.saves.repository import SaveLocationRepository
 from gameshelf.saves.service import SaveLocationService
+from gameshelf.saves.static_discovery import StaticSaveDiscovery
 from gameshelf.saves.templates import PathTemplateResolver
 from gameshelf.scanning.service import ScanService
 from gameshelf.web.asset_server import AssetServer, AssetServerAddress
@@ -71,14 +75,33 @@ def build_application(paths: AppPaths) -> Application:
     shell = WindowsShell()
     launcher = GameLauncher(repository, writer, WindowsProcessLauncher(), shell)
     covers = CoverService(paths, repository, writer)
+    resolver = PathTemplateResolver(WindowsKnownFolderProvider().load())
+    save_repository = SaveLocationRepository(database)
     save_locations = SaveLocationService(
-        SaveLocationRepository(database),
+        save_repository,
         writer,
-        PathTemplateResolver(WindowsKnownFolderProvider().load()),
+        resolver,
         library,
         shell,
         WindowsRegistry(),
     )
+    custom_manifest_directory = paths.manifests_dir / "custom"
+    custom_provider = CustomManifestProvider(custom_manifest_directory)
+    ludusavi_provider = LudusaviProvider(
+        resource_dir=_ludusavi_resource_dir(paths),
+        active_dir=paths.manifests_dir / "ludusavi",
+        temp_dir=paths.temp_dir,
+    )
+    static_discovery = StaticSaveDiscovery(
+        library=library,
+        save_repository=save_repository,
+        resolver=resolver,
+        ludusavi_provider=ludusavi_provider,
+        custom_provider=custom_provider,
+        engine_hints=EngineSaveHintProvider(resolver),
+        engine_is_experimental=engine_detection.is_experimental,
+    )
+
     def cover_lookup(game_id: str, variant: str) -> Path | None:
         column = "cover_original_relpath" if variant == "original" else "cover_thumb_relpath"
         with database.connect(readonly=True) as connection:
@@ -105,6 +128,11 @@ def build_application(paths: AppPaths) -> Application:
         covers=covers,
         engine_detection=engine_detection,
         save_locations=save_locations,
+        static_discovery=static_discovery,
+        ludusavi_provider=ludusavi_provider,
+        custom_provider=custom_provider,
+        custom_manifest_directory=custom_manifest_directory,
+        directory_opener=shell.open_directory,
         asset_session_token=asset_address.session_token,
     )
     return Application(
@@ -125,3 +153,10 @@ def _engine_rules_file(paths: AppPaths) -> Path:
     if adjacent.is_file():
         return adjacent
     return Path(__file__).resolve().parents[3] / "resources" / "rules" / "engines.yaml"
+
+
+def _ludusavi_resource_dir(paths: AppPaths) -> Path:
+    adjacent = paths.app_root / "resources" / "manifests" / "ludusavi"
+    if adjacent.is_dir():
+        return adjacent
+    return Path(__file__).resolve().parents[3] / "resources" / "manifests" / "ludusavi"

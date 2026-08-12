@@ -5,7 +5,12 @@ from typing import cast
 from gameshelf.bootstrap.paths import AppPaths
 from gameshelf.bridge.api import BridgeApi
 from gameshelf.bridge.tasks import TaskRegistry
-from gameshelf.saves.models import SaveLocation
+from gameshelf.saves.ludusavi_provider import SnapshotMetadata, UpdateResult
+from gameshelf.saves.models import (
+    SaveLocation,
+    SaveLocationSuggestion,
+    SuggestionEvidence,
+)
 from gameshelf.saves.service import InvalidSaveLocation, SaveLocationService
 
 
@@ -52,6 +57,53 @@ class FakeWindow:
     def create_file_dialog(self, _dialog_type: object, **options: object) -> tuple[str]:
         self.options = options
         return (r"C:\Users\Alice\Saves",)
+
+
+class FakeDiscovery:
+    def __init__(self) -> None:
+        self.invalidated = False
+        self.suggestion = SaveLocationSuggestion(
+            kind="registry",
+            path_template=r"HKEY_CURRENT_USER\Software\Studio\Alice",
+            display_path=r"HKEY_CURRENT_USER\Software\Studio\Alice",
+            source="engine",
+            confidence=0.9,
+            evidence=("Unity PlayerPrefs",),
+            source_evidence=(SuggestionEvidence("engine", "Unity PlayerPrefs"),),
+            suggestion_id="suggestion-1",
+            group="exact",
+        )
+
+    def suggest_for_game(self, _game_id: str) -> tuple[SaveLocationSuggestion, ...]:
+        return (self.suggestion,)
+
+    def invalidate_ludusavi(self) -> None:
+        self.invalidated = True
+
+
+class FakeSnapshotProvider:
+    def __init__(self) -> None:
+        self.update_calls = 0
+
+    def metadata(self) -> SnapshotMetadata:
+        return SnapshotMetadata(
+            etag='"etag"',
+            sha256="a" * 64,
+            downloaded_at="2026-08-12T00:00:00+00:00",
+            source_url="https://example.test/manifest.yaml",
+            upstream_commit="b" * 40,
+        )
+
+    def update_explicitly(self) -> UpdateResult:
+        self.update_calls += 1
+        return UpdateResult("updated", "已更新", self.metadata())
+
+
+class FakeCustomProvider:
+    def load_all(self):
+        from gameshelf.saves.custom_manifest_provider import CustomManifestLoadResult
+
+        return CustomManifestLoadResult((), ())
 
 
 def test_manual_api_requires_supported_kind(tmp_path: Path) -> None:
@@ -110,7 +162,46 @@ def test_save_path_picker_uses_directory_dialog_for_glob(tmp_path: Path) -> None
     assert window.options["allow_multiple"] is False
 
 
-def _api(tmp_path: Path) -> tuple[BridgeApi, TaskRegistry]:
+def test_registry_suggestion_requires_explicit_confirmation(tmp_path: Path) -> None:
+    api, tasks = _api(tmp_path, discovery=FakeDiscovery())
+    try:
+        result = api.accept_save_suggestions(
+            {
+                "gameId": "game-1",
+                "suggestionIds": ["suggestion-1"],
+                "confirmRegistry": False,
+            }
+        )
+    finally:
+        tasks.close()
+
+    assert result["ok"] is False
+    assert result["error"]["code"] == "registry_confirmation_required"
+
+
+def test_ludusavi_update_is_submitted_only_after_explicit_api_call(tmp_path: Path) -> None:
+    discovery = FakeDiscovery()
+    provider = FakeSnapshotProvider()
+    api, tasks = _api(tmp_path, discovery=discovery, snapshot_provider=provider)
+    try:
+        assert provider.update_calls == 0
+        result = api.update_ludusavi({})
+        assert result["ok"] is True
+        task_id = result["data"]["taskId"]
+        tasks.wait(task_id, timeout=2)
+    finally:
+        tasks.close()
+
+    assert provider.update_calls == 1
+    assert discovery.invalidated is True
+
+
+def _api(
+    tmp_path: Path,
+    *,
+    discovery: FakeDiscovery | None = None,
+    snapshot_provider: FakeSnapshotProvider | None = None,
+) -> tuple[BridgeApi, TaskRegistry]:
     paths = AppPaths.from_root(tmp_path / "portable")
     tasks = TaskRegistry(max_workers=1)
     api = BridgeApi(
@@ -118,6 +209,9 @@ def _api(tmp_path: Path) -> tuple[BridgeApi, TaskRegistry]:
         tasks,
         schema_version=1,
         save_locations=cast(SaveLocationService, FakeSaveService()),
+        static_discovery=discovery,
+        ludusavi_provider=snapshot_provider,
+        custom_provider=FakeCustomProvider(),
+        custom_manifest_directory=tmp_path / "custom",
     )
     return api, tasks
-

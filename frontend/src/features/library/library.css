@@ -54,5 +54,22 @@
 .save-add-dialog select, .save-add-dialog input { width: 100%; border: 1px solid #393641; border-radius: .5rem; padding: .6rem; color: #eceaf2; background: #17151e; }
 .path-picker-row { display: grid; gap: .45rem; }
 .path-picker-row span { color: #918b9d; overflow-wrap: anywhere; font-size: .75rem; }
+.save-suggestions { display: grid; gap: .7rem; border-top: 1px solid #302c38; padding-top: 1rem; }
+.save-suggestions h4, .save-suggestions h5, .ludusavi-settings h4 { margin: 0; }
+.suggestion-group { display: grid; gap: .5rem; }
+.suggestion-group h5 { color: #aaa3b7; }
+.save-suggestion-card { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .65rem; align-items: start; border: 1px solid #393641; border-radius: .65rem; padding: .7rem; background: #100f14; cursor: pointer; }
+.save-suggestion-card input { margin-top: .2rem; }
+.suggestion-content { display: grid; gap: .35rem; min-width: 0; }
+.suggestion-content small { color: #918b9d; overflow-wrap: anywhere; }
+.suggestion-content details { font-size: .75rem; }
+.suggestion-content summary, .ludusavi-settings-details > summary { color: #aaa3b7; cursor: pointer; }
+.ludusavi-settings-details { border-top: 1px solid #302c38; padding-top: .75rem; }
+.ludusavi-settings { display: grid; gap: .7rem; margin-top: .75rem; }
+.ludusavi-settings > p { margin: 0; color: #aaa3b7; font-size: .8rem; }
+.manifest-metadata { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .35rem .65rem; margin: 0; font-size: .75rem; }
+.manifest-metadata dt { color: #918b9d; }
+.manifest-metadata dd { margin: 0; overflow-wrap: anywhere; }
+.manifest-errors { margin: 0; padding-left: 1.2rem; color: #ffb0b0; font-size: .75rem; }
 @container (max-width: 33rem) { .library-toolbar { grid-template-columns: 1fr; } }
 @media (max-width: 700px) { .library-toolbar { grid-template-columns: 1fr; } }
