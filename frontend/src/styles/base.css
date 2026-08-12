@@ -138,12 +138,8 @@ label {
   gap: 1.25rem;
 }
 
-.library-layout:has(.settings-panel) {
-  grid-template-columns: 14.375rem minmax(0, 1fr) 20.625rem;
-}
-
 .root-panel,
-.settings-panel {
+.game-settings-panel {
   min-height: calc(100vh - 7.1875rem);
   border: 1px solid #2d2a35;
   border-radius: .875rem;
@@ -152,7 +148,7 @@ label {
 }
 
 .root-panel h2,
-.settings-panel h2,
+.game-settings-panel h2,
 .content-heading h2 {
   margin: 0 0 .875rem;
   font-size: 1.0625rem;
@@ -225,21 +221,21 @@ label {
   font-size: 2.625rem;
 }
 
-.settings-panel dl {
+.game-settings-panel dl {
   overflow-wrap: anywhere;
   font-size: .75rem;
 }
 
-.settings-panel dt {
+.game-settings-panel dt {
   margin-top: .625rem;
   color: #8d899a;
 }
 
-.settings-panel dd {
+.game-settings-panel dd {
   margin: .1875rem 0;
 }
 
-.settings-panel details {
+.game-settings-panel details {
   margin-top: 1.125rem;
 }
 
@@ -334,12 +330,11 @@ label {
 }
 
 @media (max-width: 1000px) {
-  .library-layout,
-  .library-layout:has(.settings-panel) {
+  .library-layout {
     grid-template-columns: 13.125rem minmax(0, 1fr);
   }
 
-  .settings-panel {
+  .game-settings-panel {
     grid-column: 1 / -1;
     min-height: auto;
   }

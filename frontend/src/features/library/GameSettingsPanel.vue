@@ -52,7 +52,7 @@ async function launch() {
 </script>
 
 <template>
-  <aside class="settings-panel">
+  <aside class="game-settings-panel">
     <div class="section-heading"><h2>游戏设置</h2></div>
     <label>标题</label><div class="path-row"><input v-model="title" /><button type="button" @click="saveTitle">保存</button></div>
     <dl><dt>安装路径</dt><dd>{{ game.installPath ?? '未知' }}</dd><dt>主程序</dt><dd>{{ game.mainExeRelpath ?? '尚未选择' }}</dd></dl>
