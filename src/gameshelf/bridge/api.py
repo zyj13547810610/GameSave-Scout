@@ -498,29 +498,41 @@ class BridgeApi:
             return failure("game_not_found", "没有找到对应的游戏。")
 
     def ludusavi_status(self) -> ApiResult:
+        custom = self._require_custom_provider().load_all()
+        directory = self._require_custom_manifest_directory()
         try:
             metadata = self._require_ludusavi_provider().metadata()
-            custom = self._require_custom_provider().load_all()
-            directory = self._require_custom_manifest_directory()
-            return success(
-                {
-                    "sourceUrl": metadata.source_url,
-                    "downloadedAt": metadata.downloaded_at,
-                    "sha256": metadata.sha256,
-                    "etag": metadata.etag,
-                    "upstreamCommit": metadata.upstream_commit,
-                    "customDirectory": str(directory),
-                    "customErrors": [
-                        {
-                            "sourceName": error.source_name,
-                            "message": error.message,
-                        }
-                        for error in custom.errors
-                    ],
-                }
-            )
-        except (SnapshotUpdateError, OSError, ValueError) as error:
-            return failure("ludusavi_status_failed", str(error))
+        except (SnapshotUpdateError, OSError) as error:
+            available = False
+            unavailable_reason: str | None = str(error)
+            source_url = downloaded_at = sha256 = etag = upstream_commit = None
+        else:
+            available = True
+            unavailable_reason = None
+            source_url = metadata.source_url
+            downloaded_at = metadata.downloaded_at
+            sha256 = metadata.sha256
+            etag = metadata.etag
+            upstream_commit = metadata.upstream_commit
+        return success(
+            {
+                "available": available,
+                "unavailableReason": unavailable_reason,
+                "sourceUrl": source_url,
+                "downloadedAt": downloaded_at,
+                "sha256": sha256,
+                "etag": etag,
+                "upstreamCommit": upstream_commit,
+                "customDirectory": str(directory),
+                "customErrors": [
+                    {
+                        "sourceName": error.source_name,
+                        "message": error.message,
+                    }
+                    for error in custom.errors
+                ],
+            }
+        )
 
     def update_ludusavi(self, request: object) -> ApiResult:
         try:
@@ -529,8 +541,17 @@ class BridgeApi:
             discovery = self._require_static_discovery()
 
             def operation(context: TaskContext) -> dict[str, JSONValue]:
-                context.report(0, 1, "正在检查 Ludusavi 清单更新……")
-                result = provider.update_explicitly()
+                stage_messages = {
+                    "connecting": "正在连接 Ludusavi 数据源……",
+                    "downloading": "正在下载 Ludusavi 清单……",
+                    "validating": "正在验证下载的清单……",
+                    "replacing": "正在替换当前有效清单……",
+                }
+
+                def report(stage: str) -> None:
+                    context.report(0, 1, stage_messages[stage])
+
+                result = provider.update_explicitly(report)
                 if result.status == "updated":
                     discovery.invalidate_ludusavi()
                 context.report(1, 1, result.message)

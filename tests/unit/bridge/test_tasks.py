@@ -1,3 +1,4 @@
+import logging
 from threading import Event
 
 from gameshelf.bridge.tasks import TaskRegistry
@@ -49,6 +50,24 @@ def test_task_failure_isolated_as_user_safe_snapshot() -> None:
     snapshot = registry.wait(task_id, timeout=2)
 
     assert snapshot.status == "failed"
-    assert snapshot.error == {"code": "task_failed", "message": "任务执行失败。"}
+    assert snapshot.error == {
+        "code": "task_failed",
+        "message": "任务执行失败，请查看 data/logs/gameshelf.log。",
+    }
     assert "secret" not in str(snapshot)
     registry.close()
+
+
+def test_task_failure_logs_internal_exception(caplog) -> None:
+    logger = logging.getLogger("gameshelf.test.tasks")
+    registry = TaskRegistry(max_workers=1, logger=logger)
+
+    def fail(_context: object) -> None:
+        raise RuntimeError("secret internal detail")
+
+    with caplog.at_level(logging.ERROR, logger=logger.name):
+        snapshot = registry.wait(registry.submit("example", fail), timeout=2)
+    registry.close()
+
+    assert "secret internal detail" in caplog.text
+    assert "secret" not in str(snapshot)

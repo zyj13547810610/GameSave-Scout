@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, replace
@@ -48,7 +49,12 @@ class TaskContext:
 
 
 class TaskRegistry:
-    def __init__(self, *, max_workers: int = 2) -> None:
+    def __init__(
+        self,
+        *,
+        max_workers: int = 2,
+        logger: logging.Logger | None = None,
+    ) -> None:
         self._executor = ThreadPoolExecutor(
             max_workers=max_workers, thread_name_prefix="gameshelf-task"
         )
@@ -57,6 +63,7 @@ class TaskRegistry:
         self._cancel_events: dict[str, Event] = {}
         self._workers: dict[str, Future[None]] = {}
         self._closed = False
+        self._logger = logger or logging.getLogger(__name__)
 
     def submit(self, kind: str, operation: TaskOperation) -> str:
         task_id = str(uuid4())
@@ -127,11 +134,17 @@ class TaskRegistry:
         except TaskCancelled:
             self._update(task_id, status="cancelled", message="任务已取消。")
         except Exception:
+            self._logger.exception(
+                "Background task %s (%s) failed",
+                task_id,
+                self._snapshots[task_id].kind,
+            )
+            message = "任务执行失败，请查看 data/logs/gameshelf.log。"
             self._update(
                 task_id,
                 status="failed",
-                message="任务执行失败。",
-                error={"code": "task_failed", "message": "任务执行失败。"},
+                message=message,
+                error={"code": "task_failed", "message": message},
             )
         else:
             self._update(task_id, status="completed", result=result)

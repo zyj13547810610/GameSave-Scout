@@ -67,7 +67,7 @@ def build_application(paths: AppPaths) -> Application:
     schema_version = Migrator(database, paths.backups_dir).migrate()
     writer = DbWriter(database)
     writer.start()
-    tasks = TaskRegistry()
+    tasks = TaskRegistry(logger=logger)
     repository = LibraryRepository(database)
     library = LibraryService(repository, writer)
     engine_detection = EngineDetectionService.from_rules_file(_engine_rules_file(paths))

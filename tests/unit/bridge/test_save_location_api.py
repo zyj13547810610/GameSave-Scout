@@ -5,7 +5,11 @@ from typing import cast
 from gameshelf.bootstrap.paths import AppPaths
 from gameshelf.bridge.api import BridgeApi
 from gameshelf.bridge.tasks import TaskRegistry
-from gameshelf.saves.ludusavi_provider import SnapshotMetadata, UpdateResult
+from gameshelf.saves.ludusavi_provider import (
+    SnapshotMetadata,
+    SnapshotUpdateError,
+    UpdateResult,
+)
 from gameshelf.saves.models import (
     SaveLocation,
     SaveLocationSuggestion,
@@ -84,6 +88,7 @@ class FakeDiscovery:
 class FakeSnapshotProvider:
     def __init__(self) -> None:
         self.update_calls = 0
+        self.result: UpdateResult | None = None
 
     def metadata(self) -> SnapshotMetadata:
         return SnapshotMetadata(
@@ -94,9 +99,17 @@ class FakeSnapshotProvider:
             upstream_commit="b" * 40,
         )
 
-    def update_explicitly(self) -> UpdateResult:
+    def update_explicitly(self, report=None) -> UpdateResult:
         self.update_calls += 1
-        return UpdateResult("updated", "已更新", self.metadata())
+        for stage in ("connecting", "downloading", "validating", "replacing"):
+            if report is not None:
+                report(stage)
+        return self.result or UpdateResult("updated", "已更新", self.metadata())
+
+
+class UnavailableSnapshotProvider(FakeSnapshotProvider):
+    def metadata(self) -> SnapshotMetadata:
+        raise SnapshotUpdateError("内置清单损坏")
 
 
 class FakeCustomProvider:
@@ -188,12 +201,48 @@ def test_ludusavi_update_is_submitted_only_after_explicit_api_call(tmp_path: Pat
         result = api.update_ludusavi({})
         assert result["ok"] is True
         task_id = result["data"]["taskId"]
-        tasks.wait(task_id, timeout=2)
+        snapshot = tasks.wait(task_id, timeout=2)
     finally:
         tasks.close()
 
     assert provider.update_calls == 1
     assert discovery.invalidated is True
+    assert snapshot.status == "completed"
+    assert snapshot.progress == {"completed": 1, "total": 1}
+    assert snapshot.message == "已更新"
+
+
+def test_ludusavi_status_reports_unavailable_without_failing_api(
+    tmp_path: Path,
+) -> None:
+    api, tasks = _api(tmp_path, snapshot_provider=UnavailableSnapshotProvider())
+    try:
+        result = api.ludusavi_status()
+    finally:
+        tasks.close()
+
+    assert result["ok"] is True
+    assert result["data"]["available"] is False
+    assert result["data"]["unavailableReason"] == "内置清单损坏"
+    assert result["data"]["sha256"] is None
+
+
+def test_failed_update_result_does_not_invalidate_cache(tmp_path: Path) -> None:
+    discovery = FakeDiscovery()
+    provider = FakeSnapshotProvider()
+    provider.result = UpdateResult(
+        "failed",
+        "网络失败，旧清单仍可使用。",
+        provider.metadata(),
+    )
+    api, tasks = _api(tmp_path, discovery=discovery, snapshot_provider=provider)
+    try:
+        task = api.update_ludusavi({})
+        tasks.wait(task["data"]["taskId"], timeout=2)
+    finally:
+        tasks.close()
+
+    assert discovery.invalidated is False
 
 
 def _api(
