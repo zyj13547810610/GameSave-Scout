@@ -47,6 +47,40 @@ def test_recursive_mode_finds_nested_exe_and_stops_below_game(
     assert candidates[0].depth == 2
 
 
+def test_recursive_mode_continues_below_directory_with_only_auxiliary_exes(
+    tmp_path: Path, task_context: TaskContext
+) -> None:
+    root_path = tmp_path / "games"
+    container = root_path / "group"
+    game = container / "GameC"
+    game.mkdir(parents=True)
+    (container / "setup.exe").write_bytes(b"MZ")
+    (container / "config.exe").write_bytes(b"MZ")
+    (game / "Game.exe").write_bytes(b"MZ")
+    root = make_root(root_path, mode="recursive", depth=2)
+
+    assert [item.relative_dir for item in enumerate_candidates(root, task_context)] == [
+        "group/GameC"
+    ]
+
+
+def test_recursive_mode_stops_when_auxiliary_and_game_exes_are_mixed(
+    tmp_path: Path, task_context: TaskContext
+) -> None:
+    root_path = tmp_path / "games"
+    container = root_path / "group"
+    nested = container / "Nested"
+    nested.mkdir(parents=True)
+    (container / "setup.exe").write_bytes(b"MZ")
+    (container / "Game.exe").write_bytes(b"MZ")
+    (nested / "Nested.exe").write_bytes(b"MZ")
+    root = make_root(root_path, mode="recursive", depth=2)
+
+    assert [item.relative_dir for item in enumerate_candidates(root, task_context)] == [
+        "group"
+    ]
+
+
 def test_recursive_results_are_sorted_and_exclusions_ignore_case(
     tmp_path: Path, task_context: TaskContext
 ) -> None:

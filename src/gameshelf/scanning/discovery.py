@@ -11,6 +11,7 @@ from pathlib import Path
 
 from gameshelf.bridge.tasks import TaskContext
 from gameshelf.library.models import ScanRoot
+from gameshelf.scanning.executable_ranker import is_potential_game_executable_name
 from gameshelf.scanning.models import DirectoryCandidate
 from gameshelf.scanning.path_keys import portable_relative
 
@@ -66,17 +67,17 @@ def _enumerate_recursive(
         if entries is None:
             return
 
-        contains_executable = False
+        contains_game_executable = False
         child_directories: list[os.DirEntry[str]] = []
         for index, entry in enumerate(entries):
             if index % 64 == 0:
                 context.raise_if_cancelled()
-            if _safe_regular_executable(entry):
-                contains_executable = True
+            if _safe_regular_game_executable(entry):
+                contains_game_executable = True
             elif _safe_directory(entry):
                 child_directories.append(entry)
 
-        if depth > 0 and contains_executable:
+        if depth > 0 and contains_game_executable:
             yield DirectoryCandidate(
                 path=directory,
                 relative_dir=portable_relative(directory, root_path),
@@ -131,8 +132,8 @@ def _is_link_or_reparse(entry: os.DirEntry[str]) -> bool:
     return bool(attributes & reparse_flag)
 
 
-def _safe_regular_executable(entry: os.DirEntry[str]) -> bool:
-    if not entry.name.casefold().endswith(".exe"):
+def _safe_regular_game_executable(entry: os.DirEntry[str]) -> bool:
+    if not is_potential_game_executable_name(entry.name):
         return False
     try:
         return entry.is_file(follow_symlinks=False) and not entry.is_symlink()
