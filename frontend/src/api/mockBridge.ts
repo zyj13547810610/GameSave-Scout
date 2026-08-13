@@ -92,6 +92,8 @@ export function createMockBridge(overrides: Partial<GameShelfBridge> = {}): Game
     async accept_save_suggestions() { return ok([]) },
     async ludusavi_status() {
       return ok({
+        available: true,
+        unavailableReason: null,
         sourceUrl: 'https://raw.githubusercontent.com/mtkennerly/ludusavi-manifest/master/data/manifest.yaml',
         downloadedAt: '2026-08-12T00:00:00+00:00',
         sha256: '0'.repeat(64),

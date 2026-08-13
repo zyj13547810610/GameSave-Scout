@@ -1,12 +1,20 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
-import type { GameShelfBridge, LudusaviStatus } from '../../api/contracts'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import type {
+  GameShelfBridge,
+  LudusaviStatus,
+  LudusaviUpdateResult,
+} from '../../api/contracts'
 
 const props = defineProps<{ bridge: GameShelfBridge }>()
 
 const status = ref<LudusaviStatus | null>(null)
-const loading = ref(false)
+const statusLoading = ref(false)
+const updating = ref(false)
+const loading = computed(() => statusLoading.value || updating.value)
 const message = ref('')
+type ResultKind = LudusaviUpdateResult['status'] | null
+const resultKind = ref<ResultKind>(null)
 let pollTimer: number | undefined
 
 onMounted(() => void loadStatus())
@@ -15,35 +23,46 @@ onBeforeUnmount(() => {
 })
 
 async function loadStatus() {
-  loading.value = true
+  statusLoading.value = true
   const result = await props.bridge.ludusavi_status()
-  loading.value = false
+  statusLoading.value = false
   if (!result.ok) return void (message.value = result.error.message)
   status.value = result.data
 }
 
 async function updateManifest() {
-  loading.value = true
+  updating.value = true
+  resultKind.value = null
   message.value = '正在启动清单更新任务……'
   const result = await props.bridge.update_ludusavi({})
-  loading.value = false
-  if (!result.ok) return void (message.value = result.error.message)
+  if (!result.ok) {
+    updating.value = false
+    resultKind.value = 'failed'
+    return void (message.value = result.error.message)
+  }
   message.value = '清单更新任务已启动。'
   await pollTask(result.data.taskId)
 }
 
 async function pollTask(taskId: string) {
   const result = await props.bridge.task_snapshot(taskId)
-  if (!result.ok) return void (message.value = result.error.message)
+  if (!result.ok) {
+    updating.value = false
+    resultKind.value = 'failed'
+    return void (message.value = result.error.message)
+  }
   const task = result.data
   if (task.status === 'completed') {
-    message.value = updateResultMessage(task.result)
-      || task.message
-      || 'Ludusavi 清单已检查完成。'
+    const updateResult = parseUpdateResult(task.result)
+    resultKind.value = updateResult?.status ?? null
+    message.value = updateResult?.message || task.message || 'Ludusavi 清单已检查完成。'
+    updating.value = false
     await loadStatus()
     return
   }
   if (task.status === 'failed' || task.status === 'cancelled') {
+    updating.value = false
+    resultKind.value = 'failed'
     message.value = task.error?.message ?? '清单更新没有完成。'
     return
   }
@@ -56,9 +75,13 @@ async function openCustomDirectory() {
   if (!result.ok) message.value = result.error.message
 }
 
-function updateResultMessage(value: unknown): string | null {
-  if (typeof value !== 'object' || value === null || !('message' in value)) return null
-  return typeof value.message === 'string' && value.message ? value.message : null
+function parseUpdateResult(value: unknown): LudusaviUpdateResult | null {
+  if (typeof value !== 'object' || value === null) return null
+  if (!('status' in value) || !('message' in value)) return null
+  const allowed = ['updated', 'not_modified', 'invalid', 'failed'] as const
+  if (!allowed.includes(value.status as typeof allowed[number])) return null
+  if (typeof value.message !== 'string') return null
+  return value as LudusaviUpdateResult
 }
 </script>
 
@@ -66,11 +89,17 @@ function updateResultMessage(value: unknown): string | null {
   <section class="ludusavi-settings">
     <h4>Ludusavi 存档规则</h4>
     <p>程序使用随包附带或由你手动更新的规则清单；启动时不会联网更新。</p>
-    <dl v-if="status" class="manifest-metadata">
+    <dl v-if="status?.available && status.sha256 && status.downloadedAt" class="manifest-metadata">
       <dt>清单来源</dt><dd>{{ status.sourceUrl }}</dd>
       <dt>获取时间</dt><dd>{{ new Date(status.downloadedAt).toLocaleString() }}</dd>
       <dt>SHA-256</dt><dd><code>{{ status.sha256.slice(0, 12) }}</code></dd>
       <dt>ETag</dt><dd>{{ status.etag ?? '无' }}</dd>
+    </dl>
+    <p v-else-if="status && !status.available" class="manifest-unavailable">
+      <strong>Ludusavi 官方规则暂不可用</strong><br>
+      {{ status.unavailableReason ?? '未找到可用的官方清单。' }}
+    </p>
+    <dl v-if="status" class="manifest-metadata">
       <dt>自定义清单目录</dt><dd>{{ status.customDirectory }}</dd>
     </dl>
     <ul v-if="status?.customErrors.length" class="manifest-errors">
@@ -86,6 +115,14 @@ function updateResultMessage(value: unknown): string | null {
         打开自定义清单目录
       </button>
     </div>
-    <p class="status-message" aria-live="polite">{{ loading ? '正在读取清单状态……' : message }}</p>
+    <p v-if="statusLoading" class="status-message" aria-live="polite">正在读取清单状态……</p>
+    <p
+      v-else-if="message"
+      data-test="ludusavi-result"
+      :class="['manifest-update-result', resultKind]"
+      aria-live="polite"
+    >
+      {{ message }}
+    </p>
   </section>
 </template>

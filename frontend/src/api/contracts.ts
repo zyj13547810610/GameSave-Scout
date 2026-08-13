@@ -122,9 +122,11 @@ export type SaveSuggestion = {
 }
 
 export type LudusaviStatus = {
-  sourceUrl: string
-  downloadedAt: string
-  sha256: string
+  available: boolean
+  unavailableReason: string | null
+  sourceUrl: string | null
+  downloadedAt: string | null
+  sha256: string | null
   etag: string | null
   upstreamCommit?: string | null
   customDirectory: string
@@ -134,7 +136,13 @@ export type LudusaviStatus = {
 export type LudusaviUpdateResult = {
   status: 'updated' | 'not_modified' | 'invalid' | 'failed'
   message: string
-  metadata: Omit<LudusaviStatus, 'customDirectory' | 'customErrors'> | null
+  metadata: {
+    sourceUrl: string
+    downloadedAt: string
+    sha256: string
+    etag: string | null
+    upstreamCommit: string | null
+  } | null
 }
 
 export type RootInput = {
