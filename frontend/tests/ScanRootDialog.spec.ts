@@ -1,6 +1,6 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
-import { createMockBridge } from '../src/api/mockBridge'
+import { createMockBridge, fixtureRoot, ok } from '../src/api/mockBridge'
 import ScanRootDialog from '../src/features/scan-roots/ScanRootDialog.vue'
 
 describe('ScanRootDialog', () => {
@@ -15,5 +15,33 @@ describe('ScanRootDialog', () => {
 
     expect(wrapper.text()).toContain('扫描深度必须在 1 到 8 之间')
     expect(addRoot).not.toHaveBeenCalled()
+  })
+
+  it('prefills and updates an existing root', async () => {
+    const root = fixtureRoot({
+      enabled: false,
+      scanMode: 'recursive',
+      maxDepth: 4,
+      exclusions: ['Tools', '**/Cache'],
+    })
+    const updateRoot = vi.fn(async () => ok(root))
+    const bridge = createMockBridge({ update_root: updateRoot })
+    const wrapper = mount(ScanRootDialog, { props: { bridge, root } })
+
+    expect(wrapper.get('[data-test="mode-recursive"]').element).toMatchObject({ checked: true })
+    expect(wrapper.get('[data-test="max-depth"]').element).toMatchObject({ value: '4' })
+    expect(wrapper.get('[data-test="root-exclusions"]').element).toMatchObject({ value: 'Tools\n**/Cache' })
+    await wrapper.get('[data-test="root-exclusions"]').setValue('Tools\nGameA')
+    await wrapper.get('form').trigger('submit')
+
+    expect(updateRoot).toHaveBeenCalledWith({
+      rootId: root.id,
+      displayPath: root.displayPath,
+      enabled: false,
+      scanMode: 'recursive',
+      maxDepth: 4,
+      exclusions: ['Tools', 'GameA'],
+    })
+    expect(wrapper.emitted('saved')).toEqual([[root]])
   })
 })

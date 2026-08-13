@@ -90,6 +90,56 @@ def test_library_dtos_are_camel_case_and_bad_payloads_are_rejected(
         writer.close()
 
 
+def test_remove_installed_game_adds_exclusion_through_bridge(tmp_path: Path) -> None:
+    api, tasks, writer, library = _library_api(tmp_path)
+    try:
+        root = library.add_root(r"D:\Games", "recursive", 3, ["Tools"])
+        game = library.create_game_for_test(root.id, "Group/GameA", "GameA")
+
+        result = api.remove_game_and_exclude({"gameId": game.id})
+
+        assert result == {"ok": True, "data": {"removed": True}}
+        assert api.list_games()["data"] == []
+        assert api.list_roots()["data"][0]["exclusions"] == ["Tools", "Group/GameA"]
+    finally:
+        tasks.close()
+        writer.close()
+
+
+def test_delete_missing_game_rejects_installed_game_through_bridge(
+    tmp_path: Path,
+) -> None:
+    api, tasks, writer, library = _library_api(tmp_path)
+    try:
+        root = library.add_root(r"D:\Games", "children", 1, [])
+        game = library.create_game_for_test(root.id, "GameA", "GameA")
+
+        result = api.delete_missing_game({"gameId": game.id})
+
+        assert result["ok"] is False
+        assert result["error"]["code"] == "invalid_game_state"
+        assert library.get_game(game.id) is not None
+    finally:
+        tasks.close()
+        writer.close()
+
+
+def test_delete_missing_game_removes_record_through_bridge(tmp_path: Path) -> None:
+    api, tasks, writer, library = _library_api(tmp_path)
+    try:
+        root = library.add_root(r"D:\Games", "children", 1, [])
+        game = library.create_game_for_test(root.id, "GameA", "GameA")
+        library.remove_root(root.id)
+
+        result = api.delete_missing_game({"gameId": game.id})
+
+        assert result == {"ok": True, "data": {"removed": True}}
+        assert library.get_game(game.id) is None
+    finally:
+        tasks.close()
+        writer.close()
+
+
 def _library_api(
     tmp_path: Path,
 ) -> tuple[BridgeApi, TaskRegistry, DbWriter, LibraryService]:

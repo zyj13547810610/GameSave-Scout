@@ -27,6 +27,7 @@ from gameshelf.library.service import (
     InvalidEngineConfiguration,
     InvalidExecutableError,
     InvalidGameConfiguration,
+    InvalidGameRemoval,
     InvalidRootConfiguration,
     LibraryService,
     RootNotFoundError,
@@ -161,6 +162,48 @@ class BridgeApi:
     def list_games(self) -> ApiResult:
         library = self._require_library()
         return success([self._game_dto(game) for game in library.list_games()])
+
+    def remove_game_and_exclude(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            game_id = _string(payload, "gameId")
+            library = self._require_library()
+            game = library.get_game(game_id)
+            if game is None:
+                raise GameNotFoundError(game_id)
+            if game.status != "installed":
+                raise InvalidGameRemoval("Only an installed game can be removed and excluded.")
+            if self._covers is not None:
+                self._covers.remove(game_id)
+            library.remove_game_and_exclude(game_id)
+            return success({"removed": True})
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except InvalidGameRemoval as error:
+            return failure("invalid_game_state", str(error))
+        except GameNotFoundError:
+            return failure("game_not_found", "没有找到对应的游戏。")
+
+    def delete_missing_game(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            game_id = _string(payload, "gameId")
+            library = self._require_library()
+            game = library.get_game(game_id)
+            if game is None:
+                raise GameNotFoundError(game_id)
+            if game.status != "missing":
+                raise InvalidGameRemoval("Only a missing game record can be deleted.")
+            if self._covers is not None:
+                self._covers.remove(game_id)
+            library.delete_missing_game(game_id)
+            return success({"removed": True})
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except InvalidGameRemoval as error:
+            return failure("invalid_game_state", str(error))
+        except GameNotFoundError:
+            return failure("game_not_found", "没有找到对应的游戏。")
 
     def start_scan(self, request: object) -> ApiResult:
         try:

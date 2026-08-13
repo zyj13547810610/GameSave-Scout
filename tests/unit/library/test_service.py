@@ -43,6 +43,53 @@ def test_remove_root_preserves_games_as_missing_records(
     assert preserved.missing_since is not None
 
 
+def test_remove_installed_game_adds_exact_root_exclusion_and_deletes_record(
+    library_service: LibraryService,
+) -> None:
+    root = library_service.add_root(r"D:\Games", "recursive", 3, ["Tools"])
+    game = library_service.create_game_for_test(root.id, "Group/GameA", "GameA")
+
+    updated_root = library_service.remove_game_and_exclude(game.id)
+
+    assert updated_root.exclusions == ("Tools", "Group/GameA")
+    assert library_service.get_game(game.id) is None
+
+
+def test_remove_installed_game_does_not_duplicate_existing_exclusion(
+    library_service: LibraryService,
+) -> None:
+    root = library_service.add_root(r"D:\Games", "children", 1, ["GameA"])
+    game = library_service.create_game_for_test(root.id, "GameA", "GameA")
+
+    updated_root = library_service.remove_game_and_exclude(game.id)
+
+    assert updated_root.exclusions == ("GameA",)
+
+
+def test_delete_missing_game_removes_only_missing_record(
+    library_service: LibraryService,
+) -> None:
+    root = library_service.add_root(r"D:\Games", "children", 1, [])
+    missing = library_service.create_game_for_test(root.id, "Missing", "Missing")
+    installed = library_service.create_game_for_test(root.id, "Installed", "Installed")
+    library_service.remove_root(root.id)
+
+    library_service.delete_missing_game(missing.id)
+
+    assert library_service.get_game(missing.id) is None
+    assert library_service.get_game(installed.id) is not None
+
+
+def test_delete_missing_game_rejects_installed_record(
+    library_service: LibraryService,
+) -> None:
+    root = library_service.add_root(r"D:\Games", "children", 1, [])
+    game = library_service.create_game_for_test(root.id, "GameA", "GameA")
+
+    with pytest.raises(ValueError, match="missing"):
+        library_service.delete_missing_game(game.id)
+
+
 def test_update_root_normalizes_children_depth_and_keeps_identity(
     library_service: LibraryService,
 ) -> None:

@@ -191,6 +191,8 @@ export interface GameShelfBridge {
   remove_root(input: { rootId: string }): Promise<ApiResult<{ removed: boolean }>>
   remap_root(input: { rootId: string; displayPath: string }): Promise<ApiResult<ScanRoot>>
   list_games(): Promise<ApiResult<Game[]>>
+  remove_game_and_exclude(input: { gameId: string }): Promise<ApiResult<{ removed: boolean }>>
+  delete_missing_game(input: { gameId: string }): Promise<ApiResult<{ removed: boolean }>>
   start_scan(input: { rootId: string; kind: 'quick' | 'full' }): Promise<ApiResult<{ taskId: string }>>
   confirm_move(input: {
     sessionId: string

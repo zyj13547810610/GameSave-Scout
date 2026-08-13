@@ -1,7 +1,8 @@
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
-import { createMockBridge, fixtureGame } from '../src/api/mockBridge'
+import type { GameShelfBridge } from '../src/api/contracts'
+import { createMockBridge, fixtureGame, ok } from '../src/api/mockBridge'
 import GameGrid from '../src/features/library/GameGrid.vue'
 
 describe('GameGrid', () => {
@@ -29,5 +30,20 @@ describe('GameGrid', () => {
 
     expect(document.activeElement).toBe(card.element)
     wrapper.unmount()
+  })
+
+  it('closes the drawer and forwards removal after deleting a record', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const bridge = createMockBridge()
+    const remove = vi.fn(async () => ok({ removed: true }))
+    ;(bridge as GameShelfBridge & { delete_missing_game: typeof remove }).delete_missing_game = remove
+    const game = fixtureGame({ id: 'missing-1', status: 'missing', scanRootId: null })
+    const wrapper = mount(GameGrid, { props: { games: [game], bridge } })
+    await wrapper.get('[data-test="game-card-missing-1"]').trigger('click')
+
+    await wrapper.get('[data-test="delete-missing-game"]').trigger('click')
+
+    expect(wrapper.find('[data-test="game-detail-drawer"]').exists()).toBe(false)
+    expect(wrapper.emitted('removed')).toEqual([[game.id]])
   })
 })

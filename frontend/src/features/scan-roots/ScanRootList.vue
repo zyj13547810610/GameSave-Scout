@@ -2,7 +2,7 @@
 import type { GameShelfBridge, ScanRoot } from '../../api/contracts'
 
 const props = defineProps<{ bridge: GameShelfBridge; roots: ScanRoot[]; scanTasks: Record<string, string> }>()
-const emit = defineEmits<{ scan: [rootId: string]; cancel: [rootId: string]; remove: [rootId: string]; remap: [rootId: string, path: string]; toggle: [root: ScanRoot, enabled: boolean] }>()
+const emit = defineEmits<{ scan: [rootId: string]; cancel: [rootId: string]; edit: [root: ScanRoot]; remove: [rootId: string]; remap: [rootId: string, path: string]; toggle: [root: ScanRoot, enabled: boolean] }>()
 
 async function remap(rootId: string) {
   const result = await props.bridge.choose_directory()
@@ -23,6 +23,7 @@ async function remap(rootId: string) {
       <div class="compact-actions">
         <button v-if="!scanTasks[root.id]" type="button" @click="emit('scan', root.id)">扫描</button>
         <button v-else type="button" class="danger" @click="emit('cancel', root.id)">取消</button>
+        <button data-test="edit-root" type="button" @click="emit('edit', root)">设置</button>
         <button type="button" @click="remap(root.id)">重映射</button>
         <button type="button" class="danger" @click="emit('remove', root.id)">删除</button>
       </div>

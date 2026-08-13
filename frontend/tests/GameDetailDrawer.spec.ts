@@ -1,6 +1,7 @@
 import { enableAutoUnmount, mount } from '@vue/test-utils'
-import { afterEach, describe, expect, it } from 'vitest'
-import { createMockBridge, fixtureGame } from '../src/api/mockBridge'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { GameShelfBridge } from '../src/api/contracts'
+import { createMockBridge, fixtureGame, ok } from '../src/api/mockBridge'
 import GameDetailDrawer from '../src/features/library/GameDetailDrawer.vue'
 
 enableAutoUnmount(afterEach)
@@ -101,5 +102,40 @@ describe('GameDetailDrawer', () => {
 
     expect(wrapper.text()).toContain('当前：Unity')
     expect(wrapper.text()).toContain('手动设置引擎')
+  })
+
+  it('removes an installed game and adds its root exclusion after confirmation', async () => {
+    const bridge = createMockBridge()
+    const remove = vi.fn(async () => ok({ removed: true }))
+    ;(bridge as GameShelfBridge & { remove_game_and_exclude: typeof remove }).remove_game_and_exclude = remove
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const game = fixtureGame({ status: 'installed' })
+    const wrapper = mount(GameDetailDrawer, {
+      props: { game, bridge },
+      attachTo: document.body,
+    })
+
+    await wrapper.get('[data-test="remove-game-and-exclude"]').trigger('click')
+
+    expect(remove).toHaveBeenCalledWith({ gameId: game.id })
+    expect(wrapper.emitted('removed')).toEqual([[game.id]])
+  })
+
+  it('deletes only a missing game record after confirmation', async () => {
+    const bridge = createMockBridge()
+    const remove = vi.fn(async () => ok({ removed: true }))
+    ;(bridge as GameShelfBridge & { delete_missing_game: typeof remove }).delete_missing_game = remove
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const game = fixtureGame({ status: 'missing', scanRootId: null })
+    const wrapper = mount(GameDetailDrawer, {
+      props: { game, bridge },
+      attachTo: document.body,
+    })
+
+    expect(wrapper.find('[data-test="remove-game-and-exclude"]').exists()).toBe(false)
+    await wrapper.get('[data-test="delete-missing-game"]').trigger('click')
+
+    expect(remove).toHaveBeenCalledWith({ gameId: game.id })
+    expect(wrapper.emitted('removed')).toEqual([[game.id]])
   })
 })

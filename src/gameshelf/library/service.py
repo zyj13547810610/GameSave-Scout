@@ -50,6 +50,10 @@ class InvalidEngineConfiguration(ValueError):
     """Raised when a manual engine value is malformed."""
 
 
+class InvalidGameRemoval(ValueError):
+    """Raised when a game record cannot use the requested removal flow."""
+
+
 class LibraryService:
     def __init__(self, repository: LibraryRepository, writer: DbWriter) -> None:
         self._repository = repository
@@ -197,6 +201,56 @@ class LibraryService:
 
     def get_game(self, game_id: str) -> Game | None:
         return self._repository.get_game(game_id)
+
+    def remove_game_and_exclude(self, game_id: str) -> ScanRoot:
+        def operation(connection: sqlite3.Connection) -> ScanRoot:
+            game = connection.execute(
+                "SELECT status, scan_root_id, relative_dir FROM games WHERE id = ?",
+                (game_id,),
+            ).fetchone()
+            if game is None:
+                raise GameNotFoundError(game_id)
+            if (
+                game["status"] != "installed"
+                or game["scan_root_id"] is None
+                or game["relative_dir"] is None
+            ):
+                raise InvalidGameRemoval(
+                    "Only an installed game owned by a scan root can be removed and excluded."
+                )
+            root = connection.execute(
+                "SELECT * FROM scan_roots WHERE id = ?", (game["scan_root_id"],)
+            ).fetchone()
+            if root is None:
+                raise RootNotFoundError(str(game["scan_root_id"]))
+            exclusions = _normalize_exclusions(
+                (*_json_string_tuple(root["exclusions_json"]), str(game["relative_dir"]))
+            )
+            connection.execute(
+                "UPDATE scan_roots SET exclusions_json = json(?) WHERE id = ?",
+                (_json_array(exclusions), root["id"]),
+            )
+            connection.execute("DELETE FROM games WHERE id = ?", (game_id,))
+            updated = connection.execute(
+                "SELECT * FROM scan_roots WHERE id = ?", (root["id"],)
+            ).fetchone()
+            assert updated is not None
+            return scan_root_from_row(updated)
+
+        return self._writer.submit(operation).result()
+
+    def delete_missing_game(self, game_id: str) -> None:
+        def operation(connection: sqlite3.Connection) -> None:
+            game = connection.execute(
+                "SELECT status FROM games WHERE id = ?", (game_id,)
+            ).fetchone()
+            if game is None:
+                raise GameNotFoundError(game_id)
+            if game["status"] != "missing":
+                raise InvalidGameRemoval("Only a missing game record can be deleted.")
+            connection.execute("DELETE FROM games WHERE id = ?", (game_id,))
+
+        self._writer.submit(operation).result()
 
     def set_game_title(self, game_id: str, title: str) -> Game:
         clean_title = title.strip()
@@ -444,6 +498,13 @@ def _json_object(values: Mapping[str, str]) -> str:
     import json
 
     return json.dumps(values, ensure_ascii=False, separators=(",", ":"))
+
+
+def _json_string_tuple(value: str) -> tuple[str, ...]:
+    import json
+
+    decoded = json.loads(value)
+    return tuple(str(item) for item in decoded) if isinstance(decoded, list) else ()
 
 
 def _validate_text(value: str, label: str) -> str:

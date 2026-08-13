@@ -59,6 +59,8 @@ export function createMockBridge(overrides: Partial<GameShelfBridge> = {}): Game
     async remove_root() { return ok({ removed: true }) },
     async remap_root(input) { return ok(fixtureRoot({ id: input.rootId, displayPath: input.displayPath })) },
     async list_games() { return ok([]) },
+    async remove_game_and_exclude() { return ok({ removed: true }) },
+    async delete_missing_game() { return ok({ removed: true }) },
     async start_scan() { return ok({ taskId: 'task-1' }) },
     async confirm_move(input) { return ok(fixtureGame({ id: input.existingGameId })) },
     async set_game_title(input) { return ok(fixtureGame({ id: input.gameId, title: input.title })) },

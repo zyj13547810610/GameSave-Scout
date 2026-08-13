@@ -36,6 +36,10 @@
 .engine-picker .secondary { color: #c7c1d0; background: #28242f; }
 .inline-error { margin: 0; color: #ff9c9c; }
 .game-drawer .game-settings-panel { min-height: auto; border: 0; padding: 0; background: transparent; }
+.record-danger-zone { display: grid; gap: .65rem; margin-top: 1rem; border-top: 1px solid #673541; padding-top: 1rem; }
+.record-danger-zone h3, .record-danger-zone p { margin: 0; }
+.record-danger-zone p { color: #aaa3b7; font-size: .8rem; }
+.record-danger-zone button { justify-self: start; }
 .save-locations { display: grid; gap: .75rem; margin-top: 1rem; border-top: 1px solid #302c38; padding-top: 1rem; }
 .save-location-heading, .save-dialog-heading, .save-location-title { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; }
 .save-location-heading h3, .save-dialog-heading h4 { margin: 0; }

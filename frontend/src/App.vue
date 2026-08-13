@@ -2,6 +2,7 @@
 import { createPinia, getActivePinia, storeToRefs } from 'pinia'
 import { computed, inject, nextTick, onMounted, ref, watch } from 'vue'
 import { bridgeKey, createBridge } from './api/bridge'
+import type { ScanRoot } from './api/contracts'
 import GameGrid from './features/library/GameGrid.vue'
 import LibraryToolbar from './features/library/LibraryToolbar.vue'
 import { filterGames } from './features/library/libraryFilters'
@@ -19,6 +20,7 @@ const { roots, games, error, scanTasks, moveSuggestions } = storeToRefs(store)
 const state = ref<'connecting' | 'ready' | 'failed'>('connecting')
 const errorMessage = ref('')
 const showAddRoot = ref(false)
+const editingRoot = ref<ScanRoot | null>(null)
 const uiScaleStorage = getUiScaleStorage(window)
 const uiScale = ref(readUiScale(uiScaleStorage))
 const filteredGames = computed(() => filterGames(games.value, {
@@ -51,6 +53,11 @@ async function bootstrap() {
 
 async function rootSaved() {
   showAddRoot.value = false
+  editingRoot.value = null
+  await store.load(bridge)
+}
+
+async function gameRemoved() {
   await store.load(bridge)
 }
 
@@ -77,7 +84,7 @@ onMounted(bootstrap)
     <template v-else>
       <div v-if="error" class="error-banner" role="alert"><span>{{ error }}</span><button type="button" @click="store.dismissError">关闭</button></div>
       <div class="library-layout">
-        <ScanRootList :bridge="bridge" :roots="roots" :scan-tasks="scanTasks" @scan="scan" @cancel="(id) => store.cancelScan(bridge, id)" @toggle="(root, enabled) => store.updateRoot(bridge, root, enabled)" @remove="(id) => store.removeRoot(bridge, id)" @remap="(id, path) => store.remapRoot(bridge, id, path)" />
+        <ScanRootList :bridge="bridge" :roots="roots" :scan-tasks="scanTasks" @scan="scan" @cancel="(id) => store.cancelScan(bridge, id)" @toggle="(root, enabled) => store.updateRoot(bridge, root, enabled)" @edit="editingRoot = $event" @remove="(id) => store.removeRoot(bridge, id)" @remap="(id, path) => store.remapRoot(bridge, id, path)" />
         <section class="library-content">
           <div class="content-heading"><h2>我的游戏 <span>{{ games.length }}</span></h2></div>
           <MoveSuggestionPanel :suggestions="moveSuggestions" :games="games" @confirm="store.confirmMove(bridge, $event)" />
@@ -85,11 +92,12 @@ onMounted(bootstrap)
           <template v-else>
             <LibraryToolbar v-model:query="store.query" v-model:status="store.statusFilter" v-model:engine="store.engineFilter" :engines="engines" />
             <div v-if="filteredGames.length === 0" class="empty-state compact"><h2>没有符合筛选条件的游戏</h2><p>请调整搜索词或筛选条件。</p></div>
-            <GameGrid v-else :games="filteredGames" :bridge="bridge" @updated="store.updateGame" />
+            <GameGrid v-else :games="filteredGames" :bridge="bridge" @updated="store.updateGame" @removed="gameRemoved" />
           </template>
         </section>
       </div>
       <div v-if="showAddRoot" class="dialog-backdrop" @click.self="showAddRoot = false"><ScanRootDialog :bridge="bridge" @saved="rootSaved" @close="showAddRoot = false" /></div>
+      <div v-if="editingRoot" class="dialog-backdrop" @click.self="editingRoot = null"><ScanRootDialog :bridge="bridge" :root="editingRoot" @saved="rootSaved" @close="editingRoot = null" /></div>
     </template>
   </main>
 </template>

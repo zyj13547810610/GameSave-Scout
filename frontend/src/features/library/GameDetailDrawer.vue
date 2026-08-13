@@ -7,9 +7,11 @@ import EnginePicker from '../engines/EnginePicker.vue'
 import SaveLocationList from '../saves/SaveLocationList.vue'
 import GameSettingsPanel from './GameSettingsPanel.vue'
 
-defineProps<{ game: Game; bridge: GameShelfBridge }>()
-const emit = defineEmits<{ close: []; updated: [game: Game] }>()
+const props = defineProps<{ game: Game; bridge: GameShelfBridge }>()
+const emit = defineEmits<{ close: []; updated: [game: Game]; removed: [gameId: string] }>()
 const drawer = ref<HTMLElement | null>(null)
+const removalBusy = ref(false)
+const removalError = ref('')
 let previousBodyPaddingRight = ''
 
 function close() {
@@ -51,6 +53,25 @@ function onKeydown(event: KeyboardEvent) {
   else if (event.key === 'Tab') trapFocus(event)
 }
 
+async function removeGameRecord() {
+  const installed = props.game.status === 'installed'
+  const prompt = installed
+    ? '从游戏库移除并忽略这个目录？不会删除游戏文件；以后扫描该根目录时会跳过它。'
+    : '删除这条失效游戏记录？不会删除游戏本体或外部存档，但会移除 GameShelf 管理的封面和存档位置记录。'
+  if (!window.confirm(prompt)) return
+  removalBusy.value = true
+  removalError.value = ''
+  const result = installed
+    ? await props.bridge.remove_game_and_exclude({ gameId: props.game.id })
+    : await props.bridge.delete_missing_game({ gameId: props.game.id })
+  removalBusy.value = false
+  if (!result.ok) {
+    removalError.value = result.error.message
+    return
+  }
+  emit('removed', props.game.id)
+}
+
 onMounted(async () => {
   const scrollbarWidth = Math.max(0, window.innerWidth - document.documentElement.clientWidth)
   const currentPadding = Number.parseFloat(window.getComputedStyle(document.body).paddingRight) || 0
@@ -88,6 +109,28 @@ onBeforeUnmount(() => {
       <CoverActions :game-id="game.id" :has-cover="Boolean(game.coverOriginalUrl)" :bridge="bridge" @updated="$emit('updated', $event)" />
       <SaveLocationList :game-id="game.id" :bridge="bridge" />
       <GameSettingsPanel :game="game" :bridge="bridge" @updated="$emit('updated', $event)" />
+      <section v-if="game.status !== 'save_only'" class="record-danger-zone">
+        <h3>游戏记录</h3>
+        <p v-if="game.status === 'installed'">从库中移除后会自动加入当前根目录排除项，不会删除游戏文件。</p>
+        <p v-else>只删除 GameShelf 中的失效记录，不会删除磁盘上的游戏或外部存档。</p>
+        <button
+          v-if="game.status === 'installed'"
+          data-test="remove-game-and-exclude"
+          type="button"
+          class="danger"
+          :disabled="removalBusy"
+          @click="removeGameRecord"
+        >{{ removalBusy ? '正在移除…' : '从库中移除并忽略' }}</button>
+        <button
+          v-else
+          data-test="delete-missing-game"
+          type="button"
+          class="danger"
+          :disabled="removalBusy"
+          @click="removeGameRecord"
+        >{{ removalBusy ? '正在删除…' : '删除失效记录' }}</button>
+        <p v-if="removalError" class="inline-error" role="alert">{{ removalError }}</p>
+      </section>
     </aside>
   </div>
 </template>
