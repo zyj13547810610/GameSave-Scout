@@ -45,6 +45,7 @@ class HttpResponse(Protocol):
 
 type HttpOpen = Callable[[str, dict[str, str], float], HttpResponse]
 type UpdateStatus = Literal["updated", "not_modified", "invalid", "failed"]
+type ProgressReporter = Callable[[str], None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -137,13 +138,22 @@ class LudusaviProvider:
             self.ensure_initial_snapshot()
             return _read_metadata(self.active_metadata)
 
-    def update_explicitly(self) -> UpdateResult:
+    def update_explicitly(
+        self,
+        report: ProgressReporter | None = None,
+    ) -> UpdateResult:
         with self._lock:
-            self.ensure_initial_snapshot()
-            current = self.metadata()
+            try:
+                self.ensure_initial_snapshot()
+                current: SnapshotMetadata | None = _read_metadata(
+                    self.active_metadata
+                )
+            except SnapshotUpdateError:
+                current = None
             headers = {"User-Agent": "GameShelf/0.1 Ludusavi snapshot updater"}
-            if current.etag:
+            if current is not None and current.etag:
                 headers["If-None-Match"] = current.etag
+            _report(report, "connecting")
             try:
                 response = self._http_open(
                     self.update_url,
@@ -152,6 +162,15 @@ class LudusaviProvider:
                 )
                 with response:
                     if response.status == 304:
+                        if current is None:
+                            return UpdateResult(
+                                "failed",
+                                _failure_message(
+                                    "服务器返回未修改，但本地没有可用清单。",
+                                    current,
+                                ),
+                                current,
+                            )
                         return UpdateResult(
                             "not_modified",
                             "Ludusavi 清单已是最新。",
@@ -160,7 +179,10 @@ class LudusaviProvider:
                     if response.status != 200:
                         return UpdateResult(
                             "failed",
-                            f"Ludusavi 服务器返回 HTTP {response.status}。",
+                            _failure_message(
+                                f"Ludusavi 服务器返回 HTTP {response.status}。",
+                                current,
+                            ),
                             current,
                         )
                     length = _content_length(response)
@@ -171,20 +193,32 @@ class LudusaviProvider:
                             current,
                         )
                     etag = response.getheader("ETag")
-                    return self._download_and_replace(response, current, etag)
+                    return self._download_and_replace(
+                        response,
+                        current,
+                        etag,
+                        report,
+                    )
             except (OSError, urllib.error.URLError) as error:
-                return UpdateResult("failed", f"无法下载 Ludusavi 清单：{error}", current)
+                return UpdateResult(
+                    "failed",
+                    _failure_message(f"无法下载 Ludusavi 清单：{error}", current),
+                    current,
+                )
 
     def _download_and_replace(
         self,
         response: HttpResponse,
-        current: SnapshotMetadata,
+        current: SnapshotMetadata | None,
         etag: str | None,
+        report: ProgressReporter | None,
     ) -> UpdateResult:
         download = self.temp_dir / f"ludusavi-download-{uuid4().hex}.yaml"
+        metadata_temporary = self.temp_dir / f"ludusavi-metadata-{uuid4().hex}.json"
         digest = hashlib.sha256()
         total = 0
         try:
+            _report(report, "downloading")
             with download.open("xb") as stream:
                 while chunk := response.read(_CHUNK_BYTES):
                     total += len(chunk)
@@ -194,6 +228,14 @@ class LudusaviProvider:
                     stream.write(chunk)
                 stream.flush()
                 os.fsync(stream.fileno())
+            downloaded_sha256 = digest.hexdigest()
+            if _sha256_file(download) != downloaded_sha256:
+                return UpdateResult(
+                    "invalid",
+                    "下载内容落盘后的 SHA-256 校验失败。",
+                    current,
+                )
+            _report(report, "validating")
             try:
                 _validate_manifest_file(download)
             except (InvalidLudusaviManifest, UnicodeError) as error:
@@ -201,25 +243,66 @@ class LudusaviProvider:
 
             metadata = SnapshotMetadata(
                 etag=etag,
-                sha256=digest.hexdigest(),
+                sha256=downloaded_sha256,
                 downloaded_at=_utc_now(),
                 source_url=self.update_url,
                 upstream_commit=None,
             )
             backup = self._backup_active_pair()
-            if backup is None:
-                return UpdateResult("failed", "无法备份当前有效清单。", current)
             try:
-                os.replace(download, self.active_manifest)
-                _write_metadata_atomic(self.active_metadata, metadata, self.temp_dir)
-            except OSError as error:
-                self._restore_pair(backup)
-                return UpdateResult("failed", f"替换清单失败，已恢复旧版本：{error}", current)
+                _write_bytes_fsynced(
+                    metadata_temporary,
+                    _metadata_json_bytes(metadata),
+                )
+                _report(report, "replacing")
+                self._replace_pair(download, metadata_temporary, backup)
+            except (OSError, SnapshotUpdateError) as error:
+                return UpdateResult(
+                    "failed",
+                    _failure_message(f"替换清单失败：{error}", current),
+                    current,
+                )
             self._prune_previous()
             return UpdateResult("updated", "Ludusavi 清单已更新。", metadata)
         finally:
             with suppress(OSError):
                 download.unlink(missing_ok=True)
+            with suppress(OSError):
+                metadata_temporary.unlink(missing_ok=True)
+
+    def _replace_pair(
+        self,
+        new_manifest: Path,
+        new_metadata: Path,
+        backup: SnapshotPair | None,
+    ) -> None:
+        try:
+            os.replace(new_manifest, self.active_manifest)
+            os.replace(new_metadata, self.active_metadata)
+            self._validate_pair(
+                SnapshotPair(self.active_manifest, self.active_metadata),
+                allow_crlf_repair=False,
+            )
+        except (OSError, SnapshotUpdateError) as error:
+            with suppress(OSError):
+                self.active_manifest.unlink(missing_ok=True)
+            with suppress(OSError):
+                self.active_metadata.unlink(missing_ok=True)
+            if backup is not None:
+                try:
+                    _, manifest_bytes = self._validate_pair(
+                        backup,
+                        allow_crlf_repair=False,
+                    )
+                    self._install_pair_bytes(
+                        manifest_bytes,
+                        backup.metadata.read_bytes(),
+                    )
+                except (OSError, SnapshotUpdateError) as restore_error:
+                    raise SnapshotUpdateError(
+                        "新清单替换失败，旧清单恢复也失败。"
+                    ) from restore_error
+            raise SnapshotUpdateError("新清单替换失败，已恢复旧清单。") from error
 
     def _validate_pair(
         self,
@@ -367,6 +450,20 @@ def _content_length(response: HttpResponse) -> int | None:
         return None
 
 
+def _report(reporter: ProgressReporter | None, stage: str) -> None:
+    if reporter is not None:
+        reporter(stage)
+
+
+def _failure_message(detail: str, current: SnapshotMetadata | None) -> str:
+    suffix = (
+        "当前有效清单仍可使用。"
+        if current is not None
+        else "当前没有可用的 Ludusavi 官方清单。"
+    )
+    return f"{detail}{suffix}"
+
+
 def _validate_manifest_file(path: Path) -> None:
     with path.open(encoding="utf-8") as stream:
         parse_manifest(stream, skip_invalid_paths=True)
@@ -465,6 +562,17 @@ def _write_metadata_atomic(
     finally:
         with suppress(OSError):
             temporary.unlink(missing_ok=True)
+
+
+def _metadata_json_bytes(metadata: SnapshotMetadata) -> bytes:
+    data = {
+        "etag": metadata.etag,
+        "sha256": metadata.sha256,
+        "downloadedAt": metadata.downloaded_at,
+        "sourceUrl": metadata.source_url,
+        "upstreamCommit": metadata.upstream_commit,
+    }
+    return (json.dumps(data, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
 
 
 def _utc_now() -> str:
