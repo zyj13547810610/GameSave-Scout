@@ -59,7 +59,7 @@ def test_task_failure_isolated_as_user_safe_snapshot() -> None:
 
 
 def test_task_failure_logs_internal_exception(caplog) -> None:
-    logger = logging.getLogger("gameshelf.test.tasks")
+    logger = logging.getLogger("tests.tasks")
     registry = TaskRegistry(max_workers=1, logger=logger)
 
     def fail(_context: object) -> None:
