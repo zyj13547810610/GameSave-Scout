@@ -14,6 +14,7 @@ const items = ref<SaveSuggestion[]>(props.suggestions ? [...props.suggestions] :
 const selected = ref(new Set<string>())
 const loading = ref(false)
 const message = ref('')
+const hasSearched = ref(props.suggestions !== undefined)
 
 const groups = computed(() => [
   { id: 'exact', label: '高可信建议', items: items.value.filter((item) => item.group === 'exact') },
@@ -22,12 +23,14 @@ const groups = computed(() => [
 ].filter((group) => group.items.length > 0))
 
 watch(() => props.suggestions, (suggestions) => {
-  if (suggestions) setItems(suggestions)
+  if (suggestions) {
+    hasSearched.value = true
+    setItems(suggestions)
+  }
 })
 
 onMounted(() => {
-  if (props.suggestions === undefined) void refresh()
-  else setItems(props.suggestions)
+  if (props.suggestions !== undefined) setItems(props.suggestions)
 })
 
 function setItems(suggestions: SaveSuggestion[]) {
@@ -40,6 +43,7 @@ function setItems(suggestions: SaveSuggestion[]) {
 }
 
 async function refresh() {
+  hasSearched.value = true
   loading.value = true
   message.value = ''
   const result = await props.bridge.suggest_save_locations({ gameId: props.gameId })
@@ -92,11 +96,24 @@ function evidenceSourceLabel(source: SaveSuggestion['sourceEvidence'][number]['s
 <template>
   <section class="save-suggestions">
     <div class="save-location-heading">
-      <h4>发现的存档位置</h4>
-      <button type="button" class="secondary" :disabled="loading" @click="refresh">重新检测</button>
+      <h4>查找存档位置</h4>
+      <button
+        data-test="find-save-suggestions"
+        type="button"
+        class="secondary"
+        :disabled="loading"
+        @click="refresh"
+      >
+        {{ hasSearched ? '重新查找' : '查找存档' }}
+      </button>
     </div>
 
-    <p v-if="!loading && items.length === 0" class="empty-save-message">暂未发现新的存档位置。</p>
+    <p v-if="!hasSearched" class="empty-save-message">
+      点击后才会检查引擎规则、Ludusavi 和自定义清单。
+    </p>
+    <p v-else-if="!loading && items.length === 0" class="empty-save-message">
+      暂未发现新的存档位置。
+    </p>
     <section v-for="group in groups" :key="group.id" class="suggestion-group">
       <h5>{{ group.label }}</h5>
       <label v-for="item in group.items" :key="item.suggestionId" class="save-suggestion-card">
@@ -133,6 +150,6 @@ function evidenceSourceLabel(source: SaveSuggestion['sourceEvidence'][number]['s
     >
       接受所选位置
     </button>
-    <p class="status-message" aria-live="polite">{{ loading ? '正在检测存档位置……' : message }}</p>
+    <p class="status-message" aria-live="polite">{{ loading ? '正在查找存档位置……' : message }}</p>
   </section>
 </template>
