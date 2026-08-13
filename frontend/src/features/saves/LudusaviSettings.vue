@@ -22,11 +22,14 @@ onBeforeUnmount(() => {
   if (pollTimer !== undefined) window.clearTimeout(pollTimer)
 })
 
-async function loadStatus() {
+async function loadStatus(options: { preserveMessage?: boolean } = {}) {
   statusLoading.value = true
   const result = await props.bridge.ludusavi_status()
   statusLoading.value = false
-  if (!result.ok) return void (message.value = result.error.message)
+  if (!result.ok) {
+    if (!options.preserveMessage) message.value = result.error.message
+    return
+  }
   status.value = result.data
 }
 
@@ -57,7 +60,7 @@ async function pollTask(taskId: string) {
     resultKind.value = updateResult?.status ?? null
     message.value = updateResult?.message || task.message || 'Ludusavi 清单已检查完成。'
     updating.value = false
-    await loadStatus()
+    await loadStatus({ preserveMessage: true })
     return
   }
   if (task.status === 'failed' || task.status === 'cancelled') {

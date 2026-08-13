@@ -302,6 +302,33 @@ def test_metadata_replace_failure_restores_old_pair(
     assert service.active_metadata.read_bytes() == before_metadata
 
 
+def test_backup_failure_preserves_active_pair_and_reports_backup_stage(
+    provider: tuple[LudusaviProvider, FakeHttp],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, fake_http = provider
+    service.ensure_initial_snapshot()
+    before = (
+        service.active_manifest.read_bytes(),
+        service.active_metadata.read_bytes(),
+    )
+    fake_http.respond(200, NEW_MANIFEST)
+
+    def fail_backup(*_args: object, **_kwargs: object) -> None:
+        raise OSError("backup disk failure")
+
+    monkeypatch.setattr(provider_module.shutil, "copy2", fail_backup)
+
+    result = service.update_explicitly()
+
+    assert result.status == "failed"
+    assert "备份当前清单失败" in result.message
+    assert (
+        service.active_manifest.read_bytes(),
+        service.active_metadata.read_bytes(),
+    ) == before
+
+
 @pytest.mark.parametrize(
     ("status", "body", "headers", "expected_status"),
     [

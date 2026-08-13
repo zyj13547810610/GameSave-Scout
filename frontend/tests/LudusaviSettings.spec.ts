@@ -108,6 +108,51 @@ describe('LudusaviSettings', () => {
     expect(wrapper.text()).toContain('1234567890ab')
   })
 
+  it('keeps the update result when refreshing manifest status fails', async () => {
+    const status = vi
+      .fn()
+      .mockResolvedValueOnce(ok({
+        available: true,
+        unavailableReason: null,
+        sourceUrl: 'https://example.test/manifest.yaml',
+        downloadedAt: '2026-08-12T00:00:00+00:00',
+        sha256: '1234567890abcdef'.repeat(4),
+        etag: null,
+        upstreamCommit: null,
+        customDirectory: 'D:\\GameShelf\\data\\manifests\\custom',
+        customErrors: [],
+      }))
+      .mockResolvedValueOnce({
+        ok: false,
+        error: { code: 'status_failed', message: '状态刷新失败' },
+      })
+    const bridge = createMockBridge({
+      ludusavi_status: status,
+      update_ludusavi: async () => ok({ taskId: 'task-1' }),
+      task_snapshot: async () => ok({
+        id: 'task-1',
+        kind: 'ludusavi_update',
+        status: 'completed',
+        progress: { completed: 1, total: 1 },
+        message: '网络连接失败。当前有效清单仍可使用。',
+        result: {
+          status: 'failed',
+          message: '网络连接失败。当前有效清单仍可使用。',
+          metadata: null,
+        },
+        error: null,
+      }),
+    })
+    const wrapper = mount(LudusaviSettings, { props: { bridge } })
+    await flushPromises()
+
+    await wrapper.get('[data-test="update-ludusavi"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('当前有效清单仍可使用')
+    expect(wrapper.text()).not.toContain('状态刷新失败')
+  })
+
   it('shows unavailable official rules while leaving retry enabled', async () => {
     const bridge = createMockBridge({
       ludusavi_status: async () => ok({

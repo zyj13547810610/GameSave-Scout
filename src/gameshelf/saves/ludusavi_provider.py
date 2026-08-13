@@ -248,7 +248,14 @@ class LudusaviProvider:
                 source_url=self.update_url,
                 upstream_commit=None,
             )
-            backup = self._backup_active_pair()
+            try:
+                backup = self._backup_active_pair()
+            except OSError as error:
+                return UpdateResult(
+                    "failed",
+                    _failure_message(f"备份当前清单失败：{error}", current),
+                    current,
+                )
             try:
                 _write_bytes_fsynced(
                     metadata_temporary,
