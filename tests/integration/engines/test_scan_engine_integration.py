@@ -158,6 +158,27 @@ def test_invalid_manual_executable_falls_back_and_adds_warning(
     assert refreshed.detected_engine_id == "unity"
 
 
+def test_scan_detects_a_unity_runtime_nested_below_the_library_entry(
+    engine_scan_harness: "EngineScanHarness",
+) -> None:
+    build = engine_scan_harness.game_path / "Build"
+    data = build / "Mortal_Data"
+    data.mkdir(parents=True)
+    (build / "Mortal.exe").write_bytes(b"MZ")
+    (build / "UnityPlayer.dll").write_bytes(b"unity")
+    (data / "globalgamemanagers").write_bytes(b"unity")
+    (build / "UnityCrashHandler64.exe").write_bytes(b"MZ")
+
+    game = engine_scan_harness.rescan()
+
+    assert game.main_exe_relpath == "Build/Mortal.exe"
+    assert game.detected_engine_id == "unity"
+    assert {item.path for item in game.engine_evidence} == {
+        "Build/UnityPlayer.dll",
+        "Build/Mortal_Data/globalgamemanagers",
+    }
+
+
 class EngineScanHarness:
     def __init__(
         self,
