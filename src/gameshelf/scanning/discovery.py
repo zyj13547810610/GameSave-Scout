@@ -6,7 +6,7 @@ import fnmatch
 import logging
 import os
 import stat
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 
 from gameshelf.bridge.tasks import TaskContext
@@ -16,6 +16,7 @@ from gameshelf.scanning.models import DirectoryCandidate
 from gameshelf.scanning.path_keys import portable_relative
 
 logger = logging.getLogger(__name__)
+type DirectoryObserver = Callable[[Path, bool], None]
 
 
 class RootUnavailableError(OSError):
@@ -23,22 +24,27 @@ class RootUnavailableError(OSError):
 
 
 def enumerate_candidates(
-    root: ScanRoot, context: TaskContext
+    root: ScanRoot,
+    context: TaskContext,
+    on_directory: DirectoryObserver | None = None,
 ) -> Iterator[DirectoryCandidate]:
     """Yield candidates in stable path order while honoring cancellation."""
     root_path = Path(root.display_path)
     if root.scan_mode == "children":
-        yield from _enumerate_children(root_path, root.exclusions, context)
+        yield from _enumerate_children(root_path, root.exclusions, context, on_directory)
         return
     yield from _enumerate_recursive(
-        root_path, root.max_depth, root.exclusions, context
+        root_path, root.max_depth, root.exclusions, context, on_directory
     )
 
 
 def _enumerate_children(
-    root_path: Path, exclusions: Sequence[str], context: TaskContext
+    root_path: Path,
+    exclusions: Sequence[str],
+    context: TaskContext,
+    on_directory: DirectoryObserver | None,
 ) -> Iterator[DirectoryCandidate]:
-    entries = _read_entries(root_path, context, is_root=True)
+    entries = _read_entries(root_path, context, is_root=True, on_directory=on_directory)
     assert entries is not None
     for index, entry in enumerate(entries):
         if index % 64 == 0:
@@ -46,7 +52,7 @@ def _enumerate_children(
         relative = entry.name
         if _is_excluded(relative, exclusions) or not _safe_directory(entry):
             continue
-        if not _directory_is_accessible(Path(entry.path), context):
+        if not _directory_is_accessible(Path(entry.path), context, on_directory):
             continue
         yield DirectoryCandidate(
             path=Path(entry.path),
@@ -61,9 +67,12 @@ def _enumerate_recursive(
     max_depth: int,
     exclusions: Sequence[str],
     context: TaskContext,
+    on_directory: DirectoryObserver | None,
 ) -> Iterator[DirectoryCandidate]:
     def walk(directory: Path, depth: int, *, is_root: bool = False) -> Iterator[DirectoryCandidate]:
-        entries = _read_entries(directory, context, is_root=is_root)
+        entries = _read_entries(
+            directory, context, is_root=is_root, on_directory=on_directory
+        )
         if entries is None:
             return
 
@@ -99,21 +108,39 @@ def _enumerate_recursive(
 
 
 def _read_entries(
-    directory: Path, context: TaskContext, *, is_root: bool
+    directory: Path,
+    context: TaskContext,
+    *,
+    is_root: bool,
+    on_directory: DirectoryObserver | None,
 ) -> list[os.DirEntry[str]] | None:
     context.raise_if_cancelled()
     try:
         with os.scandir(directory) as iterator:
-            return sorted(iterator, key=lambda entry: (entry.name.casefold(), entry.name))
+            entries = sorted(iterator, key=lambda entry: (entry.name.casefold(), entry.name))
+        if on_directory is not None:
+            on_directory(directory, True)
+        return entries
     except OSError as error:
+        if on_directory is not None:
+            on_directory(directory, False)
         if is_root:
             raise RootUnavailableError(f"Cannot open scan root: {directory}") from error
         logger.warning("Skipping inaccessible directory %s: %s", directory, error)
         return None
 
 
-def _directory_is_accessible(directory: Path, context: TaskContext) -> bool:
-    return _read_entries(directory, context, is_root=False) is not None
+def _directory_is_accessible(
+    directory: Path,
+    context: TaskContext,
+    on_directory: DirectoryObserver | None,
+) -> bool:
+    return (
+        _read_entries(
+            directory, context, is_root=False, on_directory=on_directory
+        )
+        is not None
+    )
 
 
 def _safe_directory(entry: os.DirEntry[str]) -> bool:

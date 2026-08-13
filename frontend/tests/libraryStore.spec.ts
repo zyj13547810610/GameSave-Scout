@@ -20,4 +20,21 @@ describe('library store', () => {
     expect(store.games[0].title).toBe('Alice')
     expect(store.scanTasks['root-1']).toBe('task-1')
   })
+
+  it('clears the previous scan summary when a new scan starts', async () => {
+    const bridge = createMockBridge({
+      start_scan: vi.fn(async () => ok({ taskId: 'task-2' })),
+    })
+    const store = useLibraryStore()
+    store.taskSnapshots['root-1'] = {
+      id: 'task-1', kind: 'library_scan', status: 'completed',
+      progress: { completed: 1, total: null }, message: '扫描完成。', details: {},
+      result: null, error: null,
+    }
+
+    await store.scan(bridge, 'root-1', 'full')
+
+    expect(store.taskSnapshots['root-1']).toBeUndefined()
+    expect(store.scanTasks['root-1']).toBe('task-2')
+  })
 })

@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from concurrent.futures import Future, ThreadPoolExecutor
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from threading import Event, RLock
 from typing import Any, Literal
 from uuid import uuid4
 
 type TaskStatus = Literal["queued", "running", "completed", "cancelled", "failed"]
 type TaskOperation = Callable[["TaskContext"], Any]
+type TaskDetailValue = str | int | float | bool | None
+type TaskDetails = dict[str, TaskDetailValue]
 
 
 class TaskCancelled(RuntimeError):
@@ -25,6 +27,7 @@ class TaskSnapshot:
     status: TaskStatus
     progress: dict[str, int | None]
     message: str
+    details: TaskDetails = field(default_factory=dict)
     result: Any = None
     error: dict[str, str] | None = None
 
@@ -33,15 +36,22 @@ class TaskContext:
     def __init__(
         self,
         cancel_event: Event,
-        reporter: Callable[[int, int | None, str], None],
+        reporter: Callable[[int, int | None, str, TaskDetails], None],
     ) -> None:
         self._cancel_event = cancel_event
         self._reporter = reporter
 
-    def report(self, completed: int, total: int | None, message: str) -> None:
+    def report(
+        self,
+        completed: int,
+        total: int | None,
+        message: str,
+        *,
+        details: Mapping[str, TaskDetailValue] | None = None,
+    ) -> None:
         if completed < 0 or (total is not None and (total < 0 or completed > total)):
             raise ValueError("任务进度数值无效。")
-        self._reporter(completed, total, message)
+        self._reporter(completed, total, message, dict(details or {}))
 
     def raise_if_cancelled(self) -> None:
         if self._cancel_event.is_set():
@@ -123,8 +133,8 @@ class TaskRegistry:
         self._update(task_id, status="running")
         context = TaskContext(
             cancel_event,
-            lambda completed, total, message: self._report(
-                task_id, completed, total, message
+            lambda completed, total, message, details: self._report(
+                task_id, completed, total, message, details
             ),
         )
         try:
@@ -149,11 +159,19 @@ class TaskRegistry:
         else:
             self._update(task_id, status="completed", result=result)
 
-    def _report(self, task_id: str, completed: int, total: int | None, message: str) -> None:
+    def _report(
+        self,
+        task_id: str,
+        completed: int,
+        total: int | None,
+        message: str,
+        details: TaskDetails,
+    ) -> None:
         self._update(
             task_id,
             progress={"completed": completed, "total": total},
             message=message,
+            details=details,
         )
 
     def _update(self, task_id: str, **changes: Any) -> None:

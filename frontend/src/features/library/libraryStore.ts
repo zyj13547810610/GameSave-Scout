@@ -56,6 +56,7 @@ export const useLibraryStore = defineStore('library', {
     async scan(bridge: GameShelfBridge, rootId: string, kind: 'quick' | 'full') {
       const result = await bridge.start_scan({ rootId, kind })
       if (!result.ok) return this.fail(result.error.message)
+      delete this.taskSnapshots[rootId]
       this.scanTasks[rootId] = result.data.taskId
       window.setTimeout(() => void this.refreshTask(bridge, rootId), 250)
     },

@@ -174,6 +174,57 @@ label {
   white-space: nowrap;
 }
 
+.scan-progress,
+.scan-summary {
+  display: grid;
+  gap: .3rem;
+  margin-top: .25rem;
+  border-radius: .5rem;
+  padding: .55rem;
+  color: #c7c1d0;
+  background: #100f14;
+}
+
+.scan-progress small,
+.scan-summary small {
+  color: #918b9d;
+  line-height: 1.45;
+}
+
+.scan-current {
+  overflow: hidden;
+  color: #b5a7ff;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.indeterminate-progress {
+  overflow: hidden;
+  height: .25rem;
+  border-radius: 999px;
+  background: #302b3b;
+}
+
+.indeterminate-progress span {
+  display: block;
+  width: 40%;
+  height: 100%;
+  border-radius: inherit;
+  background: #8e70fa;
+  animation: scan-progress-slide 1.2s ease-in-out infinite alternate;
+}
+
+.scan-summary.failed,
+.scan-summary.cancelled {
+  color: #ffb0b0;
+  background: #351d25;
+}
+
+@keyframes scan-progress-slide {
+  from { transform: translateX(-5%); }
+  to { transform: translateX(160%); }
+}
+
 .compact-actions button {
   padding: .3125rem .4375rem;
   font-size: .6875rem;

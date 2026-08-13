@@ -16,7 +16,7 @@ import './features/library/library.css'
 
 const bridge = inject(bridgeKey, createBridge())
 const store = useLibraryStore(getActivePinia() ?? createPinia())
-const { roots, games, error, scanTasks, moveSuggestions } = storeToRefs(store)
+const { roots, games, error, scanTasks, taskSnapshots, moveSuggestions } = storeToRefs(store)
 const state = ref<'connecting' | 'ready' | 'failed'>('connecting')
 const errorMessage = ref('')
 const showAddRoot = ref(false)
@@ -84,7 +84,7 @@ onMounted(bootstrap)
     <template v-else>
       <div v-if="error" class="error-banner" role="alert"><span>{{ error }}</span><button type="button" @click="store.dismissError">关闭</button></div>
       <div class="library-layout">
-        <ScanRootList :bridge="bridge" :roots="roots" :scan-tasks="scanTasks" @scan="scan" @cancel="(id) => store.cancelScan(bridge, id)" @toggle="(root, enabled) => store.updateRoot(bridge, root, enabled)" @edit="editingRoot = $event" @remove="(id) => store.removeRoot(bridge, id)" @remap="(id, path) => store.remapRoot(bridge, id, path)" />
+        <ScanRootList :bridge="bridge" :roots="roots" :scan-tasks="scanTasks" :task-snapshots="taskSnapshots" @scan="scan" @cancel="(id) => store.cancelScan(bridge, id)" @toggle="(root, enabled) => store.updateRoot(bridge, root, enabled)" @edit="editingRoot = $event" @remove="(id) => store.removeRoot(bridge, id)" @remap="(id, path) => store.remapRoot(bridge, id, path)" />
         <section class="library-content">
           <div class="content-heading"><h2>我的游戏 <span>{{ games.length }}</span></h2></div>
           <MoveSuggestionPanel :suggestions="moveSuggestions" :games="games" @confirm="store.confirmMove(bridge, $event)" />

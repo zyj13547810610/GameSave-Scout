@@ -39,9 +39,10 @@ def test_task_snapshot_uses_camel_case_json_fields(tmp_path: Path) -> None:
             "id": task_id,
             "kind": "example",
             "status": "completed",
-            "progress": {"completed": 0, "total": None},
-            "message": "",
-            "result": {"answer": 42},
+                "progress": {"completed": 0, "total": None},
+                "message": "",
+                "details": {},
+                "result": {"answer": 42},
             "error": None,
         }
     finally:

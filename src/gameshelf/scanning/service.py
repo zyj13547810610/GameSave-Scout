@@ -6,7 +6,8 @@ import json
 import logging
 import sqlite3
 import stat
-from collections.abc import Iterator
+import time
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -71,12 +72,50 @@ class ScanService:
         if root is None:
             raise RootNotFoundError(root_id)
         session_id = self._create_session(root_id, scan_kind)
+        started_at = time.monotonic()
         discovered = 0
         warnings = 0
+        directories_scanned = 0
+        inaccessible_directories = 0
+        current_path = "."
         batch: list[tuple[str, str]] = []
+
+        def report(stage: str, message: str, **summary: int) -> None:
+            context.report(
+                discovered,
+                None,
+                message,
+                details={
+                    "stage": stage,
+                    "currentPath": current_path,
+                    "directoriesScanned": directories_scanned,
+                    "discovered": discovered,
+                    "inaccessibleDirectories": inaccessible_directories,
+                    "warnings": warnings,
+                    "elapsedSeconds": round(time.monotonic() - started_at, 2),
+                    **summary,
+                },
+            )
+
+        def observe_directory(path: Path, accessible: bool) -> None:
+            nonlocal current_path, directories_scanned, inaccessible_directories, warnings
+            directories_scanned += 1
+            try:
+                relative = path.relative_to(Path(root.display_path)).as_posix()
+            except ValueError:
+                relative = path.name
+            current_path = relative or "."
+            if not accessible:
+                inaccessible_directories += 1
+                warnings += 1
+            report("discovering", f"正在检查：{current_path}")
+
+        report("preparing", "正在准备扫描…")
         try:
             context.raise_if_cancelled()
-            for candidate in self._candidates(root, scan_kind, context):
+            for candidate in self._candidates(
+                root, scan_kind, context, observe_directory
+            ):
                 context.raise_if_cancelled()
                 install_key = windows_path_key(candidate.path)
                 if self._owning_root_id(install_key) != root.id:
@@ -123,7 +162,8 @@ class ScanService:
                     )
                 )
                 discovered += 1
-                context.report(discovered, None, f"Scanning {candidate.relative_dir}")
+                current_path = candidate.relative_dir
+                report("discovering", f"已发现：{candidate.relative_dir}")
                 if len(batch) == 200:
                     self._stage_batch(session_id, batch)
                     batch.clear()
@@ -132,18 +172,22 @@ class ScanService:
             context.raise_if_cancelled()
         except RootUnavailableError as error:
             self._finish_without_reconcile(session_id, root.id, "unavailable", str(error))
+            report("unavailable", "根目录暂时无法访问。")
             return _empty_summary(session_id, "unavailable", discovered)
         except TaskCancelled:
             self._finish_without_reconcile(session_id, root.id, "cancelled", "Scan cancelled.")
+            report("cancelled", "扫描已取消。")
             raise
         except Exception as error:
             self._finish_without_reconcile(session_id, root.id, "failed", str(error))
+            report("failed", "扫描失败。")
             raise
 
+        report("reconciling", "正在更新游戏库…")
         result = self._writer.submit(
             lambda connection: reconcile_session(connection, session_id, root, scan_kind)
         ).result()
-        return ScanSummary(
+        summary = ScanSummary(
             session_id=session_id,
             status="completed",
             discovered=discovered,
@@ -154,6 +198,14 @@ class ScanService:
             move_suggestions=result.move_suggestions,
             games=result.games,
         )
+        report(
+            "completed",
+            "扫描完成。",
+            added=result.added,
+            updated=result.updated,
+            missing=result.missing,
+        )
+        return summary
 
     def confirm_move(
         self,
@@ -266,7 +318,11 @@ class ScanService:
         return self._writer.submit(operation).result()
 
     def _candidates(
-        self, root: ScanRoot, scan_kind: ScanKind, context: TaskContext
+        self,
+        root: ScanRoot,
+        scan_kind: ScanKind,
+        context: TaskContext,
+        on_directory: Callable[[Path, bool], None],
     ) -> Iterator[DirectoryCandidate]:
         if scan_kind == "quick" and root.scan_mode == "recursive":
             for game in self._repository.list_games():
@@ -274,7 +330,9 @@ class ScanService:
                     continue
                 context.raise_if_cancelled()
                 path = Path(root.display_path).joinpath(*game.relative_dir.split("/"))
-                if not path.is_dir():
+                accessible = path.is_dir()
+                on_directory(path, accessible)
+                if not accessible:
                     continue
                 yield DirectoryCandidate(
                     path=path,
@@ -283,7 +341,7 @@ class ScanService:
                     reason="direct_child",
                 )
             return
-        yield from enumerate_candidates(root, context)
+        yield from enumerate_candidates(root, context, on_directory)
 
     def _owning_root_id(self, install_key: str) -> str | None:
         eligible = [

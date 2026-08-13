@@ -56,6 +56,44 @@ def test_successful_full_scan_adds_games_and_marks_removed_game_missing(
     assert scan_harness.game(game.id).status == "missing"
 
 
+def test_scan_reports_structured_stages_and_completion_summary(
+    scan_harness: "ScanHarness",
+) -> None:
+    root = scan_harness.add_root(mode="children")
+    scan_harness.mkdir("GameA", exes=["GameA.exe"])
+    reports: list[dict[str, object]] = []
+
+    summary = scan_harness.scanner.scan_root(
+        root.id,
+        "full",
+        TaskContext(
+            Event(),
+            lambda _completed, _total, _message, details: reports.append(details),
+        ),
+    )
+
+    stages = [report["stage"] for report in reports]
+    assert stages[0] == "preparing"
+    assert "discovering" in stages
+    assert stages[-2:] == ["reconciling", "completed"]
+    final = dict(reports[-1])
+    elapsed = final.pop("elapsedSeconds")
+    assert isinstance(elapsed, float)
+    assert elapsed >= 0
+    assert final == {
+        "stage": "completed",
+        "currentPath": "GameA",
+        "directoriesScanned": 2,
+        "discovered": 1,
+        "inaccessibleDirectories": 0,
+        "warnings": 0,
+        "added": 1,
+        "updated": 0,
+        "missing": 0,
+    }
+    assert summary.discovered == 1
+
+
 def test_unavailable_root_preserves_installed_status(
     scan_harness: "ScanHarness",
 ) -> None:

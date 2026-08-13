@@ -8,7 +8,12 @@ def test_task_reports_progress_and_result() -> None:
     registry = TaskRegistry(max_workers=1)
 
     def work(context: object) -> dict[str, int]:
-        context.report(1, 2, "一半")
+        context.report(
+            1,
+            2,
+            "一半",
+            details={"stage": "discovering", "currentPath": "Alice"},
+        )
         return {"answer": 42}
 
     task_id = registry.submit("example", work)
@@ -17,6 +22,7 @@ def test_task_reports_progress_and_result() -> None:
     assert snapshot.status == "completed"
     assert snapshot.progress == {"completed": 1, "total": 2}
     assert snapshot.message == "一半"
+    assert snapshot.details == {"stage": "discovering", "currentPath": "Alice"}
     assert snapshot.result == {"answer": 42}
     registry.close()
 

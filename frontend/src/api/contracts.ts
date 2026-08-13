@@ -160,6 +160,7 @@ export type TaskSnapshot = {
   status: TaskStatus
   progress: { completed: number; total: number | null }
   message: string
+  details?: Record<string, string | number | boolean | null>
   result: unknown
   error: ApiError | null
 }

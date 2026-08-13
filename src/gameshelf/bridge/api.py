@@ -833,6 +833,7 @@ class BridgeApi:
             "status": snapshot.status,
             "progress": cast(dict[str, JSONValue], snapshot.progress),
             "message": snapshot.message,
+            "details": cast(dict[str, JSONValue], snapshot.details),
             "result": cast(JSONValue, snapshot.result),
             "error": cast(JSONValue, snapshot.error),
         }
