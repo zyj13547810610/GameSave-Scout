@@ -126,6 +126,81 @@ def test_ranker_prefers_a_title_segment_over_a_larger_generic_engine(
     assert "filename_matches_title_segment" in ranked[0].evidence
 
 
+def test_ranker_prefers_a_nested_unity_player_layout(
+    tmp_path: Path, monkeypatch
+) -> None:
+    game = tmp_path / "Legend.of.Mortal"
+    build = game / "Build"
+    data = build / "Mortal_Data"
+    data.mkdir(parents=True)
+    (game / "GameLauncher.exe").write_bytes(b"MZ")
+    (build / "Mortal.exe").write_bytes(b"MZ")
+    (build / "UnityPlayer.dll").write_bytes(b"MZ")
+    (data / "globalgamemanagers").write_bytes(b"unity")
+    (build / "UnityCrashHandler64.exe").write_bytes(b"MZ")
+    monkeypatch.setattr(
+        "gameshelf.scanning.executable_ranker.read_pe_metadata",
+        lambda _: PeMetadata("", "", "", "x64"),
+    )
+
+    ranked = rank_executables(game)
+
+    assert ranked[0].relative_path == "Build/Mortal.exe"
+    assert "unity_player_layout" in ranked[0].evidence
+    assert all("UnityCrashHandler" not in item.relative_path for item in ranked)
+
+
+def test_ranker_prefers_an_unreal_bootstrap_executable(
+    tmp_path: Path, monkeypatch
+) -> None:
+    game = tmp_path / "Operation.Lovecraft.Fallen.Doll.v0.4.9"
+    engine_bin = game / "Engine" / "Binaries" / "Win64"
+    project_bin = game / "Paralogue" / "Binaries" / "Win64"
+    engine_bin.mkdir(parents=True)
+    project_bin.mkdir(parents=True)
+    (game / "FallenDoll.exe").write_bytes(b"MZ")
+    (engine_bin / "UnrealCEFSubProcess.exe").write_bytes(b"MZ")
+    (project_bin / "Paralogue-Win64-Shipping.exe").write_bytes(b"MZ")
+    monkeypatch.setattr(
+        "gameshelf.scanning.executable_ranker.read_pe_metadata",
+        lambda path: PeMetadata(
+            "BootstrapPackagedGame" if path.name == "FallenDoll.exe" else "",
+            "",
+            "",
+            "x64",
+        ),
+    )
+
+    ranked = rank_executables(game)
+
+    assert ranked[0].relative_path == "FallenDoll.exe"
+    assert "unreal_bootstrap_layout" in ranked[0].evidence
+    assert all("UnrealCEFSubProcess" not in item.relative_path for item in ranked)
+
+
+def test_ranker_uses_unreal_shipping_executable_as_fallback(
+    tmp_path: Path, monkeypatch
+) -> None:
+    game = tmp_path / "UnrealGame"
+    engine_bin = game / "Engine" / "Binaries" / "Win64"
+    project_bin = game / "ProjectName" / "Binaries" / "Win64"
+    engine_bin.mkdir(parents=True)
+    project_bin.mkdir(parents=True)
+    shipping = project_bin / "ProjectName-Win64-Shipping.exe"
+    shipping.write_bytes(b"MZ")
+    monkeypatch.setattr(
+        "gameshelf.scanning.executable_ranker.read_pe_metadata",
+        lambda _: PeMetadata("", "", "", "x64"),
+    )
+
+    ranked = rank_executables(game)
+
+    assert ranked[0].relative_path == (
+        "ProjectName/Binaries/Win64/ProjectName-Win64-Shipping.exe"
+    )
+    assert "unreal_shipping_binary" in ranked[0].evidence
+
+
 def test_ranker_excludes_known_auxiliary_executables(
     tmp_path: Path, monkeypatch
 ) -> None:

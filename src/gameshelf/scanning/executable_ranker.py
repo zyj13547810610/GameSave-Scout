@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from difflib import SequenceMatcher
 from pathlib import Path
 
-from gameshelf.scanning.pe_metadata import PeArchitecture, read_pe_metadata
+from gameshelf.scanning.pe_metadata import PeArchitecture, PeMetadata, read_pe_metadata
 
 _REJECTED_PREFIXES = (
     "unins",
@@ -140,6 +140,10 @@ def _rank(path: Path, game_dir: Path) -> ExecutableCandidate:
         score += 15
         evidence.append("file_description_matches_directory")
 
+    runtime_score, runtime_evidence = _runtime_layout_score(path, game_dir, metadata)
+    score += runtime_score
+    evidence.extend(runtime_evidence)
+
     try:
         size = path.stat().st_size
     except OSError:
@@ -152,6 +156,100 @@ def _rank(path: Path, game_dir: Path) -> ExecutableCandidate:
         evidence.append("medium_executable")
 
     return ExecutableCandidate(relative, score, metadata.architecture, tuple(evidence))
+
+
+def _runtime_layout_score(
+    path: Path, game_dir: Path, metadata: PeMetadata
+) -> tuple[float, tuple[str, ...]]:
+    score = 0.0
+    evidence: list[str] = []
+
+    unity_player = path.parent / "UnityPlayer.dll"
+    unity_data = path.parent / f"{path.stem}_Data" / "globalgamemanagers"
+    if (
+        _is_safe_file_within(path, game_dir)
+        and _is_safe_file_within(unity_player, game_dir)
+        and _is_safe_file_within(unity_data, game_dir)
+    ):
+        score += 100
+        evidence.append("unity_player_layout")
+
+    unreal_root = _find_unreal_runtime_root(path, game_dir)
+    if unreal_root is not None:
+        product_name = _normalize(metadata.product_name)
+        description = _normalize(metadata.file_description)
+        if path.parent == unreal_root and (
+            "bootstrappackagedgame" in product_name
+            or "bootstrappackagedgame" in description
+        ):
+            score += 80
+            evidence.append("unreal_bootstrap_layout")
+        elif _is_unreal_shipping_executable(path, unreal_root):
+            score += 45
+            evidence.append("unreal_shipping_binary")
+
+    return score, tuple(evidence)
+
+
+def _find_unreal_runtime_root(path: Path, game_dir: Path) -> Path | None:
+    if not _is_safe_file_within(path, game_dir):
+        return None
+    current = path.parent
+    while True:
+        if _has_unreal_runtime_layout(current, game_dir):
+            return current
+        if current == game_dir:
+            return None
+        current = current.parent
+
+
+def _has_unreal_runtime_layout(directory: Path, game_dir: Path) -> bool:
+    if not _is_safe_directory_within(directory / "Engine" / "Binaries", game_dir):
+        return False
+    try:
+        return any(
+            child.name.casefold() != "engine"
+            and _is_safe_directory_within(child, game_dir)
+            and _is_safe_directory_within(child / "Binaries", game_dir)
+            for child in directory.iterdir()
+        )
+    except OSError:
+        return False
+
+
+def _is_unreal_shipping_executable(path: Path, runtime_root: Path) -> bool:
+    relative = path.relative_to(runtime_root)
+    return (
+        len(relative.parts) >= 4
+        and relative.parts[0].casefold() != "engine"
+        and relative.parts[1].casefold() == "binaries"
+        and path.stem.casefold().endswith("-win64-shipping")
+    )
+
+
+def _is_safe_file_within(path: Path, root: Path) -> bool:
+    return _is_safe_path_within(path, root) and path.is_file()
+
+
+def _is_safe_directory_within(path: Path, root: Path) -> bool:
+    return _is_safe_path_within(path, root) and path.is_dir()
+
+
+def _is_safe_path_within(path: Path, root: Path) -> bool:
+    try:
+        relative = path.relative_to(root)
+        resolved_root = root.resolve(strict=True)
+        resolved_path = path.resolve(strict=True)
+    except (OSError, ValueError):
+        return False
+    if not resolved_path.is_relative_to(resolved_root):
+        return False
+    current = root
+    for part in relative.parts:
+        current /= part
+        if _is_link_or_reparse(current):
+            return False
+    return True
 
 
 def _is_link_or_reparse(path: Path) -> bool:
