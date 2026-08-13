@@ -2,7 +2,7 @@
 
 GameShelf 是一个面向 Windows 10/11 x64 的本地优先、便携式个人游戏库与存档定位工具。
 
-当前正在按 [`docs/superpowers/plans/2026-08-12-GameShelf-开发路线图.md`](docs/superpowers/plans/2026-08-12-GameShelf-开发路线图.md) 实施 V1。
+当前正在按 [`docs/superpowers/plans/2026-08-12-GameShelf-开发路线图.md`](docs/superpowers/plans/2026-08-12-GameShelf-开发路线图.md) 完成 V0.1 首发版。
 
 ## 开发环境
 
