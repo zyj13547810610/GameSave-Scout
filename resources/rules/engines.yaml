@@ -1,4 +1,4 @@
-version: "2026.08.13-1"
+version: "2026.08.13-2"
 rules:
   - id: tyrano
     label: TyranoScript
@@ -80,7 +80,7 @@ rules:
     label: Artemis
     threshold: 0.70
     all:
-      - { op: magic_at, path: data.pfs, value: "hex:70660000", weight: 0.55 }
+      - { op: glob_magic_at, path: "*.pfs", value: "hex:70660000", weight: 0.55 }
       - { op: magic_at, path: movie.mja, value: MJA0, weight: 0.45 }
   - id: reallive
     label: RealLive

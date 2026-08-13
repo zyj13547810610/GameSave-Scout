@@ -11,7 +11,7 @@ from gameshelf.scanning.pe_metadata import PeMetadata
 @pytest.mark.parametrize(
     ("engine_id", "files"),
     [
-        ("artemis", {"data.pfs": b"pf\0\0", "movie.mja": b"MJA0"}),
+        ("artemis", {"assets_01.pfs": b"pf\0\0", "movie.mja": b"MJA0"}),
         ("reallive", {"Gameexe.ini": b"[Window]", "seen.txt": b"PACL" + b"\0" * 32}),
         ("bgi_ethornell", {"data.arc": b"PackFile    " + b"\0" * 32}),
         ("catsystem2", {"data.dat": b"CsPack2" + b"\0" * 32, "scene.cst": b"CatScene"}),
@@ -37,6 +37,30 @@ def test_generic_file_alone_remains_unknown(tmp_path: Path, name: str) -> None:
     assert outcome.best is None
 
 
+def test_artemis_pfs_extension_without_magic_remains_unknown(tmp_path: Path) -> None:
+    (tmp_path / "assets_01.pfs").write_bytes(b"not pfs")
+    (tmp_path / "movie.mja").write_bytes(b"MJA0")
+    rules = load_engine_rules(Path("resources/rules/engines.yaml"))
+
+    outcome = DetectorRegistry(RuleDetector(rule) for rule in rules).detect(tmp_path, None)
+
+    assert outcome.best is None
+
+
+def test_artemis_reports_the_actual_variable_pfs_path(tmp_path: Path) -> None:
+    (tmp_path / "assets_01.pfs").write_bytes(b"pf\0\0")
+    (tmp_path / "movie.mja").write_bytes(b"MJA0")
+    rules = load_engine_rules(Path("resources/rules/engines.yaml"))
+
+    outcome = DetectorRegistry(RuleDetector(rule) for rule in rules).detect(tmp_path, None)
+
+    assert outcome.best is not None and outcome.best.engine_id == "artemis"
+    assert {item.path for item in outcome.best.evidence} == {
+        "assets_01.pfs",
+        "movie.mja",
+    }
+
+
 @pytest.mark.parametrize("scene_name", ["Scene.pck", "Scene.chs", "Scene.gbk"])
 def test_siglus_accepts_exact_scene_file_variants(
     tmp_path: Path, monkeypatch, scene_name: str
@@ -59,7 +83,7 @@ def test_siglus_accepts_exact_scene_file_variants(
     )
 
     assert outcome.best is not None and outcome.best.engine_id == "siglus"
-    assert outcome.best.rule_version == "2026.08.13-1"
+    assert outcome.best.rule_version == "2026.08.13-2"
     assert {item.path for item in outcome.best.evidence} == {
         "SiglusEngine.exe",
         scene_name,

@@ -12,6 +12,7 @@ import yaml
 type EvidenceOp = Literal[
     "path_exists",
     "glob_exists",
+    "glob_magic_at",
     "magic_at",
     "edge_contains",
     "text_contains",
@@ -33,6 +34,7 @@ _EVIDENCE_KEYS = {"op", "path", "value", "offset", "weight", "field"}
 _OPS = {
     "path_exists",
     "glob_exists",
+    "glob_magic_at",
     "magic_at",
     "edge_contains",
     "text_contains",
@@ -128,7 +130,13 @@ def _parse_evidence_list(raw: object, label: str) -> tuple[EvidenceRule, ...]:
         field = item.get("field")
         if field is not None and not isinstance(field, str):
             raise RuleSchemaError("evidence field must be a string")
-        value_ops = {"magic_at", "edge_contains", "text_contains", "pe_field_contains"}
+        value_ops = {
+            "glob_magic_at",
+            "magic_at",
+            "edge_contains",
+            "text_contains",
+            "pe_field_contains",
+        }
         if op in value_ops and value is None:
             raise RuleSchemaError(f"{op} requires value")
         result.append(EvidenceRule(cast(EvidenceOp, op), path, weight, value, offset, field))

@@ -73,6 +73,12 @@ def test_scan_refreshes_suggestion_but_preserves_manual_engine(
     assert refreshed.detected_engine_id == "unity"
     assert refreshed.engine_id == "custom:my-engine"
     assert refreshed.engine_is_manual is True
+    assert refreshed.engine_confidence == pytest.approx(0.97)
+    assert refreshed.engine_rules_version == "unity-2026.08.12"
+    assert {item.code for item in refreshed.engine_evidence} == {
+        "unity_player",
+        "unity_data",
+    }
 
 
 def test_detector_failure_preserves_previous_detected_and_adopted_engine(
@@ -177,6 +183,27 @@ def test_scan_detects_a_unity_runtime_nested_below_the_library_entry(
         "Build/UnityPlayer.dll",
         "Build/Mortal_Data/globalgamemanagers",
     }
+
+
+def test_scan_detects_unreal_shipping_runtime(
+    engine_scan_harness: "EngineScanHarness",
+) -> None:
+    runtime = engine_scan_harness.game_path
+    (runtime / "Engine" / "Binaries").mkdir(parents=True)
+    executable = (
+        runtime
+        / "Sample"
+        / "Binaries"
+        / "Win64"
+        / "Sample-Win64-Shipping.exe"
+    )
+    executable.parent.mkdir(parents=True)
+    executable.write_bytes(b"MZ")
+
+    game = engine_scan_harness.rescan()
+
+    assert game.main_exe_relpath == "Sample/Binaries/Win64/Sample-Win64-Shipping.exe"
+    assert game.detected_engine_id == "unreal"
 
 
 class EngineScanHarness:

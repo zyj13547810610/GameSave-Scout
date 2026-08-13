@@ -24,7 +24,20 @@ from gameshelf.engines.detectors.rpg_maker import RpgMakerDetector
             "VX Ace",
         ),
         (
+            {
+                "Game.ini": b"[Game]\nLibrary=RGSS301.dll",
+                "Data/Scripts.rvdata2": b"synthetic scripts",
+            },
+            "rpg_maker_vx_ace",
+            "VX Ace",
+        ),
+        (
             {"www/js/rpg_core.js": b"Utils.RPGMAKER_NAME = 'MV'", "www/data/System.json": b"{}"},
+            "rpg_maker_mv",
+            "MV",
+        ),
+        (
+            {"js/rpg_core.js": b"Utils.RPGMAKER_NAME = 'MV'", "data/System.json": b"{}"},
             "rpg_maker_mv",
             "MV",
         ),

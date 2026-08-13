@@ -66,7 +66,7 @@ class RuleDetector:
 
 
 def _target_may_exist(root: Path, evidence: EvidenceRule) -> bool:
-    if evidence.op == "glob_exists":
+    if evidence.op in {"glob_exists", "glob_magic_at"}:
         return any(_bounded_glob(root, evidence.path))
     return _target(root, evidence.path).exists()
 
@@ -77,14 +77,21 @@ def _evaluate(
     root = context.game_dir
     path = _target(root, evidence.path)
     matched = False
+    matched_path = evidence.path
     if evidence.op == "path_exists":
         matched = path.exists()
     elif evidence.op == "glob_exists":
         matched = bool(_bounded_glob(root, evidence.path))
+    elif evidence.op == "glob_magic_at":
+        needle = _bytes_value(evidence.value or "")
+        for candidate in _bounded_glob(root, evidence.path):
+            if candidate.is_file() and _matches_magic(candidate, evidence.offset, needle):
+                matched = True
+                matched_path = candidate.relative_to(root.resolve(strict=False)).as_posix()
+                break
     elif evidence.op == "magic_at" and path.is_file():
         needle = _bytes_value(evidence.value or "")
-        data = read_prefix(path, min(64 * 1024, evidence.offset + len(needle)))
-        matched = data[evidence.offset : evidence.offset + len(needle)] == needle
+        matched = _matches_magic(path, evidence.offset, needle)
     elif evidence.op == "edge_contains" and path.is_file():
         matched = contains_in_edges(path, _bytes_value(evidence.value or ""))
     elif evidence.op == "text_contains" and path.is_file():
@@ -100,7 +107,7 @@ def _evaluate(
         f"rule_{evidence.op}",
         _evidence_detail(evidence),
         evidence.weight,
-        evidence.path,
+        matched_path,
     )
 
 
@@ -108,6 +115,7 @@ def _evidence_detail(evidence: EvidenceRule) -> str:
     labels = {
         "path_exists": "发现路径",
         "glob_exists": "发现匹配文件",
+        "glob_magic_at": "匹配文件头特征",
         "magic_at": "文件头特征匹配",
         "edge_contains": "文件边缘特征匹配",
         "text_contains": "配置文本特征匹配",
@@ -139,3 +147,8 @@ def _bytes_value(value: str) -> bytes:
     if value.startswith("hex:"):
         return bytes.fromhex(value[4:])
     return value.encode("latin-1")
+
+
+def _matches_magic(path: Path, offset: int, needle: bytes) -> bool:
+    data = read_prefix(path, min(64 * 1024, offset + len(needle)))
+    return data[offset : offset + len(needle)] == needle

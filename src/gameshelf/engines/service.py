@@ -10,6 +10,7 @@ from gameshelf.engines.detectors.creator_engines import CreatorEngineDetector
 from gameshelf.engines.detectors.renpy import RenPyDetector
 from gameshelf.engines.detectors.rpg_maker import RpgMakerDetector
 from gameshelf.engines.detectors.unity import UnityDetector
+from gameshelf.engines.detectors.unreal import UnrealDetector
 from gameshelf.engines.detectors.wolf import WolfRpgDetector
 from gameshelf.engines.models import DetectionOutcome
 from gameshelf.engines.registry import DetectorRegistry
@@ -35,6 +36,7 @@ _BUILTIN_OPTIONS = (
     EngineOption("rgu", "RGU"),
     EngineOption("renpy", "Ren'Py"),
     EngineOption("unity", "Unity"),
+    EngineOption("unreal", "Unreal Engine"),
     EngineOption("wolf_rpg", "WOLF RPG Editor"),
     EngineOption("smile_game_builder", "SMILE GAME BUILDER"),
     EngineOption("rpg_developer_bakin", "RPG Developer Bakin"),
@@ -59,6 +61,7 @@ class EngineDetectionService:
             RpgMakerDetector(),
             RenPyDetector(),
             UnityDetector(),
+            UnrealDetector(),
             WolfRpgDetector(),
             CreatorEngineDetector(),
             *(RuleDetector(rule) for rule in rules),

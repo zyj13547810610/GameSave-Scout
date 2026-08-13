@@ -8,7 +8,7 @@ from gameshelf.engines.base import DetectionContext
 from gameshelf.engines.bounded_reader import read_text_limit
 from gameshelf.engines.models import EngineEvidence, EngineMatch
 
-_VERSION = "rpg-maker-2026.08.12"
+_VERSION = "rpg-maker-2026.08.13"
 
 
 class RpgMakerDetector:
@@ -35,7 +35,13 @@ class RpgMakerDetector:
                 ("rgss3", "rpg_maker_vx_ace", "VX Ace", (".rgss3a", "rgss3")),
             )
             for marker, engine_id, variant, companions in families:
-                if marker in text and _has_companion(root, companions):
+                has_unpacked_vx_ace_scripts = (
+                    marker == "rgss3"
+                    and (root / "Data" / "Scripts.rvdata2").is_file()
+                )
+                if marker in text and (
+                    _has_companion(root, companions) or has_unpacked_vx_ace_scripts
+                ):
                     return _match(
                         engine_id,
                         variant,
