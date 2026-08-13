@@ -74,7 +74,7 @@
 .manifest-update-result { margin: 0; border-radius: .5rem; padding: .55rem .65rem; }
 .manifest-update-result.updated, .manifest-update-result.not_modified { color: #a9e6c4; background: #173226; }
 .manifest-update-result.invalid { color: #f1cc87; background: #332815; }
-.manifest-update-result.failed, .manifest-unavailable { color: #ffb0b0; background: #351d25; }
+.manifest-update-result.failed, .ludusavi-settings > p.manifest-unavailable { color: #ffb0b0; background: #351d25; }
 .manifest-unavailable { margin: 0; border-radius: .5rem; padding: .55rem .65rem; }
 @container (max-width: 33rem) { .library-toolbar { grid-template-columns: 1fr; } }
 @media (max-width: 700px) { .library-toolbar { grid-template-columns: 1fr; } }

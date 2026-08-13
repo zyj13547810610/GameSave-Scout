@@ -408,28 +408,6 @@ class LudusaviProvider:
             with suppress(OSError):
                 metadata_temporary.unlink(missing_ok=True)
 
-    def _atomic_copy(self, source: Path, destination: Path) -> None:
-        temporary = self.temp_dir / f"copy-{uuid4().hex}.tmp"
-        try:
-            shutil.copy2(source, temporary)
-            os.replace(temporary, destination)
-        finally:
-            with suppress(OSError):
-                temporary.unlink(missing_ok=True)
-
-    def _atomic_write_bytes(self, content: bytes, destination: Path) -> None:
-        temporary = self.temp_dir / f"write-{uuid4().hex}.tmp"
-        try:
-            with temporary.open("xb") as stream:
-                stream.write(content)
-                stream.flush()
-                os.fsync(stream.fileno())
-            os.replace(temporary, destination)
-        finally:
-            with suppress(OSError):
-                temporary.unlink(missing_ok=True)
-
-
 def _urllib_open(url: str, headers: dict[str, str], timeout: float) -> HttpResponse:
     request = urllib.request.Request(url, headers=headers, method="GET")
     try:
@@ -537,31 +515,6 @@ def _read_metadata(path: Path) -> SnapshotMetadata:
 
 def re_full_sha256(value: str) -> bool:
     return len(value) == 64 and all(character in "0123456789abcdef" for character in value)
-
-
-def _write_metadata_atomic(
-    destination: Path,
-    metadata: SnapshotMetadata,
-    temp_dir: Path,
-) -> None:
-    temporary = temp_dir / f"metadata-{uuid4().hex}.json"
-    data = {
-        "etag": metadata.etag,
-        "sha256": metadata.sha256,
-        "downloadedAt": metadata.downloaded_at,
-        "sourceUrl": metadata.source_url,
-        "upstreamCommit": metadata.upstream_commit,
-    }
-    try:
-        with temporary.open("x", encoding="utf-8", newline="\n") as stream:
-            json.dump(data, stream, ensure_ascii=False, indent=2)
-            stream.write("\n")
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, destination)
-    finally:
-        with suppress(OSError):
-            temporary.unlink(missing_ok=True)
 
 
 def _metadata_json_bytes(metadata: SnapshotMetadata) -> bytes:
