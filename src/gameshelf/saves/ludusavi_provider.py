@@ -135,8 +135,19 @@ class LudusaviProvider:
 
     def metadata(self) -> SnapshotMetadata:
         with self._lock:
-            self.ensure_initial_snapshot()
-            return _read_metadata(self.active_metadata)
+            try:
+                return self._active_metadata_if_integrity_valid()
+            except (OSError, SnapshotUpdateError):
+                self.ensure_initial_snapshot()
+                return self._active_metadata_if_integrity_valid()
+
+    def _active_metadata_if_integrity_valid(self) -> SnapshotMetadata:
+        if not self.active_manifest.is_file() or not self.active_metadata.is_file():
+            raise SnapshotUpdateError("Ludusavi 清单文件组不完整。")
+        metadata = _read_metadata(self.active_metadata)
+        if _sha256_file(self.active_manifest) != metadata.sha256:
+            raise SnapshotUpdateError("Ludusavi 清单的 SHA-256 与元数据不一致。")
+        return metadata
 
     def update_explicitly(
         self,

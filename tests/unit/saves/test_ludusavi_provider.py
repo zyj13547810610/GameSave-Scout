@@ -137,6 +137,23 @@ def test_initial_snapshot_copies_resource_without_network(
     assert fake_http.calls == []
 
 
+def test_metadata_uses_integrity_check_without_parsing_installed_manifest(
+    provider: tuple[LudusaviProvider, FakeHttp],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, _ = provider
+    service.ensure_initial_snapshot()
+
+    def fail_if_parsed(_content: bytes) -> None:
+        raise AssertionError("metadata status must not parse the manifest")
+
+    monkeypatch.setattr(provider_module, "_validate_manifest_bytes", fail_if_parsed)
+
+    metadata = service.metadata()
+
+    assert metadata.sha256 == hashlib.sha256(OLD_MANIFEST).hexdigest()
+
+
 def test_explicit_update_uses_etag_and_keeps_old_file_on_invalid_yaml(
     provider: tuple[LudusaviProvider, FakeHttp],
 ) -> None:
@@ -213,6 +230,21 @@ def test_invalid_active_pair_restores_latest_valid_backup(
     assert loaded.games["Alice"].canonical_name == "Alice"
     assert service.active_manifest.read_bytes() == OLD_MANIFEST
     assert fake_http.calls == []
+
+
+def test_metadata_recovers_hash_mismatched_active_pair(
+    provider: tuple[LudusaviProvider, FakeHttp],
+) -> None:
+    service, _ = provider
+    service.ensure_initial_snapshot()
+    backup = service._backup_active_pair()
+    assert backup is not None
+    service.active_manifest.write_bytes(b"broken")
+
+    metadata = service.metadata()
+
+    assert metadata.sha256 == hashlib.sha256(OLD_MANIFEST).hexdigest()
+    assert service.active_manifest.read_bytes() == OLD_MANIFEST
 
 
 def test_partial_active_pair_is_not_used(
