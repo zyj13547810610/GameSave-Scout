@@ -23,11 +23,18 @@ describe('uiScale', () => {
     localStorage.setItem(UI_SCALE_STORAGE_KEY, '1.2')
     const scale = readUiScale(localStorage)
     applyUiScale(scale, document.documentElement)
-    saveUiScale(1.3, localStorage)
+    saveUiScale(0.8, localStorage)
 
     expect(scale).toBe(1.2)
     expect(document.documentElement.style.getPropertyValue('--ui-scale')).toBe('1.2')
-    expect(localStorage.getItem(UI_SCALE_STORAGE_KEY)).toBe('1.3')
+    expect(localStorage.getItem(UI_SCALE_STORAGE_KEY)).toBe('0.8')
+  })
+
+  it('migrates the legacy 130% scale to 120%', () => {
+    localStorage.setItem(UI_SCALE_STORAGE_KEY, '1.3')
+
+    expect(readUiScale(localStorage)).toBe(1.2)
+    expect(localStorage.getItem(UI_SCALE_STORAGE_KEY)).toBe('1.2')
   })
 
   it('does not crash when the localStorage getter is blocked', () => {

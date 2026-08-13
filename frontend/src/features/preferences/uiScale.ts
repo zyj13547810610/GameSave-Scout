@@ -1,6 +1,7 @@
-export const UI_SCALE_OPTIONS = [0.9, 1, 1.1, 1.2, 1.3] as const
+export const UI_SCALE_OPTIONS = [0.8, 0.9, 1, 1.1, 1.2] as const
 export type UiScale = (typeof UI_SCALE_OPTIONS)[number]
 export const UI_SCALE_STORAGE_KEY = 'gameshelf.ui-scale'
+const LEGACY_MAX_UI_SCALE = 1.3
 
 export function isUiScale(value: number): value is UiScale {
   return UI_SCALE_OPTIONS.some((option) => option === value)
@@ -14,9 +15,19 @@ export function getUiScaleStorage(windowObject: Pick<Window, 'localStorage'>): S
   }
 }
 
-export function readUiScale(storage: Pick<Storage, 'getItem'> | null): UiScale {
+export function readUiScale(
+  storage: Pick<Storage, 'getItem' | 'setItem'> | null,
+): UiScale {
   try {
     const value = Number(storage?.getItem(UI_SCALE_STORAGE_KEY))
+    if (value === LEGACY_MAX_UI_SCALE) {
+      try {
+        storage?.setItem(UI_SCALE_STORAGE_KEY, '1.2')
+      } catch {
+        // 迁移写回失败时仍在本次运行中使用新的最大档位。
+      }
+      return 1.2
+    }
     return isUiScale(value) ? value : 1
   } catch {
     return 1

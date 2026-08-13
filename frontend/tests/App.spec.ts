@@ -28,10 +28,10 @@ describe('App', () => {
     const wrapper = mount(App, { global: { plugins: [createPinia()] } })
 
     expect(document.documentElement.style.getPropertyValue('--ui-scale')).toBe('1.2')
-    await wrapper.get('[data-test="ui-scale"]').setValue('1.3')
+    await wrapper.get('[data-test="ui-scale"]').setValue('0.8')
 
-    expect(document.documentElement.style.getPropertyValue('--ui-scale')).toBe('1.3')
-    expect(localStorage.getItem(UI_SCALE_STORAGE_KEY)).toBe('1.3')
+    expect(document.documentElement.style.getPropertyValue('--ui-scale')).toBe('0.8')
+    expect(localStorage.getItem(UI_SCALE_STORAGE_KEY)).toBe('0.8')
   })
 
   it('keeps the library grid layout when game details open', async () => {
