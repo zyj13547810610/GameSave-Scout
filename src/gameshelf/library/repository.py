@@ -54,6 +54,13 @@ class LibraryRepository:
             ).fetchone()
         return None if row is None else game_from_row(row)
 
+    def get_game_by_install_path_key(self, path_key: str) -> Game | None:
+        with self._factory.connect(readonly=True) as connection:
+            row = connection.execute(
+                "SELECT * FROM games WHERE install_path_key = ?", (path_key,)
+            ).fetchone()
+        return None if row is None else game_from_row(row)
+
 
 def scan_root_from_row(row: sqlite3.Row) -> ScanRoot:
     return ScanRoot(

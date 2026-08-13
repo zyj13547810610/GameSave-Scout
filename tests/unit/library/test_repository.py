@@ -27,3 +27,15 @@ def test_repository_round_trips_immutable_root_and_game(
 
 def test_get_game_returns_none_for_unknown_id(library_service: LibraryService) -> None:
     assert library_service.get_game("not-there") is None
+
+
+def test_get_game_by_install_path_key_returns_matching_game(
+    library_service: LibraryService,
+) -> None:
+    root = library_service.add_root(r"D:\Games", "children", 1, [])
+    game = library_service.create_game_for_test(root.id, "Alice", "Alice")
+    assert game.install_path_key is not None
+    repository = library_service._repository  # noqa: SLF001
+
+    assert repository.get_game_by_install_path_key(game.install_path_key) == game
+    assert repository.get_game_by_install_path_key(r"d:\games\missing") is None

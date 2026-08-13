@@ -124,7 +124,9 @@ def reconcile_session(
                     detected_main_exe_relpath = ?,
                     main_exe_relpath = CASE
                         WHEN main_exe_is_manual = 1 THEN main_exe_relpath ELSE ? END,
-                    exe_arch = ?, updated_at = ?, missing_since = NULL
+                    exe_arch = CASE
+                        WHEN main_exe_is_manual = 1 THEN exe_arch ELSE ? END,
+                    updated_at = ?, missing_since = NULL
                 WHERE id = ?
                 """,
                 (

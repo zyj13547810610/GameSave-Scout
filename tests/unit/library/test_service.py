@@ -1,6 +1,9 @@
+from pathlib import Path
+
 import pytest
 
 from gameshelf.library.service import InvalidRootConfiguration, LibraryService
+from gameshelf.scanning.pe_metadata import PeMetadata
 
 
 def test_add_root_deduplicates_by_windows_key(
@@ -76,3 +79,26 @@ def test_exclusions_cannot_be_absolute_or_escape_parent(
 ) -> None:
     with pytest.raises(InvalidRootConfiguration):
         library_service.add_root(r"D:\Games", "children", 1, [exclusion])
+
+
+def test_set_game_executable_stores_the_selected_pe_architecture(
+    tmp_path: Path, library_service: LibraryService, monkeypatch
+) -> None:
+    root_path = tmp_path / "games"
+    game_path = root_path / "Alice"
+    game_path.mkdir(parents=True)
+    executable = game_path / "Alice.exe"
+    executable.write_bytes(b"MZ")
+    root = library_service.add_root(str(root_path), "children", 1, [])
+    game = library_service.create_game_for_test(root.id, "Alice", "Alice")
+    monkeypatch.setattr(
+        "gameshelf.library.service.read_pe_metadata",
+        lambda _: PeMetadata("", "", "", "x64"),
+        raising=False,
+    )
+
+    updated = library_service.set_game_executable(game.id, str(executable))
+
+    assert updated.main_exe_relpath == "Alice.exe"
+    assert updated.main_exe_is_manual is True
+    assert updated.exe_arch == "x64"

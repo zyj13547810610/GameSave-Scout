@@ -13,6 +13,8 @@ from gameshelf.engines.service import EngineDetectionService
 from gameshelf.library.models import Game
 from gameshelf.library.repository import LibraryRepository
 from gameshelf.library.service import LibraryService
+from gameshelf.scanning.executable_ranker import ExecutableCandidate
+from gameshelf.scanning.pe_metadata import PeMetadata
 from gameshelf.scanning.service import ScanService
 
 
@@ -96,6 +98,66 @@ def test_detector_failure_preserves_previous_detected_and_adopted_engine(
     assert refreshed.engine_evidence == game.engine_evidence
 
 
+def test_rescan_uses_valid_manual_executable_for_engine_detection(
+    engine_scan_harness: "EngineScanHarness", monkeypatch
+) -> None:
+    engine_scan_harness.game_path.mkdir()
+    wrong_tool = engine_scan_harness.game_path / "WrongTool.exe"
+    game_executable = engine_scan_harness.game_path / "Game.exe"
+    wrong_tool.write_bytes(b"MZ")
+    game_executable.write_bytes(b"MZ")
+    game = engine_scan_harness.rescan()
+    monkeypatch.setattr(
+        "gameshelf.library.service.read_pe_metadata",
+        lambda _: PeMetadata("", "", "", "x64"),
+        raising=False,
+    )
+    engine_scan_harness.library.set_game_executable(game.id, str(game_executable))
+    (engine_scan_harness.game_path / "UnityPlayer.dll").write_bytes(b"unity")
+    data = engine_scan_harness.game_path / "Game_Data"
+    data.mkdir()
+    (data / "globalgamemanagers").write_bytes(b"unity")
+    monkeypatch.setattr(
+        "gameshelf.scanning.service.rank_executables",
+        lambda _: (
+            ExecutableCandidate("WrongTool.exe", 100, "x86", ("test",)),
+            ExecutableCandidate("Game.exe", 10, "x64", ("test",)),
+        ),
+    )
+
+    refreshed = engine_scan_harness.rescan()
+
+    assert engine_scan_harness.detected_executable(game.id) == "WrongTool.exe"
+    assert refreshed.main_exe_relpath == "Game.exe"
+    assert refreshed.main_exe_is_manual is True
+    assert refreshed.exe_arch == "x64"
+    assert refreshed.detected_engine_id == "unity"
+
+
+def test_invalid_manual_executable_falls_back_and_adds_warning(
+    engine_scan_harness: "EngineScanHarness",
+) -> None:
+    engine_scan_harness.game_path.mkdir()
+    (engine_scan_harness.game_path / "Game.exe").write_bytes(b"MZ")
+    game = engine_scan_harness.rescan()
+    engine_scan_harness.set_stored_manual_executable(
+        game.id, "../Outside.exe", architecture="x64"
+    )
+    (engine_scan_harness.game_path / "UnityPlayer.dll").write_bytes(b"unity")
+    data = engine_scan_harness.game_path / "Game_Data"
+    data.mkdir()
+    (data / "globalgamemanagers").write_bytes(b"unity")
+
+    summary = engine_scan_harness.scan()
+    refreshed = summary.games[0]
+
+    assert summary.warnings == 1
+    assert refreshed.main_exe_relpath == "../Outside.exe"
+    assert refreshed.main_exe_is_manual is True
+    assert refreshed.exe_arch == "x64"
+    assert refreshed.detected_engine_id == "unity"
+
+
 class EngineScanHarness:
     def __init__(
         self,
@@ -135,13 +197,38 @@ class EngineScanHarness:
         (data / "globalgamemanagers").write_bytes(b"synthetic")
 
     def rescan(self) -> Game:
-        summary = self.scanner.scan_root(
+        summary = self.scan()
+        assert len(summary.games) == 1
+        return summary.games[0]
+
+    def scan(self):
+        return self.scanner.scan_root(
             self.root_id,
             "full",
             TaskContext(Event(), lambda *_: None),
         )
-        assert len(summary.games) == 1
-        return summary.games[0]
+
+    def detected_executable(self, game_id: str) -> str | None:
+        with self.factory.connect(readonly=True) as connection:
+            row = connection.execute(
+                "SELECT detected_main_exe_relpath FROM games WHERE id = ?", (game_id,)
+            ).fetchone()
+        assert row is not None
+        return row[0]
+
+    def set_stored_manual_executable(
+        self, game_id: str, relative_path: str, *, architecture: str
+    ) -> None:
+        self.writer.submit(
+            lambda connection: connection.execute(
+                """
+                UPDATE games
+                SET main_exe_relpath = ?, main_exe_is_manual = 1, exe_arch = ?
+                WHERE id = ?
+                """,
+                (relative_path, architecture, game_id),
+            ).rowcount
+        ).result()
 
     def set_manual_engine(
         self, game_id: str, engine_id: str | None, variant: str | None

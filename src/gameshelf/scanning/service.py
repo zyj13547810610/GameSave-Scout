@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
+import stat
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -21,11 +23,19 @@ from gameshelf.library.service import RootNotFoundError
 from gameshelf.scanning.discovery import RootUnavailableError, enumerate_candidates
 from gameshelf.scanning.executable_ranker import rank_executables
 from gameshelf.scanning.models import DirectoryCandidate
-from gameshelf.scanning.path_keys import is_same_or_child, windows_path_key
+from gameshelf.scanning.path_keys import (
+    PathTraversalError,
+    expand_relative,
+    is_same_or_child,
+    windows_path_key,
+)
 from gameshelf.scanning.reconcile import MoveSuggestion, reconcile_session
 
 type ScanKind = Literal["quick", "full"]
 type ScanStatus = Literal["completed", "cancelled", "failed", "unavailable"]
+
+logger = logging.getLogger(__name__)
+_REPARSE_FLAG = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
 
 
 @dataclass(frozen=True)
@@ -73,11 +83,22 @@ class ScanService:
                     continue
                 ranked = rank_executables(candidate.path)
                 recommendation = ranked[0] if ranked else None
-                executable = (
+                automatic_executable = (
                     candidate.path.joinpath(*recommendation.relative_path.split("/"))
                     if recommendation is not None
                     else None
                 )
+                existing = self._repository.get_game_by_install_path_key(install_key)
+                executable, manual_warning = _detection_executable(
+                    candidate.path, existing, automatic_executable
+                )
+                if manual_warning:
+                    warnings += 1
+                    logger.warning(
+                        "Stored manual executable is unavailable or unsafe for %s; "
+                        "using the automatic recommendation for engine detection.",
+                        candidate.path,
+                    )
                 detection = (
                     self._engine_detection.detect(candidate.path, executable)
                     if self._engine_detection is not None
@@ -205,7 +226,9 @@ class ScanService:
                         WHEN ? THEN engine_evidence_json ELSE ? END,
                     engine_rules_version = CASE
                         WHEN ? THEN engine_rules_version ELSE ? END,
-                    exe_arch = ?, updated_at = ?
+                    exe_arch = CASE WHEN main_exe_is_manual = 1
+                        THEN exe_arch ELSE ? END,
+                    updated_at = ?
                 WHERE id = ?
                 """,
                 (
@@ -399,3 +422,39 @@ def _engine_payload(outcome: DetectionOutcome) -> dict[str, object]:
 
 class ConfirmMoveError(ValueError):
     """Raised when a move suggestion is stale or cannot be verified."""
+
+
+def _detection_executable(
+    game_dir: Path,
+    existing: Game | None,
+    automatic: Path | None,
+) -> tuple[Path | None, bool]:
+    if existing is None or not existing.main_exe_is_manual:
+        return automatic, False
+    relative = existing.main_exe_relpath
+    if relative is None:
+        return automatic, True
+    try:
+        selected = expand_relative(game_dir, relative)
+    except PathTraversalError:
+        return automatic, True
+    if selected.suffix.casefold() != ".exe" or not _safe_regular_file(
+        selected, game_dir
+    ):
+        return automatic, True
+    return selected, False
+
+
+def _safe_regular_file(path: Path, root: Path) -> bool:
+    try:
+        info = path.stat(follow_symlinks=False)
+        resolved_root = root.resolve(strict=True)
+        resolved_path = path.resolve(strict=True)
+    except OSError:
+        return False
+    return (
+        stat.S_ISREG(info.st_mode)
+        and not path.is_symlink()
+        and not bool(getattr(info, "st_file_attributes", 0) & _REPARSE_FLAG)
+        and resolved_path.is_relative_to(resolved_root)
+    )

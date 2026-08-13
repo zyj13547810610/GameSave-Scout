@@ -23,6 +23,7 @@ from gameshelf.scanning.path_keys import (
     is_same_or_child,
     windows_path_key,
 )
+from gameshelf.scanning.pe_metadata import read_pe_metadata
 
 
 class InvalidRootConfiguration(ValueError):
@@ -225,10 +226,14 @@ class LibraryService:
             expand_relative(install_dir, relative)
         except PathTraversalError as error:
             raise InvalidExecutableError("The executable leaves the game directory.") from error
+        architecture = read_pe_metadata(selected).architecture
         return self._update_game(
             game.id,
-            "main_exe_relpath = ?, main_exe_is_manual = 1, updated_at = ?",
-            (relative, _utc_now()),
+            """
+            main_exe_relpath = ?, main_exe_is_manual = 1, exe_arch = ?,
+            updated_at = ?
+            """,
+            (relative, architecture, _utc_now()),
         )
 
     def set_game_engine(

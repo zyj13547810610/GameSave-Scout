@@ -77,12 +77,13 @@ def test_manual_executable_survives_new_auto_recommendation(
     root = scan_harness.add_root(mode="children")
     scan_harness.mkdir("GameA", exes=["A.exe", "Better.exe"])
     game = scan_harness.scan(root.id, "full").games[0]
-    scan_harness.set_manual_exe(game.id, "A.exe")
+    scan_harness.set_manual_exe(game.id, "A.exe", architecture="x64")
 
     scan_harness.scan(root.id, "full")
 
     refreshed = scan_harness.game(game.id)
     assert refreshed.main_exe_relpath == "A.exe"
+    assert refreshed.exe_arch == "x64"
     assert scan_harness.detected_executable(game.id) is not None
 
 
@@ -159,6 +160,7 @@ def test_confirmed_move_preserves_original_game_id_and_removes_temporary_candida
     (moved_game / "Game.exe").write_bytes(b"not-a-real-pe")
     moved_root = scan_harness.add_root(mode="children", path=moved_root_path)
     summary = scan_harness.scan(moved_root.id, "full")
+    scan_harness.set_exe_arch(summary.games[0].id, "x64")
     suggestion = summary.move_suggestions[0]
 
     confirmed = scan_harness.scanner.confirm_move(
@@ -170,7 +172,38 @@ def test_confirmed_move_preserves_original_game_id_and_removes_temporary_candida
     assert confirmed.id == original.id
     assert confirmed.scan_root_id == moved_root.id
     assert confirmed.status == "installed"
+    assert confirmed.exe_arch == "x64"
     assert scan_harness.games() == (confirmed,)
+
+
+def test_confirmed_move_preserves_architecture_for_a_manual_executable(
+    scan_harness: "ScanHarness",
+) -> None:
+    original_root = scan_harness.add_root(mode="children")
+    scan_harness.mkdir("GameA", exes=["Game.exe"])
+    original = scan_harness.scan(original_root.id, "full").games[0]
+    scan_harness.set_manual_exe(original.id, "Game.exe", architecture="x86")
+    scan_harness.remove_dir("GameA")
+    scan_harness.scan(original_root.id, "full")
+
+    moved_root_path = scan_harness.root_path.parent / "moved-manual-game"
+    moved_game = moved_root_path / "GameA"
+    moved_game.mkdir(parents=True)
+    (moved_game / "Game.exe").write_bytes(b"MZ")
+    moved_root = scan_harness.add_root(mode="children", path=moved_root_path)
+    summary = scan_harness.scan(moved_root.id, "full")
+    scan_harness.set_exe_arch(summary.games[0].id, "x64")
+    suggestion = summary.move_suggestions[0]
+
+    confirmed = scan_harness.scanner.confirm_move(
+        summary.session_id,
+        suggestion.existing_game_id,
+        suggestion.candidate_relative_dir,
+    )
+
+    assert confirmed.main_exe_relpath == "Game.exe"
+    assert confirmed.main_exe_is_manual is True
+    assert confirmed.exe_arch == "x86"
 
 
 @pytest.mark.parametrize(
@@ -309,15 +342,25 @@ class ScanHarness:
         assert game is not None
         return game
 
-    def set_manual_exe(self, game_id: str, relative_path: str) -> None:
+    def set_manual_exe(
+        self, game_id: str, relative_path: str, *, architecture: str = "unknown"
+    ) -> None:
         self.writer.submit(
             lambda connection: connection.execute(
                 """
                 UPDATE games
-                SET main_exe_relpath = ?, main_exe_is_manual = 1
+                SET main_exe_relpath = ?, main_exe_is_manual = 1, exe_arch = ?
                 WHERE id = ?
                 """,
-                (relative_path, game_id),
+                (relative_path, architecture, game_id),
+            ).rowcount
+        ).result()
+
+    def set_exe_arch(self, game_id: str, architecture: str) -> None:
+        self.writer.submit(
+            lambda connection: connection.execute(
+                "UPDATE games SET exe_arch = ? WHERE id = ?",
+                (architecture, game_id),
             ).rowcount
         ).result()
 
