@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 import shutil
+import threading
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping
@@ -61,6 +63,12 @@ class UpdateResult:
     metadata: SnapshotMetadata | None
 
 
+@dataclass(frozen=True, slots=True)
+class SnapshotPair:
+    manifest: Path
+    metadata: Path
+
+
 class LudusaviProvider:
     UPDATE_URL = (
         "https://raw.githubusercontent.com/mtkennerly/"
@@ -86,64 +94,86 @@ class LudusaviProvider:
         self.active_metadata = active_dir / "manifest-meta.json"
         self.previous_dir = active_dir / "previous"
         self._http_open = http_open or _urllib_open
+        self._lock = threading.RLock()
 
     def ensure_initial_snapshot(self) -> None:
-        self.active_dir.mkdir(parents=True, exist_ok=True)
-        self.temp_dir.mkdir(parents=True, exist_ok=True)
-        self.previous_dir.mkdir(parents=True, exist_ok=True)
-        if self.active_manifest.is_file() and self.active_metadata.is_file():
-            return
+        with self._lock:
+            self.active_dir.mkdir(parents=True, exist_ok=True)
+            self.temp_dir.mkdir(parents=True, exist_ok=True)
+            self.previous_dir.mkdir(parents=True, exist_ok=True)
+            active = SnapshotPair(self.active_manifest, self.active_metadata)
+            try:
+                self._validate_pair(active, allow_crlf_repair=False)
+                return
+            except SnapshotUpdateError:
+                pass
 
-        resource_manifest = self.resource_dir / "manifest.yaml"
-        resource_metadata = self.resource_dir / "manifest-meta.json"
-        if not resource_manifest.is_file() or not resource_metadata.is_file():
-            raise SnapshotUpdateError("缺少内置 Ludusavi 清单或元数据。")
-        metadata = _read_metadata(resource_metadata)
-        manifest_bytes = _validated_manifest_bytes(
-            resource_manifest,
-            metadata.sha256,
-            allow_crlf_repair=True,
-        )
-        self._atomic_write_bytes(manifest_bytes, self.active_manifest)
-        self._atomic_copy(resource_metadata, self.active_metadata)
+            if self._restore_latest_valid_backup():
+                return
+
+            resource = SnapshotPair(
+                self.resource_dir / "manifest.yaml",
+                self.resource_dir / "manifest-meta.json",
+            )
+            try:
+                _, manifest_bytes = self._validate_pair(
+                    resource,
+                    allow_crlf_repair=True,
+                )
+            except SnapshotUpdateError as error:
+                raise SnapshotUpdateError(
+                    f"缺少有效的内置 Ludusavi 清单或元数据：{error}"
+                ) from error
+            self._install_pair_bytes(manifest_bytes, resource.metadata.read_bytes())
 
     def load(self) -> LudusaviManifest:
-        self.ensure_initial_snapshot()
-        with self.active_manifest.open(encoding="utf-8") as stream:
-            return parse_manifest(stream, skip_invalid_paths=True)
+        with self._lock:
+            self.ensure_initial_snapshot()
+            with self.active_manifest.open(encoding="utf-8") as stream:
+                return parse_manifest(stream, skip_invalid_paths=True)
 
     def metadata(self) -> SnapshotMetadata:
-        self.ensure_initial_snapshot()
-        return _read_metadata(self.active_metadata)
+        with self._lock:
+            self.ensure_initial_snapshot()
+            return _read_metadata(self.active_metadata)
 
     def update_explicitly(self) -> UpdateResult:
-        self.ensure_initial_snapshot()
-        current = self.metadata()
-        headers = {"User-Agent": "GameShelf/0.1 Ludusavi snapshot updater"}
-        if current.etag:
-            headers["If-None-Match"] = current.etag
-        try:
-            response = self._http_open(
-                self.update_url,
-                headers,
-                DOWNLOAD_TIMEOUT_SECONDS,
-            )
-            with response:
-                if response.status == 304:
-                    return UpdateResult("not_modified", "Ludusavi 清单已是最新。", current)
-                if response.status != 200:
-                    return UpdateResult(
-                        "failed",
-                        f"Ludusavi 服务器返回 HTTP {response.status}。",
-                        current,
-                    )
-                length = _content_length(response)
-                if length is not None and length > MAX_DOWNLOAD_BYTES:
-                    return UpdateResult("invalid", "下载内容超过 64 MiB 限制。", current)
-                etag = response.getheader("ETag")
-                return self._download_and_replace(response, current, etag)
-        except (OSError, urllib.error.URLError) as error:
-            return UpdateResult("failed", f"无法下载 Ludusavi 清单：{error}", current)
+        with self._lock:
+            self.ensure_initial_snapshot()
+            current = self.metadata()
+            headers = {"User-Agent": "GameShelf/0.1 Ludusavi snapshot updater"}
+            if current.etag:
+                headers["If-None-Match"] = current.etag
+            try:
+                response = self._http_open(
+                    self.update_url,
+                    headers,
+                    DOWNLOAD_TIMEOUT_SECONDS,
+                )
+                with response:
+                    if response.status == 304:
+                        return UpdateResult(
+                            "not_modified",
+                            "Ludusavi 清单已是最新。",
+                            current,
+                        )
+                    if response.status != 200:
+                        return UpdateResult(
+                            "failed",
+                            f"Ludusavi 服务器返回 HTTP {response.status}。",
+                            current,
+                        )
+                    length = _content_length(response)
+                    if length is not None and length > MAX_DOWNLOAD_BYTES:
+                        return UpdateResult(
+                            "invalid",
+                            "下载内容超过 64 MiB 限制。",
+                            current,
+                        )
+                    etag = response.getheader("ETag")
+                    return self._download_and_replace(response, current, etag)
+            except (OSError, urllib.error.URLError) as error:
+                return UpdateResult("failed", f"无法下载 Ludusavi 清单：{error}", current)
 
     def _download_and_replace(
         self,
@@ -176,12 +206,14 @@ class LudusaviProvider:
                 source_url=self.update_url,
                 upstream_commit=None,
             )
-            backup = self._backup_active()
+            backup = self._backup_active_pair()
+            if backup is None:
+                return UpdateResult("failed", "无法备份当前有效清单。", current)
             try:
                 os.replace(download, self.active_manifest)
                 _write_metadata_atomic(self.active_metadata, metadata, self.temp_dir)
             except OSError as error:
-                self._restore_backup(backup)
+                self._restore_pair(backup)
                 return UpdateResult("failed", f"替换清单失败，已恢复旧版本：{error}", current)
             self._prune_previous()
             return UpdateResult("updated", "Ludusavi 清单已更新。", metadata)
@@ -189,29 +221,109 @@ class LudusaviProvider:
             with suppress(OSError):
                 download.unlink(missing_ok=True)
 
-    def _backup_active(self) -> Path:
-        self.previous_dir.mkdir(parents=True, exist_ok=True)
-        stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-        backup = self.previous_dir / f"manifest-{stamp}-{uuid4().hex[:8]}.yaml"
-        shutil.copy2(self.active_manifest, backup)
-        return backup
+    def _validate_pair(
+        self,
+        pair: SnapshotPair,
+        *,
+        allow_crlf_repair: bool,
+    ) -> tuple[SnapshotMetadata, bytes]:
+        if not pair.manifest.is_file() or not pair.metadata.is_file():
+            raise SnapshotUpdateError("Ludusavi 清单文件组不完整。")
+        metadata = _read_metadata(pair.metadata)
+        manifest_bytes = _validated_manifest_bytes(
+            pair.manifest,
+            metadata.sha256,
+            allow_crlf_repair=allow_crlf_repair,
+        )
+        _validate_manifest_bytes(manifest_bytes)
+        return metadata, manifest_bytes
 
-    def _restore_backup(self, backup: Path) -> None:
-        rollback = self.temp_dir / f"ludusavi-rollback-{uuid4().hex}.yaml"
-        with suppress(OSError):
-            shutil.copy2(backup, rollback)
-            os.replace(rollback, self.active_manifest)
-        with suppress(OSError):
-            rollback.unlink(missing_ok=True)
+    def _backup_active_pair(self) -> SnapshotPair | None:
+        with self._lock:
+            active = SnapshotPair(self.active_manifest, self.active_metadata)
+            try:
+                self._validate_pair(active, allow_crlf_repair=False)
+            except SnapshotUpdateError:
+                return None
+            self.previous_dir.mkdir(parents=True, exist_ok=True)
+            key = f"{datetime.now(UTC):%Y%m%dT%H%M%SZ}-{uuid4().hex[:8]}"
+            backup = SnapshotPair(
+                self.previous_dir / f"manifest-{key}.yaml",
+                self.previous_dir / f"manifest-{key}.json",
+            )
+            try:
+                shutil.copy2(active.manifest, backup.manifest)
+                shutil.copy2(active.metadata, backup.metadata)
+            except OSError:
+                with suppress(OSError):
+                    backup.manifest.unlink(missing_ok=True)
+                with suppress(OSError):
+                    backup.metadata.unlink(missing_ok=True)
+                raise
+            return backup
 
-    def _prune_previous(self) -> None:
-        backups = sorted(
-            self.previous_dir.glob("manifest-*.yaml"),
-            key=lambda path: (path.stat().st_mtime_ns, path.name),
+    def _restore_pair(self, pair: SnapshotPair) -> bool:
+        try:
+            _, manifest_bytes = self._validate_pair(
+                pair,
+                allow_crlf_repair=False,
+            )
+            self._install_pair_bytes(manifest_bytes, pair.metadata.read_bytes())
+        except (OSError, SnapshotUpdateError):
+            return False
+        return True
+
+    def _restore_latest_valid_backup(self) -> bool:
+        return any(self._restore_pair(pair) for pair in self._previous_pairs())
+
+    def _previous_pairs(self) -> list[SnapshotPair]:
+        pairs: list[SnapshotPair] = []
+        for manifest in self.previous_dir.glob("manifest-*.yaml"):
+            metadata = manifest.with_suffix(".json")
+            if metadata.is_file():
+                pairs.append(SnapshotPair(manifest, metadata))
+        return sorted(
+            pairs,
+            key=lambda pair: (
+                max(pair.manifest.stat().st_mtime_ns, pair.metadata.stat().st_mtime_ns),
+                pair.manifest.name,
+            ),
             reverse=True,
         )
-        for old in backups[2:]:
-            old.unlink()
+
+    def _prune_previous(self) -> None:
+        pairs = self._previous_pairs()
+        keep = {
+            path
+            for pair in pairs[:2]
+            for path in (pair.manifest, pair.metadata)
+        }
+        for path in self.previous_dir.glob("manifest-*.*"):
+            if path not in keep and path.suffix in {".yaml", ".json"}:
+                path.unlink()
+
+    def _install_pair_bytes(self, manifest_bytes: bytes, metadata_bytes: bytes) -> None:
+        manifest_temporary = self.temp_dir / f"manifest-{uuid4().hex}.tmp"
+        metadata_temporary = self.temp_dir / f"metadata-{uuid4().hex}.tmp"
+        replaced_manifest = False
+        try:
+            _write_bytes_fsynced(manifest_temporary, manifest_bytes)
+            _write_bytes_fsynced(metadata_temporary, metadata_bytes)
+            os.replace(manifest_temporary, self.active_manifest)
+            replaced_manifest = True
+            os.replace(metadata_temporary, self.active_metadata)
+        except OSError:
+            if replaced_manifest:
+                with suppress(OSError):
+                    self.active_manifest.unlink(missing_ok=True)
+                with suppress(OSError):
+                    self.active_metadata.unlink(missing_ok=True)
+            raise
+        finally:
+            with suppress(OSError):
+                manifest_temporary.unlink(missing_ok=True)
+            with suppress(OSError):
+                metadata_temporary.unlink(missing_ok=True)
 
     def _atomic_copy(self, source: Path, destination: Path) -> None:
         temporary = self.temp_dir / f"copy-{uuid4().hex}.tmp"
@@ -260,6 +372,13 @@ def _validate_manifest_file(path: Path) -> None:
         parse_manifest(stream, skip_invalid_paths=True)
 
 
+def _validate_manifest_bytes(content: bytes) -> None:
+    try:
+        parse_manifest(io.StringIO(content.decode("utf-8")), skip_invalid_paths=True)
+    except (InvalidLudusaviManifest, UnicodeError) as error:
+        raise SnapshotUpdateError(f"Ludusavi 清单内容无效：{error}") from error
+
+
 def _validated_manifest_bytes(
     path: Path,
     expected_sha256: str,
@@ -285,6 +404,13 @@ def _sha256_file(path: Path) -> str:
         while chunk := stream.read(_CHUNK_BYTES):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _write_bytes_fsynced(path: Path, content: bytes) -> None:
+    with path.open("xb") as stream:
+        stream.write(content)
+        stream.flush()
+        os.fsync(stream.fileno())
 
 
 def _read_metadata(path: Path) -> SnapshotMetadata:

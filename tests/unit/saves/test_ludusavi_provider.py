@@ -182,6 +182,49 @@ def test_successful_update_atomically_replaces_manifest_and_metadata(
     assert len(list(service.previous_dir.glob("*.yaml"))) == 1
 
 
+def test_invalid_active_pair_restores_latest_valid_backup(
+    provider: tuple[LudusaviProvider, FakeHttp],
+) -> None:
+    service, fake_http = provider
+    service.ensure_initial_snapshot()
+    backup = service._backup_active_pair()
+    assert backup is not None
+    service.active_manifest.write_bytes(b"broken")
+
+    loaded = service.load()
+
+    assert loaded.games["Alice"].canonical_name == "Alice"
+    assert service.active_manifest.read_bytes() == OLD_MANIFEST
+    assert fake_http.calls == []
+
+
+def test_partial_active_pair_is_not_used(
+    provider: tuple[LudusaviProvider, FakeHttp],
+) -> None:
+    service, _ = provider
+    service.ensure_initial_snapshot()
+    service.active_metadata.unlink()
+
+    service.ensure_initial_snapshot()
+
+    assert service.active_manifest.read_bytes() == OLD_MANIFEST
+    assert service.active_metadata.is_file()
+
+
+def test_backup_pairs_are_pruned_together(
+    provider: tuple[LudusaviProvider, FakeHttp],
+) -> None:
+    service, _ = provider
+    service.ensure_initial_snapshot()
+    for _ in range(3):
+        assert service._backup_active_pair() is not None
+
+    service._prune_previous()
+
+    assert len(list(service.previous_dir.glob("*.yaml"))) == 2
+    assert len(list(service.previous_dir.glob("*.json"))) == 2
+
+
 def test_update_rejects_non_https_url_and_oversize_response(
     provider: tuple[LudusaviProvider, FakeHttp],
     tmp_path: Path,
