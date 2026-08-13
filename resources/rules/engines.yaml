@@ -1,4 +1,4 @@
-version: "2026.08.12-1"
+version: "2026.08.13-1"
 rules:
   - id: tyrano
     label: TyranoScript
@@ -95,7 +95,10 @@ rules:
     threshold: 0.70
     all:
       - { op: pe_field_contains, path: SiglusEngine.exe, field: product_name, value: Siglus, weight: 0.6 }
-      - { op: path_exists, path: Scene.pck, weight: 0.4 }
+    any:
+      - { op: path_exists, path: Scene.pck, weight: 0.1334 }
+      - { op: path_exists, path: Scene.chs, weight: 0.1333 }
+      - { op: path_exists, path: Scene.gbk, weight: 0.1333 }
   - id: bgi_ethornell
     label: BGI/Ethornell
     threshold: 0.70
