@@ -32,6 +32,15 @@ class ExecutableCandidate:
     evidence: tuple[str, ...]
 
 
+def is_potential_game_executable_name(name: str) -> bool:
+    """Return whether a filename can represent a game executable."""
+    path = Path(name)
+    if path.suffix.casefold() != ".exe":
+        return False
+    stem = path.stem.casefold()
+    return stem != "config" and not stem.startswith(_REJECTED_PREFIXES)
+
+
 def rank_executables(game_dir: Path) -> tuple[ExecutableCandidate, ...]:
     candidates = [_rank(path, game_dir) for path in _find_executables(game_dir)]
     return tuple(
@@ -56,10 +65,7 @@ def _find_executables(game_dir: Path) -> tuple[Path, ...]:
             key=lambda name: (name.casefold(), name),
         )
         for name in sorted(files, key=lambda value: (value.casefold(), value)):
-            if not name.casefold().endswith(".exe"):
-                continue
-            stem = Path(name).stem.casefold()
-            if stem.startswith(_REJECTED_PREFIXES):
+            if not is_potential_game_executable_name(name):
                 continue
             found.append(current_path / name)
     return tuple(found)
@@ -107,10 +113,6 @@ def _rank(path: Path, game_dir: Path) -> ExecutableCandidate:
     elif size >= 1024 * 1024:
         score += 6
         evidence.append("medium_executable")
-
-    if path.stem.casefold() == "config":
-        score -= 60
-        evidence.append("auxiliary_configuration_tool")
 
     return ExecutableCandidate(relative, score, metadata.architecture, tuple(evidence))
 

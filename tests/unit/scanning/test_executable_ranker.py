@@ -1,6 +1,9 @@
 from pathlib import Path
 
-from gameshelf.scanning.executable_ranker import rank_executables
+from gameshelf.scanning.executable_ranker import (
+    is_potential_game_executable_name,
+    rank_executables,
+)
 from gameshelf.scanning.pe_metadata import PeMetadata, read_pe_metadata
 
 
@@ -39,7 +42,14 @@ def test_malformed_pe_is_never_executed_and_remains_low_confidence(
     assert read_pe_metadata(executable) == PeMetadata("", "", "", "unknown")
 
 
-def test_ranker_excludes_support_directories_and_demotes_config(
+def test_auxiliary_executable_names_are_not_potential_games() -> None:
+    assert is_potential_game_executable_name("Game.exe") is True
+    assert is_potential_game_executable_name("setup.exe") is False
+    assert is_potential_game_executable_name("CONFIG.EXE") is False
+    assert is_potential_game_executable_name("readme.txt") is False
+
+
+def test_ranker_excludes_support_directories_and_auxiliary_executables(
     tmp_path: Path, monkeypatch
 ) -> None:
     (tmp_path / "tools").mkdir()
@@ -53,9 +63,7 @@ def test_ranker_excludes_support_directories_and_demotes_config(
 
     ranked = rank_executables(tmp_path)
 
-    assert [item.relative_path for item in ranked] == ["Game.exe", "config.exe"]
-    assert "auxiliary_configuration_tool" in ranked[1].evidence
-    assert ranked[1].score < ranked[0].score
+    assert [item.relative_path for item in ranked] == ["Game.exe"]
 
 
 def test_ranking_is_deterministic_for_equal_candidates(tmp_path: Path, monkeypatch) -> None:
