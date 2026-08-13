@@ -56,6 +56,7 @@ def test_recursive_mode_continues_below_directory_with_only_auxiliary_exes(
     game.mkdir(parents=True)
     (container / "setup.exe").write_bytes(b"MZ")
     (container / "config.exe").write_bytes(b"MZ")
+    (container / "UnityCrashHandler32.exe").write_bytes(b"MZ")
     (game / "Game.exe").write_bytes(b"MZ")
     root = make_root(root_path, mode="recursive", depth=2)
 
