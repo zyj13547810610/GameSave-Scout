@@ -20,6 +20,7 @@ from gameshelf.saves.custom_manifest_provider import (
 from gameshelf.saves.engine_hints import EngineSaveHintProvider
 from gameshelf.saves.ludusavi_models import LudusaviManifest
 from gameshelf.saves.ludusavi_parser import parse_manifest
+from gameshelf.saves.ludusavi_provider import SnapshotUpdateError
 from gameshelf.saves.repository import SaveLocationRepository
 from gameshelf.saves.service import SaveLocationService
 from gameshelf.saves.static_discovery import StaticSaveDiscovery
@@ -32,6 +33,11 @@ class FakeLudusaviProvider:
 
     def load(self) -> LudusaviManifest:
         return self.manifest
+
+
+class UnavailableLudusaviProvider:
+    def load(self) -> LudusaviManifest:
+        raise SnapshotUpdateError("内置清单损坏")
 
 
 @dataclass
@@ -144,3 +150,18 @@ def test_confirmed_location_is_never_suggested_again(
     static_harness.save_service.accept_suggestion(static_harness.game_id, suggestion)
 
     assert static_harness.discovery.suggest_for_game(static_harness.game_id) == ()
+
+
+def test_static_discovery_skips_unavailable_official_manifest(
+    static_harness: StaticHarness,
+) -> None:
+    static_harness.discovery._ludusavi_provider = UnavailableLudusaviProvider()
+    static_harness.discovery.invalidate_ludusavi()
+
+    suggestions = static_harness.discovery.suggest_for_game(static_harness.game_id)
+
+    assert suggestions
+    assert {evidence.source for item in suggestions for evidence in item.source_evidence} == {
+        "custom",
+        "engine",
+    }

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 from collections.abc import Callable, Mapping
 from dataclasses import replace
 from pathlib import Path
@@ -15,6 +16,7 @@ from gameshelf.saves.custom_manifest_provider import CustomManifestLoadResult
 from gameshelf.saves.engine_hints import EngineSaveHintProvider
 from gameshelf.saves.ludusavi_matcher import LudusaviMatcher
 from gameshelf.saves.ludusavi_models import LudusaviManifest, ManifestMatch
+from gameshelf.saves.ludusavi_provider import SnapshotUpdateError
 from gameshelf.saves.models import (
     SaveLocationSuggestion,
     SuggestionCategory,
@@ -25,6 +27,8 @@ from gameshelf.saves.models import (
 from gameshelf.saves.repository import SaveLocationRepository
 from gameshelf.saves.templates import InvalidPathTemplate, PathTemplateResolver
 from gameshelf.scanning.path_keys import windows_path_key
+
+logger = logging.getLogger(__name__)
 
 
 class LudusaviManifestProvider(Protocol):
@@ -86,18 +90,22 @@ class StaticSaveDiscovery:
                 )
             )
 
-        if self._official_manifest is None:
-            self._official_manifest = self._ludusavi_provider.load()
-        official_matches = LudusaviMatcher(
-            self._official_manifest, self._resolver
-        ).find(game, install_dir)
-        candidates.extend(
-            self._manifest_suggestions(
-                official_matches,
-                evidence_source="ludusavi",
-                source_detail="Ludusavi 官方清单",
+        try:
+            if self._official_manifest is None:
+                self._official_manifest = self._ludusavi_provider.load()
+            official_matches = LudusaviMatcher(
+                self._official_manifest,
+                self._resolver,
+            ).find(game, install_dir)
+            candidates.extend(
+                self._manifest_suggestions(
+                    official_matches,
+                    evidence_source="ludusavi",
+                    source_detail="Ludusavi 官方清单",
+                )
             )
-        )
+        except (SnapshotUpdateError, OSError) as error:
+            logger.warning("Ludusavi 官方清单不可用，已跳过：%s", error)
 
         metadata = self._engine_metadata_loader(game, install_dir)
         experimental = self._engine_is_experimental(game.engine_id)
