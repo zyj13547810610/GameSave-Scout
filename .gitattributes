@@ -1,3 +1,4 @@
 .gitattributes text eol=lf
 frontend/index.html text eol=lf
 resources/ui/** text eol=lf
+resources/manifests/ludusavi/manifest.yaml text eol=lf

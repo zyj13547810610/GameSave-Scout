@@ -60,14 +60,22 @@ class FakeHttp:
 
 @pytest.fixture
 def provider(tmp_path: Path) -> tuple[LudusaviProvider, FakeHttp]:
+    return _provider_with_resource(tmp_path, OLD_MANIFEST, OLD_MANIFEST)
+
+
+def _provider_with_resource(
+    tmp_path: Path,
+    resource_bytes: bytes,
+    expected_bytes: bytes,
+) -> tuple[LudusaviProvider, FakeHttp]:
     resources = tmp_path / "resources" / "ludusavi"
     resources.mkdir(parents=True)
-    (resources / "manifest.yaml").write_bytes(OLD_MANIFEST)
+    (resources / "manifest.yaml").write_bytes(resource_bytes)
     (resources / "manifest-meta.json").write_text(
         json.dumps(
             {
                 "etag": '"old"',
-                "sha256": hashlib.sha256(OLD_MANIFEST).hexdigest(),
+                "sha256": hashlib.sha256(expected_bytes).hexdigest(),
                 "downloadedAt": "2026-08-12T00:00:00+00:00",
                 "sourceUrl": LudusaviProvider.UPDATE_URL,
                 "upstreamCommit": "abc123",
@@ -86,6 +94,32 @@ def provider(tmp_path: Path) -> tuple[LudusaviProvider, FakeHttp]:
         ),
         fake_http,
     )
+
+
+def test_initial_snapshot_repairs_only_crlf_difference(tmp_path: Path) -> None:
+    expected = OLD_MANIFEST
+    service, fake_http = _provider_with_resource(
+        tmp_path,
+        expected.replace(b"\n", b"\r\n"),
+        expected,
+    )
+
+    service.ensure_initial_snapshot()
+
+    assert service.active_manifest.read_bytes() == expected
+    assert service.metadata().sha256 == hashlib.sha256(expected).hexdigest()
+    assert fake_http.calls == []
+
+
+def test_initial_snapshot_rejects_non_newline_content_change(tmp_path: Path) -> None:
+    service, _ = _provider_with_resource(
+        tmp_path,
+        OLD_MANIFEST + b"tampered",
+        OLD_MANIFEST,
+    )
+
+    with pytest.raises(SnapshotUpdateError, match="SHA-256"):
+        service.ensure_initial_snapshot()
 
 
 def test_initial_snapshot_copies_resource_without_network(

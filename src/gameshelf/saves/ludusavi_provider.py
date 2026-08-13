@@ -99,9 +99,12 @@ class LudusaviProvider:
         if not resource_manifest.is_file() or not resource_metadata.is_file():
             raise SnapshotUpdateError("缺少内置 Ludusavi 清单或元数据。")
         metadata = _read_metadata(resource_metadata)
-        if _sha256_file(resource_manifest) != metadata.sha256:
-            raise SnapshotUpdateError("内置 Ludusavi 清单的 SHA-256 与元数据不一致。")
-        self._atomic_copy(resource_manifest, self.active_manifest)
+        manifest_bytes = _validated_manifest_bytes(
+            resource_manifest,
+            metadata.sha256,
+            allow_crlf_repair=True,
+        )
+        self._atomic_write_bytes(manifest_bytes, self.active_manifest)
         self._atomic_copy(resource_metadata, self.active_metadata)
 
     def load(self) -> LudusaviManifest:
@@ -219,6 +222,18 @@ class LudusaviProvider:
             with suppress(OSError):
                 temporary.unlink(missing_ok=True)
 
+    def _atomic_write_bytes(self, content: bytes, destination: Path) -> None:
+        temporary = self.temp_dir / f"write-{uuid4().hex}.tmp"
+        try:
+            with temporary.open("xb") as stream:
+                stream.write(content)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, destination)
+        finally:
+            with suppress(OSError):
+                temporary.unlink(missing_ok=True)
+
 
 def _urllib_open(url: str, headers: dict[str, str], timeout: float) -> HttpResponse:
     request = urllib.request.Request(url, headers=headers, method="GET")
@@ -243,6 +258,25 @@ def _content_length(response: HttpResponse) -> int | None:
 def _validate_manifest_file(path: Path) -> None:
     with path.open(encoding="utf-8") as stream:
         parse_manifest(stream, skip_invalid_paths=True)
+
+
+def _validated_manifest_bytes(
+    path: Path,
+    expected_sha256: str,
+    *,
+    allow_crlf_repair: bool,
+) -> bytes:
+    content = path.read_bytes()
+    if hashlib.sha256(content).hexdigest() == expected_sha256:
+        return content
+    if allow_crlf_repair:
+        normalized = content.replace(b"\r\n", b"\n")
+        if (
+            normalized != content
+            and hashlib.sha256(normalized).hexdigest() == expected_sha256
+        ):
+            return normalized
+    raise SnapshotUpdateError("Ludusavi 清单的 SHA-256 与元数据不一致。")
 
 
 def _sha256_file(path: Path) -> str:
