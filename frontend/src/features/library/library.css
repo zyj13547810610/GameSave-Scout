@@ -38,7 +38,10 @@
 .detail-section { margin-top: 1rem; border: 1px solid #393641; border-radius: .75rem; background: #1a171f; }
 .detail-section-summary { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .85rem 1rem; cursor: pointer; font-weight: 700; }
 .detail-section-summary small { color: #918b9d; font-weight: 400; }
+.detail-section-summary.warning small { color: #f3cc87; }
 .detail-section-body { display: grid; gap: .75rem; border-top: 1px solid #302c38; padding: 1rem; }
+.engine-section .engine-details, .engine-section .engine-picker { margin-top: 0; border-top: 0; padding-top: 0; }
+.engine-section .engine-picker { border-top: 1px solid #302c38; padding-top: 1rem; }
 .game-drawer .game-settings-panel { min-height: auto; padding: 0; }
 .game-settings-panel .game-paths { margin: 0; }
 .path-link { width: fit-content; max-width: 100%; border: 0; padding: 0; color: #cfc2f5; background: transparent; text-align: left; overflow-wrap: anywhere; }

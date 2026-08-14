@@ -1,12 +1,20 @@
 <script setup lang="ts">
 import type { EngineDetection, EngineSelection } from '../../api/contracts'
 
-defineProps<{ adopted: EngineSelection; detected: EngineDetection | null }>()
+withDefaults(defineProps<{
+  adopted: EngineSelection
+  detected: EngineDetection | null
+  showHeading?: boolean
+}>(), { showHeading: true })
 </script>
 
 <template>
-  <section class="engine-details" aria-labelledby="engine-details-title">
-    <h3 id="engine-details-title">游戏引擎</h3>
+  <section
+    class="engine-details"
+    :aria-labelledby="showHeading ? 'engine-details-title' : undefined"
+    :aria-label="showHeading ? undefined : '引擎识别详情'"
+  >
+    <h3 v-if="showHeading" id="engine-details-title">游戏引擎</h3>
     <p><strong>当前：{{ adopted.label }}</strong><span v-if="adopted.manual" class="engine-flag">手动设置</span></p>
     <template v-if="detected">
       <p class="engine-suggestion">
