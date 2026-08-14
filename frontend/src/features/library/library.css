@@ -10,12 +10,19 @@
 .card-badge.no-exe { right: .4375rem; left: auto; color: #f7ce82; }
 .game-detail-layer { position: fixed; z-index: 20; inset: 0; }
 .drawer-backdrop { position: absolute; inset: 0; background: rgb(0 0 0 / 22%); }
-.game-drawer { position: absolute; z-index: 1; top: 0; right: 0; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-gutter: stable; width: min(26.25rem, 92vw); height: 100dvh; border-left: 1px solid #393641; padding: 1.5rem; background: #15131a; box-shadow: -1.25rem 0 3.75rem rgb(0 0 0 / 40%); }
+.game-drawer { position: absolute; z-index: 1; top: 0; right: 0; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-gutter: stable; width: clamp(32rem, 40vw, 48rem); max-width: 92vw; height: 100dvh; border-left: 1px solid #393641; padding: 1.5rem; background: #15131a; box-shadow: -1.25rem 0 3.75rem rgb(0 0 0 / 40%); }
 .drawer-close { position: absolute; z-index: 2; top: .75rem; right: .75rem; }
-.detail-cover-frame { display: grid; width: 100%; height: 22.5rem; place-items: center; border-radius: .75rem; background: #0e0d12; }
+.detail-overview { display: grid; gap: .75rem; text-align: center; }
+.detail-overview h2 { margin: 0; overflow-wrap: anywhere; }
+.detail-cover-frame { display: grid; width: 100%; height: min(22.5rem, 46vh); place-items: center; border-radius: .75rem; background: #0e0d12; }
 .detail-cover-frame img { width: 100%; height: 100%; object-fit: contain; }
 .detail-cover-frame .cover-placeholder { width: 15rem; height: 100%; }
-.detail-meta { color: #9893a4; }
+.detail-badges, .detail-quick-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: .5rem; }
+.detail-status-badge { display: inline-flex; align-items: center; border-radius: 999px; padding: .2rem .5rem; color: #bbb4c8; background: #292630; font-size: .72rem; }
+.detail-overview .status-message { margin: 0; }
+.detail-cover-actions { margin-top: 1rem; border: 1px solid #393641; border-radius: .75rem; padding: 1rem; background: #1a171f; }
+.detail-cover-actions .cover-actions { display: grid; gap: .75rem; }
+.detail-cover-actions .cover-actions h3, .detail-cover-actions .cover-actions p { margin: 0; }
 .engine-badge { display: inline-flex; width: fit-content; align-items: center; gap: .375rem; border: 1px solid #4b435e; border-radius: 999px; padding: .2rem .5rem; color: #cfc2f5; background: #211b2d; font-size: .72rem; }
 .engine-badge small { color: #f1c77c; }
 .engine-details, .engine-picker { margin-top: 1rem; border-top: 1px solid #302c38; padding-top: 1rem; }
@@ -47,9 +54,11 @@
 .path-link { width: fit-content; max-width: 100%; border: 0; padding: 0; color: #cfc2f5; background: transparent; text-align: left; overflow-wrap: anywhere; }
 .path-link:hover:not(:disabled) { color: #e3dafc; text-decoration: underline; }
 .advanced-settings { display: grid; gap: .65rem; margin-top: 0; }
-.record-danger-zone { display: grid; gap: .65rem; margin-top: 1rem; border-top: 1px solid #673541; padding-top: 1rem; }
-.record-danger-zone h3, .record-danger-zone p { margin: 0; }
+.record-danger-zone { border-color: #673541; background: #21171c; }
+.record-danger-zone .danger-summary, .record-danger-zone .danger-summary small { color: #ffadb8; }
 .record-danger-zone p { color: #aaa3b7; font-size: .8rem; }
+.record-danger-zone .detail-section-body { border-top-color: #673541; }
+.record-danger-zone .detail-section-body p { margin: 0; }
 .record-danger-zone button { justify-self: start; }
 .save-locations { margin-top: 1rem; }
 .save-location-body { gap: .75rem; }

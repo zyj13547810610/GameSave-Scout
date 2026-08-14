@@ -24,6 +24,74 @@ describe('GameDetailDrawer', () => {
     expect(wrapper.get('[data-test="detail-cover"]').attributes('src')).toBe('/cover/original')
   })
 
+  it('orders detail sections for common tasks and restores their default state', () => {
+    const wrapper = mount(GameDetailDrawer, {
+      props: {
+        game: fixtureGame({ mainExeRelpath: 'Alice.exe' }),
+        bridge: createMockBridge(),
+      },
+    })
+    const selectors = [
+      '[data-test="detail-overview"]',
+      '[data-test="detail-cover-actions"]',
+      '[data-test="game-settings-section"]',
+      '[data-test="save-locations-section"]',
+      '[data-test="engine-section"]',
+      '[data-test="record-section"]',
+    ]
+    const elements = selectors.map((selector) => wrapper.get(selector).element)
+
+    for (let index = 0; index < elements.length - 1; index += 1) {
+      expect(elements[index].compareDocumentPosition(elements[index + 1]))
+        .toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+    }
+    expect(wrapper.get('[data-test="game-settings-section"]').attributes()).toHaveProperty('open')
+    expect(wrapper.get('[data-test="save-locations-section"]').attributes()).toHaveProperty('open')
+    expect(wrapper.get('[data-test="engine-section"]').attributes()).not.toHaveProperty('open')
+    expect(wrapper.get('[data-test="record-section"]').attributes()).not.toHaveProperty('open')
+  })
+
+  it('launches the game and opens its install directory from overview shortcuts', async () => {
+    const launch = vi.fn(async () => ok({
+      gameId: 'game-1',
+      pid: 7,
+      launchedAt: '2026-08-14T00:00:00Z',
+    }))
+    const openDirectory = vi.fn(async () => ok({ opened: true }))
+    const bridge = createMockBridge({ launch_game: launch, open_install_directory: openDirectory })
+    const wrapper = mount(GameDetailDrawer, {
+      props: {
+        game: fixtureGame({ mainExeRelpath: 'Alice.exe' }),
+        bridge,
+      },
+    })
+
+    await wrapper.get('[data-test="quick-launch"]').trigger('click')
+    await wrapper.get('[data-test="quick-open-directory"]').trigger('click')
+
+    expect(launch).toHaveBeenCalledWith({ gameId: 'game-1' })
+    expect(openDirectory).toHaveBeenCalledWith({ gameId: 'game-1' })
+  })
+
+  it('shows shortcut failures near the overview actions', async () => {
+    const bridge = createMockBridge({
+      launch_game: async () => ({
+        ok: false,
+        error: { code: 'launch_failed', message: '启动失败：主程序不存在' },
+      }),
+    })
+    const wrapper = mount(GameDetailDrawer, {
+      props: {
+        game: fixtureGame({ mainExeRelpath: 'Alice.exe' }),
+        bridge,
+      },
+    })
+
+    await wrapper.get('[data-test="quick-launch"]').trigger('click')
+
+    expect(wrapper.get('[data-test="quick-message"]').text()).toBe('启动失败：主程序不存在')
+  })
+
   it('shows only one visible close button', () => {
     const wrapper = mount(GameDetailDrawer, {
       props: { game: fixtureGame(), bridge: createMockBridge() },
