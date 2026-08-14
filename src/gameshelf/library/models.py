@@ -10,6 +10,7 @@ from gameshelf.engines.models import EngineEvidence
 
 type ScanMode = Literal["children", "recursive"]
 type GameStatus = Literal["installed", "missing", "save_only"]
+type RemovableGameStatus = Literal["installed", "missing"]
 type ExecutableArchitecture = Literal["x86", "x64", "unknown"]
 
 
@@ -56,3 +57,17 @@ class Game:
     cover_revision: int
     last_launched_at: str | None
     missing_since: str | None
+
+
+@dataclass(frozen=True)
+class GameRemovalRequest:
+    game_id: str
+    expected_status: RemovableGameStatus
+
+
+@dataclass(frozen=True)
+class BatchGameRemovalResult:
+    installed_count: int
+    missing_count: int
+    updated_root_ids: tuple[str, ...]
+    managed_cover_relpaths: tuple[str, ...]

@@ -11,7 +11,14 @@ from pathlib import Path
 from uuid import uuid4
 
 from gameshelf.db.writer import DbWriter
-from gameshelf.library.models import Game, ScanMode, ScanRoot
+from gameshelf.library.models import (
+    BatchGameRemovalResult,
+    Game,
+    GameRemovalRequest,
+    RemovableGameStatus,
+    ScanMode,
+    ScanRoot,
+)
 from gameshelf.library.repository import (
     LibraryRepository,
     game_from_row,
@@ -55,6 +62,8 @@ class InvalidGameRemoval(ValueError):
 
 
 class LibraryService:
+    MAX_BATCH_REMOVALS = 500
+
     def __init__(self, repository: LibraryRepository, writer: DbWriter) -> None:
         self._repository = repository
         self._writer = writer
@@ -201,6 +210,114 @@ class LibraryService:
 
     def get_game(self, game_id: str) -> Game | None:
         return self._repository.get_game(game_id)
+
+    def remove_games(
+        self, requests: Sequence[GameRemovalRequest]
+    ) -> BatchGameRemovalResult:
+        if not requests:
+            raise InvalidGameRemoval("At least one game must be selected for removal.")
+        if len(requests) > self.MAX_BATCH_REMOVALS:
+            raise InvalidGameRemoval(
+                f"A batch removal cannot contain more than {self.MAX_BATCH_REMOVALS} items."
+            )
+
+        unique_requests: dict[str, RemovableGameStatus] = {}
+        for request in requests:
+            game_id = request.game_id.strip()
+            expected_status = request.expected_status
+            if not game_id or expected_status not in ("installed", "missing"):
+                raise InvalidGameRemoval("Each removal item must name a removable game status.")
+            previous = unique_requests.get(game_id)
+            if previous is not None and previous != expected_status:
+                raise InvalidGameRemoval(
+                    "A duplicate game cannot declare conflicting expected statuses."
+                )
+            unique_requests[game_id] = expected_status
+
+        def operation(connection: sqlite3.Connection) -> BatchGameRemovalResult:
+            installed_count = 0
+            missing_count = 0
+            root_additions: dict[str, list[str]] = {}
+            root_rows: dict[str, sqlite3.Row] = {}
+            cover_paths: list[str] = []
+            seen_cover_paths: set[str] = set()
+
+            for game_id, expected_status in unique_requests.items():
+                game = connection.execute(
+                    """
+                    SELECT status, scan_root_id, relative_dir,
+                           cover_original_relpath, cover_thumb_relpath
+                    FROM games WHERE id = ?
+                    """,
+                    (game_id,),
+                ).fetchone()
+                if game is None:
+                    raise GameNotFoundError(game_id)
+                if game["status"] != expected_status:
+                    raise InvalidGameRemoval(
+                        "A selected game's status changed before the batch was applied."
+                    )
+
+                if expected_status == "installed":
+                    root_id = game["scan_root_id"]
+                    relative_value = game["relative_dir"]
+                    if root_id is None or relative_value is None:
+                        raise InvalidGameRemoval(
+                            "An installed game must belong to a scan root and relative directory."
+                        )
+                    try:
+                        relative = _normalize_relative_directory(str(relative_value))
+                    except InvalidRootConfiguration as error:
+                        raise InvalidGameRemoval(
+                            "An installed game has an unsafe relative directory."
+                        ) from error
+                    root_id = str(root_id)
+                    if root_id not in root_rows:
+                        root = connection.execute(
+                            "SELECT * FROM scan_roots WHERE id = ?", (root_id,)
+                        ).fetchone()
+                        if root is None:
+                            raise RootNotFoundError(root_id)
+                        root_rows[root_id] = root
+                        root_additions[root_id] = []
+                    root_additions[root_id].append(relative)
+                    installed_count += 1
+                else:
+                    missing_count += 1
+
+                for relative_cover in (
+                    game["cover_original_relpath"],
+                    game["cover_thumb_relpath"],
+                ):
+                    if relative_cover is None:
+                        continue
+                    relative_cover = str(relative_cover)
+                    if relative_cover not in seen_cover_paths:
+                        cover_paths.append(relative_cover)
+                        seen_cover_paths.add(relative_cover)
+
+            for root_id, additions in root_additions.items():
+                root = root_rows[root_id]
+                exclusions = _normalize_exclusions(
+                    (*_json_string_tuple(root["exclusions_json"]), *additions)
+                )
+                connection.execute(
+                    "UPDATE scan_roots SET exclusions_json = json(?) WHERE id = ?",
+                    (_json_array(exclusions), root_id),
+                )
+
+            connection.executemany(
+                "DELETE FROM games WHERE id = ?",
+                ((game_id,) for game_id in unique_requests),
+            )
+            return BatchGameRemovalResult(
+                installed_count=installed_count,
+                missing_count=missing_count,
+                updated_root_ids=tuple(root_additions),
+                managed_cover_relpaths=tuple(cover_paths),
+            )
+
+        return self._writer.submit(operation).result()
 
     def remove_game_and_exclude(self, game_id: str) -> ScanRoot:
         def operation(connection: sqlite3.Connection) -> ScanRoot:

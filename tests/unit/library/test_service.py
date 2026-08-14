@@ -1,8 +1,15 @@
+import sqlite3
 from pathlib import Path
 
 import pytest
 
-from gameshelf.library.service import InvalidRootConfiguration, LibraryService
+from gameshelf.library.models import GameRemovalRequest
+from gameshelf.library.service import (
+    GameNotFoundError,
+    InvalidGameRemoval,
+    InvalidRootConfiguration,
+    LibraryService,
+)
 from gameshelf.scanning.pe_metadata import PeMetadata
 
 
@@ -88,6 +95,139 @@ def test_delete_missing_game_rejects_installed_record(
 
     with pytest.raises(ValueError, match="missing"):
         library_service.delete_missing_game(game.id)
+
+
+def test_batch_remove_mixes_statuses_merges_roots_and_captures_managed_covers(
+    library_service: LibraryService,
+) -> None:
+    first_root = library_service.add_root(r"D:\Games", "recursive", 3, ["Tools"])
+    second_root = library_service.add_root(r"E:\Games", "children", 1, [])
+    missing_root = library_service.add_root(r"F:\OldGames", "children", 1, [])
+    first = library_service.create_game_for_test(first_root.id, "Group/GameA", "GameA")
+    second = library_service.create_game_for_test(second_root.id, "GameB", "GameB")
+    missing = library_service.create_game_for_test(missing_root.id, "GameC", "GameC")
+
+    def seed_related_rows(connection: sqlite3.Connection) -> None:
+        connection.execute(
+            """
+            UPDATE games
+            SET cover_original_relpath = 'covers/original/a.png',
+                cover_thumb_relpath = 'covers/thumbs/a.webp'
+            WHERE id = ?
+            """,
+            (first.id,),
+        )
+        connection.execute(
+            """
+            UPDATE games
+            SET cover_original_relpath = 'covers/original/c.png',
+                cover_thumb_relpath = 'covers/thumbs/c.webp'
+            WHERE id = ?
+            """,
+            (missing.id,),
+        )
+        connection.execute(
+            """
+            INSERT INTO save_locations (
+                id, game_id, kind, path_template, display_path, path_key,
+                source, confidence, confirmed, enabled
+            ) VALUES ('save-c', ?, 'directory', 'C:/save', 'C:/save', 'c:/save',
+                      'manual', 1, 1, 1)
+            """,
+            (missing.id,),
+        )
+
+    library_service._writer.submit(seed_related_rows).result()  # noqa: SLF001
+    library_service.remove_root(missing_root.id)
+
+    result = library_service.remove_games(
+        (
+            GameRemovalRequest(first.id, "installed"),
+            GameRemovalRequest(missing.id, "missing"),
+            GameRemovalRequest(second.id, "installed"),
+            GameRemovalRequest(first.id, "installed"),
+        )
+    )
+
+    assert result.installed_count == 2
+    assert result.missing_count == 1
+    assert set(result.updated_root_ids) == {first_root.id, second_root.id}
+    assert set(result.managed_cover_relpaths) == {
+        "covers/original/a.png",
+        "covers/thumbs/a.webp",
+        "covers/original/c.png",
+        "covers/thumbs/c.webp",
+    }
+    assert library_service.get_game(first.id) is None
+    assert library_service.get_game(second.id) is None
+    assert library_service.get_game(missing.id) is None
+    roots = {root.id: root for root in library_service.list_roots()}
+    assert roots[first_root.id].exclusions == ("Tools", "Group/GameA")
+    assert roots[second_root.id].exclusions == ("GameB",)
+    with library_service._repository.factory.connect(readonly=True) as connection:  # noqa: SLF001
+        assert connection.execute(
+            "SELECT 1 FROM save_locations WHERE id = 'save-c'"
+        ).fetchone() is None
+
+
+def test_batch_remove_rolls_back_every_record_when_any_game_is_unknown(
+    library_service: LibraryService,
+) -> None:
+    root = library_service.add_root(r"D:\Games", "children", 1, [])
+    game = library_service.create_game_for_test(root.id, "GameA", "GameA")
+
+    with pytest.raises(GameNotFoundError):
+        library_service.remove_games(
+            (
+                GameRemovalRequest(game.id, "installed"),
+                GameRemovalRequest("unknown", "missing"),
+            )
+        )
+
+    assert library_service.get_game(game.id) is not None
+    assert library_service.list_roots()[0].exclusions == ()
+
+
+def test_batch_remove_rolls_back_when_expected_status_changed(
+    library_service: LibraryService,
+) -> None:
+    root = library_service.add_root(r"D:\Games", "children", 1, [])
+    game = library_service.create_game_for_test(root.id, "GameA", "GameA")
+
+    with pytest.raises(InvalidGameRemoval, match="status"):
+        library_service.remove_games((GameRemovalRequest(game.id, "missing"),))
+
+    assert library_service.get_game(game.id) is not None
+
+
+def test_batch_remove_rejects_unsafe_installed_relative_path_without_changes(
+    library_service: LibraryService,
+) -> None:
+    root = library_service.add_root(r"D:\Games", "children", 1, [])
+    game = library_service.create_game_for_test(root.id, "GameA", "GameA")
+
+    def corrupt_relative_path(connection: sqlite3.Connection) -> None:
+        connection.execute(
+            "UPDATE games SET relative_dir = '../outside' WHERE id = ?",
+            (game.id,),
+        )
+
+    library_service._writer.submit(corrupt_relative_path).result()  # noqa: SLF001
+
+    with pytest.raises(InvalidGameRemoval, match="relative"):
+        library_service.remove_games((GameRemovalRequest(game.id, "installed"),))
+
+    assert library_service.get_game(game.id) is not None
+    assert library_service.list_roots()[0].exclusions == ()
+
+
+def test_batch_remove_rejects_more_than_five_hundred_submitted_items(
+    library_service: LibraryService,
+) -> None:
+    requests = tuple(GameRemovalRequest("same", "installed") for _ in range(501))
+
+    with pytest.raises(InvalidGameRemoval, match="500"):
+        library_service.remove_games(requests)
 
 
 def test_update_root_normalizes_children_depth_and_keeps_identity(
