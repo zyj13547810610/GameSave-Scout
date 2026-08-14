@@ -98,6 +98,24 @@ def test_recursive_results_are_sorted_and_exclusions_ignore_case(
     ]
 
 
+def test_exact_exclusion_matches_literal_brackets_in_game_directory(
+    tmp_path: Path,
+    task_context: TaskContext,
+) -> None:
+    root_path = tmp_path / "games"
+    game = root_path / "[Circle] GameA"
+    game.mkdir(parents=True)
+    (game / "Game.exe").write_bytes(b"MZ")
+    root = make_root(
+        root_path,
+        mode="recursive",
+        depth=2,
+        exclusions=("[Circle] GameA",),
+    )
+
+    assert list(enumerate_candidates(root, task_context)) == []
+
+
 def test_unavailable_child_warns_and_scan_continues(
     tmp_path: Path,
     task_context: TaskContext,

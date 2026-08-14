@@ -67,6 +67,7 @@ function enterBatchMode() {
 
 function exitBatchMode() {
   batchMode.value = false
+  batchBusy.value = false
   batchError.value = ''
   selectedGameIds.value = new Set()
 }
@@ -107,7 +108,6 @@ async function removeSelectedGames() {
   const result = await bridge.remove_games({
     items: selected.map((game) => ({ gameId: game.id, expectedStatus: game.status })),
   })
-  batchBusy.value = false
   if (!result.ok) {
     if (result.error.code === 'invalid_game_state' || result.error.code === 'game_not_found') {
       await store.load(bridge)
@@ -115,6 +115,7 @@ async function removeSelectedGames() {
       batchNotice.value = '游戏状态已经变化，请重新选择。'
       return
     }
+    batchBusy.value = false
     batchError.value = result.error.message
     return
   }

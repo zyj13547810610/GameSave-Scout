@@ -173,6 +173,8 @@ def is_excluded(relative_dir: str, exclusions: Sequence[str]) -> bool:
     value = relative_dir.replace("\\", "/").casefold()
     for exclusion in exclusions:
         pattern = exclusion.replace("\\", "/").casefold().rstrip("/")
+        if value == pattern:
+            return True
         if fnmatch.fnmatchcase(value, pattern):
             return True
         if not any(mark in pattern for mark in "*?[") and value.startswith(f"{pattern}/"):

@@ -3,7 +3,7 @@ import { createPinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../src/App.vue'
 import { bridgeKey } from '../src/api/bridge'
-import type { GameShelfBridge, UiScaleValue } from '../src/api/contracts'
+import type { ApiResult, Game, GameShelfBridge, UiScaleValue } from '../src/api/contracts'
 import { createMockBridge, fixtureGame, ok } from '../src/api/mockBridge'
 import '../src/styles/base.css'
 
@@ -194,5 +194,46 @@ describe('App', () => {
     expect(wrapper.get('[data-test="batch-result"]').text()).toContain(
       '游戏状态已经变化，请重新选择。',
     )
+  })
+
+  it('keeps batch submission busy until the successful library refresh finishes', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const game = fixtureGame({ id: 'installed-1', status: 'installed' })
+    let listCalls = 0
+    let finishReload: ((value: ApiResult<Game[]>) => void) | undefined
+    const bridge = createMockBridge({
+      async list_games() {
+        listCalls += 1
+        if (listCalls === 1) return ok([game])
+        return new Promise((resolve) => { finishReload = resolve })
+      },
+      async remove_games() {
+        return ok({
+          installedCount: 1,
+          missingCount: 0,
+          updatedRootCount: 1,
+          cleanupWarnings: [],
+        })
+      },
+    })
+    const wrapper = mount(App, {
+      global: {
+        plugins: [createPinia()],
+        provide: { [bridgeKey as symbol]: bridge },
+      },
+    })
+    await flushPromises()
+
+    await wrapper.get('[data-test="enter-batch-mode"]').trigger('click')
+    await wrapper.get('[data-test="game-card-installed-1"]').trigger('click')
+    await wrapper.get('[data-test="batch-delete"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="batch-delete"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('[data-test="batch-delete"]').text()).toBe('处理中…')
+
+    finishReload?.(ok([]))
+    await flushPromises()
+    expect(wrapper.find('[data-test="batch-management-bar"]').exists()).toBe(false)
   })
 })
