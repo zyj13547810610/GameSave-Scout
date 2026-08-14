@@ -27,6 +27,38 @@ function fixtureSave(overrides: Partial<SaveLocation> = {}): SaveLocation {
 }
 
 describe('SaveLocationList', () => {
+  it('is open by default and opens a confirmed location from its path', async () => {
+    const openLocation = vi.fn(async () => ({
+      ok: true as const,
+      data: { opened: true },
+    }))
+    const wrapper = mount(SaveLocationList, {
+      props: {
+        gameId: 'game-1',
+        bridge: createMockBridge({ open_save_location: openLocation }),
+        locations: [fixtureSave()],
+      },
+    })
+
+    const section = wrapper.get('[data-test="save-locations-section"]')
+    expect((section.element as HTMLDetailsElement).open).toBe(true)
+    await wrapper.get('[data-test="save-display-path"]').trigger('click')
+
+    expect(openLocation).toHaveBeenCalledWith({ locationId: 'save-1' })
+  })
+
+  it('labels the verify action as verifying all locations', () => {
+    const wrapper = mount(SaveLocationList, {
+      props: {
+        gameId: 'game-1',
+        bridge: createMockBridge(),
+        locations: [],
+      },
+    })
+
+    expect(wrapper.text()).toContain('全部验证')
+  })
+
   it('renders multiple locations with source and missing state', () => {
     const wrapper = mount(SaveLocationList, {
       props: {

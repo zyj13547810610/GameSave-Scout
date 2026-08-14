@@ -68,53 +68,62 @@ function verifiedLabel(value: string | null): string {
 </script>
 
 <template>
-  <section class="save-locations">
-    <div class="save-location-heading">
-      <h3>存档位置</h3>
-      <div class="compact-actions">
-        <button type="button" :disabled="loading" @click="showAdd = true">手动添加</button>
-        <button type="button" class="secondary" :disabled="loading" @click="verify">验证</button>
+  <details open data-test="save-locations-section" class="detail-section save-locations">
+    <summary class="detail-section-summary">存档位置</summary>
+    <div class="detail-section-body save-location-body">
+      <div class="save-location-heading">
+        <div class="compact-actions">
+          <button type="button" :disabled="loading" @click="showAdd = true">手动添加</button>
+          <button type="button" class="secondary" :disabled="loading" @click="verify">全部验证</button>
+        </div>
       </div>
-    </div>
 
-    <p v-if="!loading && visibleItems.length === 0" class="empty-save-message">还没有已确认的存档位置。</p>
-    <article v-for="location in visibleItems" :key="location.id" data-test="save-location" class="save-location-card">
-      <div class="save-location-title">
+      <p v-if="!loading && visibleItems.length === 0" class="empty-save-message">还没有已确认的存档位置。</p>
+      <article v-for="location in visibleItems" :key="location.id" data-test="save-location" class="save-location-card">
         <strong>{{ saveKindLabel(location.kind) }}</strong>
-        <span>{{ saveSourceLabel(location.source) }}</span>
-        <span>{{ location.confirmed ? '已确认' : '建议' }}</span>
-      </div>
-      <p class="save-display-path">{{ location.displayPath }}</p>
-      <p v-if="location.exists === false" class="save-missing">当前位置不存在</p>
-      <p v-else-if="location.kind === 'glob' && location.matchCount !== null">
-        匹配 {{ location.matchCount }} 项{{ location.matchesTruncated ? '以上' : '' }}
-      </p>
-      <p class="save-location-meta">{{ confidenceLabel(location.confidence) }} · {{ verifiedLabel(location.lastVerifiedAt) }}</p>
-      <div class="compact-actions">
-        <button type="button" @click="open(location)">打开</button>
-        <button data-test="remove-save-location" type="button" class="danger" @click="remove(location)">移除</button>
-      </div>
-      <details>
-        <summary>高级信息</summary>
-        <code>{{ location.pathTemplate }}</code>
-        <ul v-if="location.evidence.length">
-          <li v-for="entry in location.evidence" :key="entry">{{ entry }}</li>
-        </ul>
-      </details>
-    </article>
+        <button
+          data-test="save-display-path"
+          type="button"
+          class="path-link save-display-path"
+          @click="open(location)"
+        >{{ location.displayPath }}</button>
+        <div class="save-location-tags">
+          <span>{{ saveSourceLabel(location.source) }}</span>
+          <span>{{ location.confirmed ? '已确认' : '建议' }}</span>
+          <span>{{ confidenceLabel(location.confidence) }}</span>
+          <span :class="{ 'save-missing': location.exists === false }">
+            {{ location.exists === false ? '当前位置不存在' : location.exists === true ? '位置存在' : '尚未验证' }}
+          </span>
+        </div>
+        <p v-if="location.kind === 'glob' && location.matchCount !== null">
+          匹配 {{ location.matchCount }} 项{{ location.matchesTruncated ? '以上' : '' }}
+        </p>
+        <p class="save-location-meta">{{ verifiedLabel(location.lastVerifiedAt) }}</p>
+        <div class="compact-actions">
+          <button data-test="remove-save-location" type="button" class="danger" @click="remove(location)">移除</button>
+        </div>
+        <details>
+          <summary>高级信息</summary>
+          <code>{{ location.pathTemplate }}</code>
+          <ul v-if="location.evidence.length">
+            <li v-for="entry in location.evidence" :key="entry">{{ entry }}</li>
+          </ul>
+        </details>
+      </article>
 
-    <p class="status-message" aria-live="polite">{{ loading ? '正在读取存档位置…' : message }}</p>
-    <SaveSuggestionList :game-id="gameId" :bridge="bridge" @accepted="refresh" />
-    <details class="ludusavi-settings-details">
-      <summary>存档规则设置</summary>
-      <LudusaviSettings :bridge="bridge" />
-    </details>
-    <AddSaveLocationDialog
-      v-if="showAdd"
-      :game-id="gameId"
-      :bridge="bridge"
-      @close="showAdd = false"
-      @saved="added"
-    />
-  </section>
+      <p class="status-message" aria-live="polite">{{ loading ? '正在读取存档位置…' : message }}</p>
+      <SaveSuggestionList :game-id="gameId" :bridge="bridge" @accepted="refresh" />
+      <details class="ludusavi-settings-details">
+        <summary>存档规则设置</summary>
+        <LudusaviSettings :bridge="bridge" />
+      </details>
+      <AddSaveLocationDialog
+        v-if="showAdd"
+        :game-id="gameId"
+        :bridge="bridge"
+        @close="showAdd = false"
+        @saved="added"
+      />
+    </div>
+  </details>
 </template>
