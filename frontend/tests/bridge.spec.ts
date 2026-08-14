@@ -9,7 +9,7 @@ describe('desktop bridge', () => {
 
     expect(result).toEqual({
       ok: true,
-      data: { appName: 'GameShelf', schemaVersion: 1, portable: true },
+      data: { appName: 'GameShelf', schemaVersion: 1, portable: true, uiScale: 1 },
     })
   })
 })

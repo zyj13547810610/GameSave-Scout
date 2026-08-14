@@ -1,3 +1,4 @@
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from gameshelf.bootstrap.application import build_application
@@ -24,3 +25,13 @@ def test_application_bootstrap_creates_only_portable_state(tmp_path: Path) -> No
     finally:
         application.close()
         application.close()
+
+
+def test_application_close_releases_its_logging_handler(tmp_path: Path) -> None:
+    application = build_application(AppPaths.from_root(tmp_path / "便携应用"))
+    logger = application.logger
+
+    application.close()
+
+    assert logger.propagate is True
+    assert not any(isinstance(handler, RotatingFileHandler) for handler in logger.handlers)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from threading import Lock
 
@@ -60,6 +61,10 @@ class Application:
         self.writer.close()
         for handler in tuple(self.logger.handlers):
             handler.flush()
+            if isinstance(handler, RotatingFileHandler):
+                handler.close()
+                self.logger.removeHandler(handler)
+        self.logger.propagate = True
 
 
 def build_application(paths: AppPaths) -> Application:
