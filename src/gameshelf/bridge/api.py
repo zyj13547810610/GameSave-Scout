@@ -22,7 +22,12 @@ from gameshelf.library.launcher import (
 from gameshelf.library.launcher import (
     GameNotFoundError as LauncherGameNotFoundError,
 )
-from gameshelf.library.models import Game, GameRemovalRequest, ScanRoot
+from gameshelf.library.models import (
+    Game,
+    GameRemovalRequest,
+    RemovableGameStatus,
+    ScanRoot,
+)
 from gameshelf.library.service import (
     GameNotFoundError,
     InvalidEngineConfiguration,
@@ -213,6 +218,37 @@ class BridgeApi:
             return failure("invalid_game_state", str(error))
         except GameNotFoundError:
             return failure("game_not_found", "没有找到对应的游戏。")
+
+    def remove_games(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            result = self._require_library().remove_games(
+                _game_removal_requests(payload)
+            )
+            cleanup_warning_count = (
+                self._covers.cleanup_managed_files(result.managed_cover_relpaths)
+                if self._covers is not None
+                else 0
+            )
+            cleanup_warnings: list[JSONValue] = []
+            if cleanup_warning_count:
+                cleanup_warnings.append(
+                    f"有 {cleanup_warning_count} 个受管封面文件未能清理，可稍后查看日志。"
+                )
+            return success(
+                {
+                    "installedCount": result.installed_count,
+                    "missingCount": result.missing_count,
+                    "updatedRootCount": len(result.updated_roots),
+                    "cleanupWarnings": cleanup_warnings,
+                }
+            )
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except GameNotFoundError:
+            return failure("game_not_found", "至少有一个所选游戏已不存在，请刷新后重新选择。")
+        except (InvalidGameRemoval, RootNotFoundError) as error:
+            return failure("invalid_game_state", str(error))
 
     def start_scan(self, request: object) -> ApiResult:
         try:
@@ -987,6 +1023,34 @@ def _string_list(payload: dict[str, object], key: str) -> list[str]:
     if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
         raise InvalidRequest(f"{key} must be an array of strings.")
     return cast(list[str], value)
+
+
+def _game_removal_requests(
+    payload: dict[str, object],
+) -> tuple[GameRemovalRequest, ...]:
+    value = payload.get("items")
+    if not isinstance(value, list) or not value:
+        raise InvalidRequest("items must be a non-empty array.")
+    if len(value) > LibraryService.MAX_BATCH_REMOVALS:
+        raise InvalidRequest(
+            f"items cannot contain more than {LibraryService.MAX_BATCH_REMOVALS} entries."
+        )
+    requests: list[GameRemovalRequest] = []
+    for raw_item in value:
+        if not isinstance(raw_item, dict) or not all(
+            isinstance(key, str) for key in raw_item
+        ):
+            raise InvalidRequest("Each items entry must be a JSON object.")
+        item = cast(dict[str, object], raw_item)
+        status = _string(item, "expectedStatus")
+        if status not in {"installed", "missing"}:
+            raise InvalidRequest("expectedStatus must be 'installed' or 'missing'.")
+        requests.append(
+            GameRemovalRequest(
+                _string(item, "gameId"), cast(RemovableGameStatus, status)
+            )
+        )
+    return tuple(requests)
 
 
 def _scan_mode(payload: dict[str, object]) -> Any:

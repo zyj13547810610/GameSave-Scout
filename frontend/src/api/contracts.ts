@@ -85,6 +85,15 @@ export type Game = {
   missingSince: string | null
 }
 
+export type RemovableGameStatus = 'installed' | 'missing'
+
+export type BatchGameRemovalResult = {
+  installedCount: number
+  missingCount: number
+  updatedRootCount: number
+  cleanupWarnings: string[]
+}
+
 export type SaveLocationKind = 'directory' | 'file' | 'glob' | 'registry'
 export type SaveLocationSource = 'manual' | 'dynamic' | 'ludusavi' | 'engine' | 'legacy_scan'
 
@@ -198,6 +207,9 @@ export interface GameShelfBridge {
   list_games(): Promise<ApiResult<Game[]>>
   remove_game_and_exclude(input: { gameId: string }): Promise<ApiResult<{ removed: boolean }>>
   delete_missing_game(input: { gameId: string }): Promise<ApiResult<{ removed: boolean }>>
+  remove_games(input: {
+    items: { gameId: string; expectedStatus: RemovableGameStatus }[]
+  }): Promise<ApiResult<BatchGameRemovalResult>>
   start_scan(input: { rootId: string; kind: 'quick' | 'full' }): Promise<ApiResult<{ taskId: string }>>
   confirm_move(input: {
     sessionId: string

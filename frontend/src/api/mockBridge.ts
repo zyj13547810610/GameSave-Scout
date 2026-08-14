@@ -62,6 +62,15 @@ export function createMockBridge(overrides: Partial<GameShelfBridge> = {}): Game
     async list_games() { return ok([]) },
     async remove_game_and_exclude() { return ok({ removed: true }) },
     async delete_missing_game() { return ok({ removed: true }) },
+    async remove_games(input) {
+      const items = [...new Map(input.items.map((item) => [item.gameId, item])).values()]
+      return ok({
+        installedCount: items.filter((item) => item.expectedStatus === 'installed').length,
+        missingCount: items.filter((item) => item.expectedStatus === 'missing').length,
+        updatedRootCount: 0,
+        cleanupWarnings: [],
+      })
+    },
     async start_scan() { return ok({ taskId: 'task-1' }) },
     async confirm_move(input) { return ok(fixtureGame({ id: input.existingGameId })) },
     async set_game_title(input) { return ok(fixtureGame({ id: input.gameId, title: input.title })) },

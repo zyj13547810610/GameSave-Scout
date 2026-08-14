@@ -162,6 +162,107 @@ def test_delete_missing_game_removes_record_through_bridge(tmp_path: Path) -> No
         writer.close()
 
 
+def test_batch_remove_returns_summary_and_cleanup_warning_without_paths(
+    tmp_path: Path,
+) -> None:
+    api, tasks, writer, library = _library_api(tmp_path)
+    try:
+        covers = api._covers  # noqa: SLF001
+        assert isinstance(covers, CoverService)
+        installed_root = library.add_root(r"D:\Games", "children", 1, [])
+        missing_root = library.add_root(r"E:\OldGames", "children", 1, [])
+        installed = library.create_game_for_test(
+            installed_root.id, "GameA", "GameA"
+        )
+        missing = library.create_game_for_test(missing_root.id, "GameB", "GameB")
+        cover = covers.import_clipboard_png(installed.id, _png())
+        library.remove_root(missing_root.id)
+        cleanup_calls: list[tuple[str, ...]] = []
+
+        def cleanup_with_warnings(relative_paths) -> int:
+            cleanup_calls.append(tuple(relative_paths))
+            return 2
+
+        covers.cleanup_managed_files = cleanup_with_warnings  # type: ignore[method-assign]
+
+        result = api.remove_games(
+            {
+                "items": [
+                    {"gameId": installed.id, "expectedStatus": "installed"},
+                    {"gameId": missing.id, "expectedStatus": "missing"},
+                    {"gameId": installed.id, "expectedStatus": "installed"},
+                ]
+            }
+        )
+
+        assert result == {
+            "ok": True,
+            "data": {
+                "installedCount": 1,
+                "missingCount": 1,
+                "updatedRootCount": 1,
+                "cleanupWarnings": [
+                    "有 2 个受管封面文件未能清理，可稍后查看日志。"
+                ],
+            },
+        }
+        assert cleanup_calls == [(cover.original_relpath, cover.thumb_relpath)]
+        assert str(covers._paths.data_dir) not in str(result)  # noqa: SLF001
+        assert library.list_games() == ()
+        assert library.list_roots()[0].exclusions == ("GameA",)
+    finally:
+        tasks.close()
+        writer.close()
+
+
+def test_batch_remove_status_change_rolls_back_and_skips_cover_cleanup(
+    tmp_path: Path,
+) -> None:
+    api, tasks, writer, library = _library_api(tmp_path)
+    try:
+        covers = api._covers  # noqa: SLF001
+        assert isinstance(covers, CoverService)
+        root = library.add_root(r"D:\Games", "children", 1, [])
+        first = library.create_game_for_test(root.id, "GameA", "GameA")
+        second = library.create_game_for_test(root.id, "GameB", "GameB")
+        cleanup_calls: list[tuple[str, ...]] = []
+        covers.cleanup_managed_files = (  # type: ignore[method-assign]
+            lambda paths: cleanup_calls.append(tuple(paths)) or 0
+        )
+
+        result = api.remove_games(
+            {
+                "items": [
+                    {"gameId": first.id, "expectedStatus": "installed"},
+                    {"gameId": second.id, "expectedStatus": "missing"},
+                ]
+            }
+        )
+
+        assert result["ok"] is False
+        assert result["error"]["code"] == "invalid_game_state"
+        assert {game.id for game in library.list_games()} == {first.id, second.id}
+        assert library.list_roots()[0].exclusions == ()
+        assert cleanup_calls == []
+    finally:
+        tasks.close()
+        writer.close()
+
+
+def test_batch_remove_rejects_non_removable_status_in_payload(tmp_path: Path) -> None:
+    api, tasks, writer, _ = _library_api(tmp_path)
+    try:
+        result = api.remove_games(
+            {"items": [{"gameId": "game-1", "expectedStatus": "save_only"}]}
+        )
+
+        assert result["ok"] is False
+        assert result["error"]["code"] == "invalid_request"
+    finally:
+        tasks.close()
+        writer.close()
+
+
 def _library_api(
     tmp_path: Path,
 ) -> tuple[BridgeApi, TaskRegistry, DbWriter, LibraryService]:
