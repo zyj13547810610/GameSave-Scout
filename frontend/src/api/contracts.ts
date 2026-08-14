@@ -4,10 +4,13 @@ export type ApiResult<T> =
   | { ok: true; data: T }
   | { ok: false; error: ApiError }
 
+export type UiScaleValue = 0.8 | 0.9 | 1 | 1.1 | 1.2
+
 export type BootstrapState = {
   appName: 'GameShelf'
   schemaVersion: number
   portable: true
+  uiScale: UiScaleValue
   assetSessionToken?: string
 }
 
@@ -186,6 +189,7 @@ export type ScanResult = {
 
 export interface GameShelfBridge {
   bootstrap(): Promise<ApiResult<BootstrapState>>
+  set_ui_scale(input: { uiScale: UiScaleValue }): Promise<ApiResult<{ uiScale: UiScaleValue }>>
   list_roots(): Promise<ApiResult<ScanRoot[]>>
   add_root(input: RootInput): Promise<ApiResult<ScanRoot>>
   update_root(input: RootInput & { rootId: string; enabled: boolean }): Promise<ApiResult<ScanRoot>>

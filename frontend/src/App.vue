@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { createPinia, getActivePinia, storeToRefs } from 'pinia'
-import { computed, inject, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, inject, nextTick, onMounted, ref } from 'vue'
 import { bridgeKey, createBridge } from './api/bridge'
 import type { ScanRoot } from './api/contracts'
 import GameGrid from './features/library/GameGrid.vue'
@@ -9,7 +9,7 @@ import { filterGames } from './features/library/libraryFilters'
 import { useLibraryStore } from './features/library/libraryStore'
 import MoveSuggestionPanel from './features/library/MoveSuggestionPanel.vue'
 import UiScaleControl from './features/preferences/UiScaleControl.vue'
-import { applyUiScale, getUiScaleStorage, readUiScale, saveUiScale } from './features/preferences/uiScale'
+import { applyUiScale, type UiScale } from './features/preferences/uiScale'
 import ScanRootDialog from './features/scan-roots/ScanRootDialog.vue'
 import ScanRootList from './features/scan-roots/ScanRootList.vue'
 import './features/library/library.css'
@@ -21,8 +21,9 @@ const state = ref<'connecting' | 'ready' | 'failed'>('connecting')
 const errorMessage = ref('')
 const showAddRoot = ref(false)
 const editingRoot = ref<ScanRoot | null>(null)
-const uiScaleStorage = getUiScaleStorage(window)
-const uiScale = ref(readUiScale(uiScaleStorage))
+const uiScale = ref<UiScale>(1)
+const uiScaleSaveError = ref('')
+let uiScaleSaveRevision = 0
 const filteredGames = computed(() => filterGames(games.value, {
   query: store.query,
   status: store.statusFilter,
@@ -30,10 +31,17 @@ const filteredGames = computed(() => filterGames(games.value, {
 }))
 const engines = computed(() => [...new Set(games.value.map((game) => game.engineId).filter((value): value is string => Boolean(value)))].sort())
 
-watch(uiScale, (scale) => {
+applyUiScale(uiScale.value, document.documentElement)
+
+async function changeUiScale(scale: UiScale) {
+  const revision = ++uiScaleSaveRevision
+  uiScale.value = scale
+  uiScaleSaveError.value = ''
   applyUiScale(scale, document.documentElement)
-  saveUiScale(scale, uiScaleStorage)
-}, { immediate: true })
+  const result = await bridge.set_ui_scale({ uiScale: scale })
+  if (revision !== uiScaleSaveRevision) return
+  if (!result.ok) uiScaleSaveError.value = result.error.message
+}
 
 async function bootstrap() {
   state.value = 'connecting'
@@ -43,6 +51,8 @@ async function bootstrap() {
     state.value = 'failed'
     return
   }
+  uiScale.value = result.data.uiScale
+  applyUiScale(uiScale.value, document.documentElement)
   await store.load(bridge)
   state.value = 'ready'
   await nextTick()
@@ -73,7 +83,10 @@ onMounted(bootstrap)
     <header class="app-header">
       <div><h1>GameShelf</h1><p>便携游戏库与存档管理器</p></div>
       <div class="app-actions">
-        <UiScaleControl v-model="uiScale" />
+        <div class="ui-scale-setting">
+          <UiScaleControl :model-value="uiScale" @update:model-value="changeUiScale" />
+          <p v-if="uiScaleSaveError" class="ui-scale-save-error" data-test="ui-scale-save-error" role="alert">{{ uiScaleSaveError }}</p>
+        </div>
         <button v-if="state === 'ready'" type="button" @click="showAddRoot = true">＋ 添加游戏目录</button>
       </div>
     </header>

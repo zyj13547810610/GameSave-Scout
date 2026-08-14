@@ -52,7 +52,8 @@ export function fixtureGame(overrides: Partial<Game> = {}): Game {
 
 export function createMockBridge(overrides: Partial<GameShelfBridge> = {}): GameShelfBridge {
   const bridge: GameShelfBridge = {
-    async bootstrap() { return ok({ appName: 'GameShelf', schemaVersion: 1, portable: true }) },
+    async bootstrap() { return ok({ appName: 'GameShelf', schemaVersion: 1, portable: true, uiScale: 1 }) },
+    async set_ui_scale(input) { return ok({ uiScale: input.uiScale }) },
     async list_roots() { return ok([]) },
     async add_root(input) { return ok(fixtureRoot({ displayPath: input.displayPath, scanMode: input.scanMode, maxDepth: input.maxDepth, exclusions: input.exclusions })) },
     async update_root(input) { return ok(fixtureRoot({ ...input, id: input.rootId })) },
