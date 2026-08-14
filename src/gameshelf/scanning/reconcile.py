@@ -11,7 +11,8 @@ from pathlib import PurePosixPath
 from uuid import uuid4
 
 from gameshelf.library.models import Game, ScanRoot
-from gameshelf.library.repository import game_from_row
+from gameshelf.library.repository import game_from_row, scan_root_from_row
+from gameshelf.scanning.discovery import is_excluded
 
 
 @dataclass(frozen=True)
@@ -37,6 +38,12 @@ def reconcile_session(
     root: ScanRoot,
     scan_kind: str,
 ) -> ReconcileResult:
+    current_root = connection.execute(
+        "SELECT * FROM scan_roots WHERE id = ?", (root.id,)
+    ).fetchone()
+    if current_root is None:
+        raise LookupError("The scan root was removed before reconciliation.")
+    root = scan_root_from_row(current_root)
     observations = connection.execute(
         """
         SELECT install_path_key, payload_json
@@ -55,6 +62,8 @@ def reconcile_session(
     for observation in observations:
         install_key = str(observation["install_path_key"])
         payload = json.loads(observation["payload_json"])
+        if is_excluded(str(payload["relativeDir"]), root.exclusions):
+            continue
         existing = connection.execute(
             "SELECT * FROM games WHERE install_path_key = ?", (install_key,)
         ).fetchone()

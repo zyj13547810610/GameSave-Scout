@@ -50,7 +50,7 @@ def _enumerate_children(
         if index % 64 == 0:
             context.raise_if_cancelled()
         relative = entry.name
-        if _is_excluded(relative, exclusions) or not _safe_directory(entry):
+        if is_excluded(relative, exclusions) or not _safe_directory(entry):
             continue
         if not _directory_is_accessible(Path(entry.path), context, on_directory):
             continue
@@ -100,7 +100,7 @@ def _enumerate_recursive(
         for entry in child_directories:
             context.raise_if_cancelled()
             relative = portable_relative(Path(entry.path), root_path)
-            if _is_excluded(relative, exclusions):
+            if is_excluded(relative, exclusions):
                 continue
             yield from walk(Path(entry.path), depth + 1)
 
@@ -169,7 +169,7 @@ def _safe_regular_game_executable(entry: os.DirEntry[str]) -> bool:
         return False
 
 
-def _is_excluded(relative_dir: str, exclusions: Sequence[str]) -> bool:
+def is_excluded(relative_dir: str, exclusions: Sequence[str]) -> bool:
     value = relative_dir.replace("\\", "/").casefold()
     for exclusion in exclusions:
         pattern = exclusion.replace("\\", "/").casefold().rstrip("/")

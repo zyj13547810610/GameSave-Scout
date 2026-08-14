@@ -2,7 +2,7 @@ import shutil
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
-from threading import Event
+from threading import Event, Thread
 
 import pytest
 
@@ -54,6 +54,45 @@ def test_successful_full_scan_adds_games_and_marks_removed_game_missing(
 
     assert second.missing == 1
     assert scan_harness.game(game.id).status == "missing"
+
+
+def test_reconcile_uses_latest_exclusions_after_game_is_removed_mid_scan(
+    scan_harness: "ScanHarness",
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = scan_harness.add_root(mode="children")
+    scan_harness.mkdir("GameA")
+    game = scan_harness.library.create_game_for_test(root.id, "GameA", "GameA")
+    observations_staged = Event()
+    release_reconcile = Event()
+    scan_errors: list[BaseException] = []
+    original_stage_batch = scan_harness.scanner._stage_batch  # noqa: SLF001
+
+    def block_after_staging(session_id: str, batch: list[tuple[str, str]]) -> None:
+        original_stage_batch(session_id, batch)
+        observations_staged.set()
+        assert release_reconcile.wait(timeout=2)
+
+    monkeypatch.setattr(scan_harness.scanner, "_stage_batch", block_after_staging)
+
+    def run_scan() -> None:
+        try:
+            scan_harness.scan(root.id, "full")
+        except BaseException as error:
+            scan_errors.append(error)
+
+    scan_thread = Thread(target=run_scan)
+    scan_thread.start()
+    assert observations_staged.wait(timeout=2)
+
+    scan_harness.library.remove_game_and_exclude(game.id)
+    release_reconcile.set()
+    scan_thread.join(timeout=3)
+
+    assert not scan_thread.is_alive()
+    assert scan_errors == []
+    assert scan_harness.games() == ()
+    assert scan_harness.library.list_roots()[0].exclusions == ("GameA",)
 
 
 def test_scan_reports_structured_stages_and_completion_summary(
