@@ -69,5 +69,9 @@ class GameRemovalRequest:
 class BatchGameRemovalResult:
     installed_count: int
     missing_count: int
-    updated_root_ids: tuple[str, ...]
+    updated_roots: tuple[ScanRoot, ...]
     managed_cover_relpaths: tuple[str, ...]
+
+    @property
+    def updated_root_ids(self) -> tuple[str, ...]:
+        return tuple(root.id for root in self.updated_roots)

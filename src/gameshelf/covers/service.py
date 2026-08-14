@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 import mimetypes
 import os
 import sqlite3
+from collections.abc import Sequence
 from contextlib import suppress
 from dataclasses import dataclass
 from io import BytesIO
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import BinaryIO
 from uuid import uuid4
 
@@ -18,6 +20,8 @@ from gameshelf.covers.models import CoverFiles
 from gameshelf.db.writer import DbWriter
 from gameshelf.library.repository import LibraryRepository
 from gameshelf.library.service import GameNotFoundError
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -66,6 +70,34 @@ class CoverService:
 
         self._writer.submit(operation).result()
         self._delete_old(old)
+
+    def cleanup_managed_files(self, relative_paths: Sequence[str]) -> int:
+        """Delete captured cover files without trusting database paths as filesystem paths."""
+        warnings = 0
+        seen: set[str] = set()
+        allowed_prefixes = {("covers", "original"), ("covers", "thumbs")}
+        for relative in relative_paths:
+            if relative in seen:
+                continue
+            seen.add(relative)
+            portable = PurePosixPath(relative)
+            parts = portable.parts
+            if (
+                portable.is_absolute()
+                or ".." in parts
+                or len(parts) != 3
+                or tuple(parts[:2]) not in allowed_prefixes
+            ):
+                warnings += 1
+                logger.warning("Skipped unsafe managed cover cleanup path: %s", relative)
+                continue
+            candidate = self._paths.data_dir.joinpath(*parts)
+            try:
+                candidate.unlink(missing_ok=True)
+            except OSError as error:
+                warnings += 1
+                logger.warning("Could not clean managed cover file %s: %s", candidate, error)
+        return warnings
 
     def _import(
         self, game_id: str, source: BinaryIO, content_type: str
@@ -134,18 +166,6 @@ class CoverService:
         return _StoredCover(row[0], row[1], int(row[2]))
 
     def _delete_old(self, old: _StoredCover) -> None:
-        for relative in (old.original, old.thumb):
-            if relative is None:
-                continue
-            candidate = self._paths.data_dir.joinpath(*relative.split("/"))
-            allowed_root = (
-                self._paths.covers_original_dir
-                if candidate.parent == self._paths.covers_original_dir
-                else self._paths.covers_thumbs_dir
-            )
-            try:
-                candidate.relative_to(allowed_root)
-            except ValueError:
-                continue
-            with suppress(OSError):
-                candidate.unlink(missing_ok=True)
+        self.cleanup_managed_files(
+            tuple(relative for relative in (old.original, old.thumb) if relative is not None)
+        )

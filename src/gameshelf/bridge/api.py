@@ -22,7 +22,7 @@ from gameshelf.library.launcher import (
 from gameshelf.library.launcher import (
     GameNotFoundError as LauncherGameNotFoundError,
 )
-from gameshelf.library.models import Game, ScanRoot
+from gameshelf.library.models import Game, GameRemovalRequest, ScanRoot
 from gameshelf.library.service import (
     GameNotFoundError,
     InvalidEngineConfiguration,
@@ -187,14 +187,9 @@ class BridgeApi:
             payload = _payload(request)
             game_id = _string(payload, "gameId")
             library = self._require_library()
-            game = library.get_game(game_id)
-            if game is None:
-                raise GameNotFoundError(game_id)
-            if game.status != "installed":
-                raise InvalidGameRemoval("Only an installed game can be removed and excluded.")
+            result = library.remove_games((GameRemovalRequest(game_id, "installed"),))
             if self._covers is not None:
-                self._covers.remove(game_id)
-            library.remove_game_and_exclude(game_id)
+                self._covers.cleanup_managed_files(result.managed_cover_relpaths)
             return success({"removed": True})
         except InvalidRequest as error:
             return failure("invalid_request", str(error))
@@ -208,14 +203,9 @@ class BridgeApi:
             payload = _payload(request)
             game_id = _string(payload, "gameId")
             library = self._require_library()
-            game = library.get_game(game_id)
-            if game is None:
-                raise GameNotFoundError(game_id)
-            if game.status != "missing":
-                raise InvalidGameRemoval("Only a missing game record can be deleted.")
+            result = library.remove_games((GameRemovalRequest(game_id, "missing"),))
             if self._covers is not None:
-                self._covers.remove(game_id)
-            library.delete_missing_game(game_id)
+                self._covers.cleanup_managed_files(result.managed_cover_relpaths)
             return success({"removed": True})
         except InvalidRequest as error:
             return failure("invalid_request", str(error))

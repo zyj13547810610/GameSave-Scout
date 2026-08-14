@@ -255,7 +255,8 @@ class LibraryService:
                     raise GameNotFoundError(game_id)
                 if game["status"] != expected_status:
                     raise InvalidGameRemoval(
-                        "A selected game's status changed before the batch was applied."
+                        "A selected game's status changed before the batch was applied; "
+                        f"expected {expected_status}."
                     )
 
                 if expected_status == "installed":
@@ -306,6 +307,18 @@ class LibraryService:
                     (_json_array(exclusions), root_id),
                 )
 
+            updated_roots = tuple(
+                scan_root_from_row(row)
+                for root_id in root_additions
+                if (
+                    row := connection.execute(
+                        "SELECT * FROM scan_roots WHERE id = ?", (root_id,)
+                    ).fetchone()
+                )
+                is not None
+            )
+            assert len(updated_roots) == len(root_additions)
+
             connection.executemany(
                 "DELETE FROM games WHERE id = ?",
                 ((game_id,) for game_id in unique_requests),
@@ -313,61 +326,19 @@ class LibraryService:
             return BatchGameRemovalResult(
                 installed_count=installed_count,
                 missing_count=missing_count,
-                updated_root_ids=tuple(root_additions),
+                updated_roots=updated_roots,
                 managed_cover_relpaths=tuple(cover_paths),
             )
 
         return self._writer.submit(operation).result()
 
     def remove_game_and_exclude(self, game_id: str) -> ScanRoot:
-        def operation(connection: sqlite3.Connection) -> ScanRoot:
-            game = connection.execute(
-                "SELECT status, scan_root_id, relative_dir FROM games WHERE id = ?",
-                (game_id,),
-            ).fetchone()
-            if game is None:
-                raise GameNotFoundError(game_id)
-            if (
-                game["status"] != "installed"
-                or game["scan_root_id"] is None
-                or game["relative_dir"] is None
-            ):
-                raise InvalidGameRemoval(
-                    "Only an installed game owned by a scan root can be removed and excluded."
-                )
-            root = connection.execute(
-                "SELECT * FROM scan_roots WHERE id = ?", (game["scan_root_id"],)
-            ).fetchone()
-            if root is None:
-                raise RootNotFoundError(str(game["scan_root_id"]))
-            exclusions = _normalize_exclusions(
-                (*_json_string_tuple(root["exclusions_json"]), str(game["relative_dir"]))
-            )
-            connection.execute(
-                "UPDATE scan_roots SET exclusions_json = json(?) WHERE id = ?",
-                (_json_array(exclusions), root["id"]),
-            )
-            connection.execute("DELETE FROM games WHERE id = ?", (game_id,))
-            updated = connection.execute(
-                "SELECT * FROM scan_roots WHERE id = ?", (root["id"],)
-            ).fetchone()
-            assert updated is not None
-            return scan_root_from_row(updated)
-
-        return self._writer.submit(operation).result()
+        result = self.remove_games((GameRemovalRequest(game_id, "installed"),))
+        assert len(result.updated_roots) == 1
+        return result.updated_roots[0]
 
     def delete_missing_game(self, game_id: str) -> None:
-        def operation(connection: sqlite3.Connection) -> None:
-            game = connection.execute(
-                "SELECT status FROM games WHERE id = ?", (game_id,)
-            ).fetchone()
-            if game is None:
-                raise GameNotFoundError(game_id)
-            if game["status"] != "missing":
-                raise InvalidGameRemoval("Only a missing game record can be deleted.")
-            connection.execute("DELETE FROM games WHERE id = ?", (game_id,))
-
-        self._writer.submit(operation).result()
+        self.remove_games((GameRemovalRequest(game_id, "missing"),))
 
     def set_game_title(self, game_id: str, title: str) -> Game:
         clean_title = title.strip()

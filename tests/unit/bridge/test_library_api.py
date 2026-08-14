@@ -1,8 +1,12 @@
+from io import BytesIO
 from pathlib import Path
+
+from PIL import Image
 
 from gameshelf.bootstrap.paths import AppPaths
 from gameshelf.bridge.api import BridgeApi
 from gameshelf.bridge.tasks import TaskRegistry
+from gameshelf.covers.service import CoverService
 from gameshelf.db.connection import ConnectionFactory
 from gameshelf.db.migrator import Migrator
 from gameshelf.db.writer import DbWriter
@@ -111,14 +115,20 @@ def test_delete_missing_game_rejects_installed_game_through_bridge(
 ) -> None:
     api, tasks, writer, library = _library_api(tmp_path)
     try:
+        covers = api._covers  # noqa: SLF001
+        assert isinstance(covers, CoverService)
         root = library.add_root(r"D:\Games", "children", 1, [])
         game = library.create_game_for_test(root.id, "GameA", "GameA")
+        cover = covers.import_clipboard_png(game.id, _png())
 
         result = api.delete_missing_game({"gameId": game.id})
 
         assert result["ok"] is False
         assert result["error"]["code"] == "invalid_game_state"
-        assert library.get_game(game.id) is not None
+        preserved = library.get_game(game.id)
+        assert preserved is not None
+        assert preserved.cover_original_relpath == cover.original_relpath
+        assert (covers._paths.data_dir / cover.original_relpath).is_file()  # noqa: SLF001
     finally:
         tasks.close()
         writer.close()
@@ -127,14 +137,26 @@ def test_delete_missing_game_rejects_installed_game_through_bridge(
 def test_delete_missing_game_removes_record_through_bridge(tmp_path: Path) -> None:
     api, tasks, writer, library = _library_api(tmp_path)
     try:
+        covers = api._covers  # noqa: SLF001
+        assert isinstance(covers, CoverService)
         root = library.add_root(r"D:\Games", "children", 1, [])
         game = library.create_game_for_test(root.id, "GameA", "GameA")
+        cover = covers.import_clipboard_png(game.id, _png())
         library.remove_root(root.id)
+        cleanup_calls: list[tuple[str, ...]] = []
+
+        def cleanup_after_commit(relative_paths) -> int:
+            assert library.get_game(game.id) is None
+            cleanup_calls.append(tuple(relative_paths))
+            return 0
+
+        covers.cleanup_managed_files = cleanup_after_commit  # type: ignore[method-assign]
 
         result = api.delete_missing_game({"gameId": game.id})
 
         assert result == {"ok": True, "data": {"removed": True}}
         assert library.get_game(game.id) is None
+        assert cleanup_calls == [(cover.original_relpath, cover.thumb_relpath)]
     finally:
         tasks.close()
         writer.close()
@@ -152,6 +174,7 @@ def _library_api(
     tasks = TaskRegistry(max_workers=1)
     repository = LibraryRepository(factory)
     library = LibraryService(repository, writer)
+    covers = CoverService(paths, repository, writer)
     scanner = ScanService(repository, writer)
     launcher = GameLauncher(
         repository, writer, WindowsProcessLauncher(), WindowsShell()
@@ -163,5 +186,12 @@ def _library_api(
         library=library,
         scanner=scanner,
         launcher=launcher,
+        covers=covers,
     )
     return api, tasks, writer, library
+
+
+def _png() -> bytes:
+    stream = BytesIO()
+    Image.new("RGBA", (30, 45), "purple").save(stream, format="PNG")
+    return stream.getvalue()

@@ -99,6 +99,31 @@ def test_import_file_never_modifies_or_deletes_external_source(cover_harness) ->
     assert source.read_bytes() == payload
 
 
+def test_cleanup_managed_files_deletes_only_direct_managed_cover_files(
+    cover_harness,
+) -> None:
+    paths, _, _, service, _ = cover_harness
+    removable = paths.covers_original_dir / "remove.png"
+    stuck = paths.covers_thumbs_dir / "stuck.webp"
+    external = paths.data_dir.parent / "external.png"
+    removable.write_bytes(b"managed")
+    stuck.mkdir()
+    external.write_bytes(b"external")
+
+    warnings = service.cleanup_managed_files(
+        (
+            "covers/original/remove.png",
+            "covers/thumbs/stuck.webp",
+            "../external.png",
+        )
+    )
+
+    assert warnings == 2
+    assert not removable.exists()
+    assert stuck.is_dir()
+    assert external.read_bytes() == b"external"
+
+
 def _png(color: str) -> bytes:
     stream = BytesIO()
     Image.new("RGBA", (30, 45), color).save(stream, format="PNG")
