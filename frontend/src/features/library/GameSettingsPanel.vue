@@ -45,19 +45,51 @@ async function saveAdvanced() {
   if (result.ok) emit('updated', result.data); else message.value = result.error.message
 }
 
-async function launch() {
-  const result = await props.bridge.launch_game({ gameId: props.game.id })
-  message.value = result.ok ? `游戏已启动（PID ${result.data.pid}）` : result.error.message
+async function openInstallDirectory() {
+  const result = await props.bridge.open_install_directory({ gameId: props.game.id })
+  if (!result.ok) message.value = result.error.message
 }
 </script>
 
 <template>
-  <aside class="game-settings-panel">
-    <div class="section-heading"><h2>游戏设置</h2></div>
-    <label>标题</label><div class="path-row"><input v-model="title" /><button type="button" @click="saveTitle">保存</button></div>
-    <dl><dt>安装路径</dt><dd>{{ game.installPath ?? '未知' }}</dd><dt>主程序</dt><dd>{{ game.mainExeRelpath ?? '尚未选择' }}</dd></dl>
-    <div class="dialog-actions"><button type="button" @click="chooseExecutable">选择主程序</button><button type="button" class="secondary" @click="bridge.open_install_directory({ gameId: game.id })">打开文件夹</button><button type="button" :disabled="game.status !== 'installed' || !game.mainExeRelpath" @click="launch">启动</button></div>
-    <details><summary>高级启动设置</summary><label>工作目录（相对路径）</label><input v-model="workingDir" placeholder="留空表示游戏目录" /><label>参数（每行一个）</label><textarea v-model="argsText" rows="3" /><label>环境变量（NAME=VALUE）</label><textarea v-model="environmentText" rows="3" /><button type="button" @click="saveAdvanced">保存启动设置</button></details>
-    <p v-if="message" class="status-message">{{ message }}</p>
-  </aside>
+  <details open data-test="game-settings-section" class="detail-section game-settings-panel">
+    <summary class="detail-section-summary">游戏设置</summary>
+    <div class="detail-section-body">
+      <label>标题</label>
+      <div class="path-row">
+        <input v-model="title" />
+        <button type="button" @click="saveTitle">保存</button>
+      </div>
+      <dl class="game-paths">
+        <dt>安装路径</dt>
+        <dd>
+          <button
+            data-test="install-path"
+            type="button"
+            class="path-link"
+            :disabled="!game.installPath"
+            @click="openInstallDirectory"
+          >{{ game.installPath ?? '未知' }}</button>
+        </dd>
+        <dt>主程序</dt>
+        <dd>{{ game.mainExeRelpath ?? '尚未选择' }}</dd>
+      </dl>
+      <div class="compact-actions">
+        <button type="button" @click="chooseExecutable">
+          {{ game.mainExeRelpath ? '重新选择主程序' : '选择主程序' }}
+        </button>
+      </div>
+      <details class="advanced-settings">
+        <summary>高级启动设置</summary>
+        <label>工作目录（相对路径）</label>
+        <input v-model="workingDir" placeholder="留空表示游戏目录" />
+        <label>参数（每行一个）</label>
+        <textarea v-model="argsText" rows="3" />
+        <label>环境变量（NAME=VALUE）</label>
+        <textarea v-model="environmentText" rows="3" />
+        <button type="button" @click="saveAdvanced">保存启动设置</button>
+      </details>
+      <p v-if="message" class="status-message" aria-live="polite">{{ message }}</p>
+    </div>
+  </details>
 </template>

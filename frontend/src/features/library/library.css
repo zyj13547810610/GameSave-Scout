@@ -35,7 +35,15 @@
 .engine-picker-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
 .engine-picker .secondary { color: #c7c1d0; background: #28242f; }
 .inline-error { margin: 0; color: #ff9c9c; }
-.game-drawer .game-settings-panel { min-height: auto; border: 0; padding: 0; background: transparent; }
+.detail-section { margin-top: 1rem; border: 1px solid #393641; border-radius: .75rem; background: #1a171f; }
+.detail-section-summary { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .85rem 1rem; cursor: pointer; font-weight: 700; }
+.detail-section-summary small { color: #918b9d; font-weight: 400; }
+.detail-section-body { display: grid; gap: .75rem; border-top: 1px solid #302c38; padding: 1rem; }
+.game-drawer .game-settings-panel { min-height: auto; padding: 0; }
+.game-settings-panel .game-paths { margin: 0; }
+.path-link { width: fit-content; max-width: 100%; border: 0; padding: 0; color: #cfc2f5; background: transparent; text-align: left; overflow-wrap: anywhere; }
+.path-link:hover:not(:disabled) { color: #e3dafc; text-decoration: underline; }
+.advanced-settings { display: grid; gap: .65rem; margin-top: 0; }
 .record-danger-zone { display: grid; gap: .65rem; margin-top: 1rem; border-top: 1px solid #673541; padding-top: 1rem; }
 .record-danger-zone h3, .record-danger-zone p { margin: 0; }
 .record-danger-zone p { color: #aaa3b7; font-size: .8rem; }
