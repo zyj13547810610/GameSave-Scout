@@ -3,7 +3,7 @@ import { createPinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../src/App.vue'
 import { bridgeKey } from '../src/api/bridge'
-import type { UiScaleValue } from '../src/api/contracts'
+import type { GameShelfBridge, UiScaleValue } from '../src/api/contracts'
 import { createMockBridge, fixtureGame, ok } from '../src/api/mockBridge'
 import '../src/styles/base.css'
 
@@ -97,5 +97,102 @@ describe('App', () => {
 
     expect(layout.querySelector('.settings-panel')).toBeNull()
     expect(getComputedStyle(layout).gridTemplateColumns).toBe(columnsBefore)
+  })
+
+  it('selects eligible games across filters and removes them in one batch', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const games = [
+      fixtureGame({ id: 'installed-1', title: 'Alpha', status: 'installed' }),
+      fixtureGame({ id: 'missing-1', title: 'Beta', status: 'missing', scanRootId: null }),
+      fixtureGame({ id: 'save-1', title: 'Gamma', status: 'save_only', scanRootId: null }),
+    ]
+    let listCalls = 0
+    const removeGames = vi.fn(
+      async (_input: Parameters<GameShelfBridge['remove_games']>[0]) => ok({
+        installedCount: 1,
+        missingCount: 1,
+        updatedRootCount: 1,
+        cleanupWarnings: ['有 1 个受管封面文件未能清理，可稍后查看日志。'],
+      }),
+    )
+    const bridge = createMockBridge({
+      async list_games() {
+        listCalls += 1
+        return ok(listCalls === 1 ? games : [])
+      },
+      remove_games: removeGames,
+    })
+    const wrapper = mount(App, {
+      global: {
+        plugins: [createPinia()],
+        provide: { [bridgeKey as symbol]: bridge },
+      },
+    })
+    await flushPromises()
+
+    await wrapper.get('[data-test="enter-batch-mode"]').trigger('click')
+    expect(wrapper.get('[data-test="batch-delete"]').attributes('disabled')).toBeDefined()
+    await wrapper.get('[data-test="game-card-installed-1"]').trigger('click')
+    await wrapper.get('[data-test="game-card-save-1"]').trigger('click')
+
+    expect(wrapper.find('[data-test="game-detail-drawer"]').exists()).toBe(false)
+    expect(wrapper.get('[data-test="game-card-save-1"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('[data-test="batch-counts"]').text()).toContain('已选择 1 个')
+    expect(wrapper.get('[data-test="batch-counts"]').text()).toContain('已安装 1')
+
+    await wrapper.get('select[aria-label="状态筛选"]').setValue('missing')
+    await wrapper.get('[data-test="select-visible-games"]').trigger('click')
+
+    expect(wrapper.get('[data-test="batch-counts"]').text()).toContain('已选择 2 个')
+    expect(wrapper.get('[data-test="batch-counts"]').text()).toContain('失效 1')
+
+    await wrapper.get('[data-test="batch-delete"]').trigger('click')
+    await flushPromises()
+
+    expect(removeGames).toHaveBeenCalledWith({
+      items: [
+        { gameId: 'installed-1', expectedStatus: 'installed' },
+        { gameId: 'missing-1', expectedStatus: 'missing' },
+      ],
+    })
+    expect(listCalls).toBe(2)
+    expect(wrapper.find('[data-test="batch-management-bar"]').exists()).toBe(false)
+    expect(wrapper.get('[data-test="batch-result"]').text()).toContain(
+      '已处理 2 个游戏：已安装 1，失效 1；更新 1 个根目录排除项。',
+    )
+    expect(wrapper.get('[data-test="batch-result"]').text()).toContain(
+      '有 1 个受管封面文件未能清理',
+    )
+  })
+
+  it('cancels batch mode and refreshes when a selected game status changed', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const game = fixtureGame({ id: 'installed-1', status: 'installed' })
+    const bridge = createMockBridge({
+      async list_games() { return ok([game]) },
+      async remove_games() {
+        return {
+          ok: false,
+          error: { code: 'invalid_game_state', message: '游戏状态已经变化。' },
+        }
+      },
+    })
+    const wrapper = mount(App, {
+      global: {
+        plugins: [createPinia()],
+        provide: { [bridgeKey as symbol]: bridge },
+      },
+    })
+    await flushPromises()
+
+    await wrapper.get('[data-test="enter-batch-mode"]').trigger('click')
+    await wrapper.get('[data-test="game-card-installed-1"]').trigger('click')
+    await wrapper.get('[data-test="batch-delete"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="batch-management-bar"]').exists()).toBe(false)
+    expect(wrapper.get('[data-test="batch-result"]').text()).toContain(
+      '游戏状态已经变化，请重新选择。',
+    )
   })
 })
