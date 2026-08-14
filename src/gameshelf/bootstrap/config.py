@@ -5,8 +5,9 @@ from __future__ import annotations
 import json
 import logging
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
+from threading import Lock
 from typing import Any
 from uuid import uuid4
 
@@ -16,6 +17,10 @@ UI_SCALE_OPTIONS = frozenset({0.8, 0.9, 1.0, 1.1, 1.2})
 
 class InvalidConfigError(ValueError):
     """Raised when an existing configuration cannot be safely interpreted."""
+
+
+class InvalidUiScaleError(ValueError):
+    """Raised when a requested UI scale is outside the supported options."""
 
 
 @dataclass(frozen=True)
@@ -109,7 +114,7 @@ class JsonConfigStore:
         valid_ui_scale = type(ui_scale) in {int, float} and float(ui_scale) in UI_SCALE_OPTIONS
         normalized_ui_scale = float(ui_scale) if valid_ui_scale else 1.0
         if not valid_ui_scale:
-            logger.warning("配置中的 uiScale 无效，已在本次运行中回退到 100%%。")
+            logger.warning("配置中的 uiScale 无效，已在本次运行中回退到 100%。")
         config = AppConfig(
             version=2,
             language=language,
@@ -125,3 +130,30 @@ class JsonConfigStore:
             self.save(config)
         except OSError:
             logger.warning("无法写回规范化配置，本次运行继续使用内存中的设置。")
+
+
+class ConfigService:
+    """Hold the current portable configuration and persist validated updates."""
+
+    def __init__(self, store: JsonConfigStore) -> None:
+        self._store = store
+        self._current = store.load()
+        self._lock = Lock()
+
+    @property
+    def current(self) -> AppConfig:
+        with self._lock:
+            return self._current
+
+    def set_ui_scale(self, value: object) -> AppConfig:
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or float(value) not in UI_SCALE_OPTIONS
+        ):
+            raise InvalidUiScaleError("界面缩放必须是 80%、90%、100%、110% 或 120%。")
+        with self._lock:
+            updated = replace(self._current, ui_scale=float(value))
+            self._store.save(updated)
+            self._current = updated
+            return updated

@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from threading import Lock
 
+from gameshelf.bootstrap.config import ConfigService, JsonConfigStore
 from gameshelf.bootstrap.logging import configure_logging
 from gameshelf.bootstrap.paths import AppPaths
 from gameshelf.bridge.api import BridgeApi
@@ -42,6 +43,7 @@ class Application:
     writer: DbWriter
     tasks: TaskRegistry
     logger: logging.Logger
+    config: ConfigService
     schema_version: int
     asset_server: AssetServer
     asset_address: AssetServerAddress
@@ -63,6 +65,7 @@ class Application:
 def build_application(paths: AppPaths) -> Application:
     paths.ensure_writable()
     logger = configure_logging(paths.logs_dir)
+    config = ConfigService(JsonConfigStore(paths.config_file))
     database = ConnectionFactory(paths.database_file)
     schema_version = Migrator(database, paths.backups_dir).migrate()
     writer = DbWriter(database)
@@ -122,6 +125,7 @@ def build_application(paths: AppPaths) -> Application:
         paths,
         tasks,
         schema_version=schema_version,
+        config=config,
         library=library,
         scanner=scanner,
         launcher=launcher,
@@ -142,6 +146,7 @@ def build_application(paths: AppPaths) -> Application:
         writer=writer,
         tasks=tasks,
         logger=logger,
+        config=config,
         schema_version=schema_version,
         asset_server=asset_server,
         asset_address=asset_address,

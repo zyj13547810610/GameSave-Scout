@@ -8,6 +8,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
+from gameshelf.bootstrap.config import ConfigService, InvalidUiScaleError
 from gameshelf.bootstrap.paths import AppPaths
 from gameshelf.bridge.contracts import ApiResult, JSONValue, failure, success
 from gameshelf.bridge.tasks import TaskContext, TaskRegistry, TaskSnapshot
@@ -60,6 +61,7 @@ class BridgeApi:
         tasks: TaskRegistry,
         *,
         schema_version: int,
+        config: ConfigService | None = None,
         library: LibraryService | None = None,
         scanner: ScanService | None = None,
         launcher: GameLauncher | None = None,
@@ -76,6 +78,7 @@ class BridgeApi:
         self._paths = paths
         self._tasks = tasks
         self._schema_version = schema_version
+        self._config = config
         self._library = library
         self._scanner = scanner
         self._launcher = launcher
@@ -99,10 +102,26 @@ class BridgeApi:
             "appName": "GameShelf",
             "schemaVersion": self._schema_version,
             "portable": True,
+            "uiScale": self._config.current.ui_scale if self._config is not None else 1.0,
         }
         if self._asset_session_token is not None:
             state["assetSessionToken"] = self._asset_session_token
         return success(state)
+
+    def set_ui_scale(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            config = self._require_config().set_ui_scale(payload.get("uiScale"))
+            return success({"uiScale": config.ui_scale})
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except InvalidUiScaleError as error:
+            return failure("invalid_ui_scale", str(error))
+        except OSError:
+            return failure(
+                "config_save_failed",
+                "缩放设置保存失败，下次启动可能恢复默认值。",
+            )
 
     def list_roots(self) -> ApiResult:
         library = self._require_library()
@@ -720,6 +739,11 @@ class BridgeApi:
         if self._covers is None:
             raise RuntimeError("Cover services are not configured.")
         return self._covers
+
+    def _require_config(self) -> ConfigService:
+        if self._config is None:
+            raise RuntimeError("Portable configuration is not configured.")
+        return self._config
 
     def _require_engine_detection(self) -> EngineDetectionService:
         if self._engine_detection is None:
