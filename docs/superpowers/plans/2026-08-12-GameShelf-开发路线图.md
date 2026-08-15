@@ -138,9 +138,10 @@ V0.1 引导式检测和 V0.2 孤立存档是独立子项目；不因为共享部
 
 ## 10. 质量门禁
 
-每个代码增量按风险运行相关测试；首版候选发布必须运行：
+每个代码增量按风险运行相关测试；首版候选发布必须在项目根目录激活包含 Python 3.12 与 Node.js 24 的 Conda 环境后运行：
 
 ```powershell
+conda activate .\.venv
 python -m pytest
 python -m ruff check src tests
 python -m mypy src

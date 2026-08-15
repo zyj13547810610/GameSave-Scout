@@ -6,22 +6,35 @@ GameShelf 是一个面向 Windows 10/11 x64 的本地优先、便携式个人游
 
 ## 开发环境
 
-- Python 3.12
-- Node.js 24 LTS
+- Conda（Anaconda 或 Miniconda）
+- 项目内 Conda 环境：Python 3.12、Node.js 24
 
-后端安装与检查：
+以下命令均在项目根目录执行。首次开发时创建项目内 `.venv` 环境并安装依赖：
 
 ```powershell
+conda create --prefix .\.venv --override-channels -c conda-forge python=3.12 nodejs=24 -y
+conda activate .\.venv
 python -m pip install -e ".[dev]"
+npm --prefix frontend install
+```
+
+`.venv` 同时提供项目所需的 Python 和 Node.js，不需要修改系统中已有的 Node.js。以后重新打开终端时，只需先进入项目根目录并激活环境：
+
+```powershell
+conda activate .\.venv
+```
+
+后端检查：
+
+```powershell
 python -m pytest
 python -m ruff check src tests
 python -m mypy src
 ```
 
-前端安装与检查：
+前端检查与生产构建：
 
 ```powershell
-npm --prefix frontend install
 npm --prefix frontend run test:unit -- --run
 npm --prefix frontend run type-check
 npm --prefix frontend run build
@@ -33,7 +46,31 @@ npm --prefix frontend run build
 python -m gameshelf --smoke-test
 ```
 
-正常开发启动使用 `python -m gameshelf`。可通过 `GAMESHELF_DEV_SERVER_URL` 指向本地 Vite 开发服务器；冻结版会忽略该变量并只加载随包 UI。
+## 启动项目
+
+在项目根目录打开 PowerShell，激活项目环境并启动桌面程序：
+
+```powershell
+conda activate .\.venv
+python -m gameshelf
+```
+
+该命令会加载已经构建到 `resources/ui` 的前端。如果修改过前端源码，应先执行 `npm --prefix frontend run build`。
+
+需要前端热更新时，打开两个已经激活 `.venv` 的 PowerShell 窗口。第一个窗口启动 Vite：
+
+```powershell
+npm --prefix frontend run dev -- --host 127.0.0.1
+```
+
+第二个窗口让桌面程序加载 Vite 页面：
+
+```powershell
+$env:GAMESHELF_DEV_SERVER_URL = "http://127.0.0.1:5173"
+python -m gameshelf
+```
+
+如果 Vite 因端口占用显示了其他地址，应把 `GAMESHELF_DEV_SERVER_URL` 改为终端中实际显示的地址。冻结版会忽略该变量并只加载随包 UI。
 
 ## 当前游戏库能力
 
