@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../src/App.vue'
 import { bridgeKey } from '../src/api/bridge'
 import type { ApiResult, Game, GameShelfBridge, UiScaleValue } from '../src/api/contracts'
-import { createMockBridge, fixtureGame, ok } from '../src/api/mockBridge'
+import { createMockBridge, fixtureGame, fixtureGuidedSession, ok } from '../src/api/mockBridge'
 import '../src/styles/base.css'
 
 beforeEach(() => {
@@ -97,6 +97,54 @@ describe('App', () => {
 
     expect(layout.querySelector('.settings-panel')).toBeNull()
     expect(getComputedStyle(layout).gridTemplateColumns).toBe(columnsBefore)
+  })
+
+  it('restores the monitored game drawer from the global guided status bar', async () => {
+    const session = fixtureGuidedSession({ gameId: 'game-1', gameTitle: 'Alice' })
+    const bridge = createMockBridge({
+      async list_games() { return ok([fixtureGame({ id: 'game-1', title: 'Alice' })]) },
+      async current_guided_save_detection() { return ok(session) },
+      async guided_save_detection_status() { return ok(session) },
+    })
+    const wrapper = mount(App, {
+      global: {
+        plugins: [createPinia()],
+        provide: { [bridgeKey as symbol]: bridge },
+      },
+    })
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="guided-save-status-bar"]').text()).toContain('Alice')
+    await wrapper.get('[data-test="restore-guided-save"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="game-detail-drawer"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('shows close choices reported by the guided session', async () => {
+    const session = fixtureGuidedSession({ closeRequested: true })
+    const resolveClose = vi.fn(async () => ok({ resolved: true }))
+    const bridge = createMockBridge({
+      async list_games() { return ok([fixtureGame()]) },
+      async current_guided_save_detection() { return ok(session) },
+      async guided_save_detection_status() { return ok(session) },
+      resolve_guided_close: resolveClose,
+    })
+    const wrapper = mount(App, {
+      global: {
+        plugins: [createPinia()],
+        provide: { [bridgeKey as symbol]: bridge },
+      },
+    })
+    await flushPromises()
+
+    const dialog = wrapper.get('[data-test="guided-save-close-dialog"]')
+    await dialog.get('button').trigger('click')
+    await flushPromises()
+
+    expect(resolveClose).toHaveBeenCalledWith({ resolution: 'return' })
+    wrapper.unmount()
   })
 
   it('selects eligible games across filters and removes them in one batch', async () => {

@@ -94,15 +94,34 @@ CREATE TABLE scan_observations (
 CREATE TABLE save_detection_sessions (
   id TEXT PRIMARY KEY,
   game_id TEXT NOT NULL REFERENCES games(id) ON DELETE CASCADE,
-  status TEXT NOT NULL CHECK (status IN ('preparing', 'monitoring', 'settling', 'completed', 'cancelled', 'failed')),
+  status TEXT NOT NULL CHECK (status IN (
+    'preparing', 'monitoring', 'settling', 'completed',
+    'cancelled', 'failed', 'interrupted'
+  )),
+  active_slot INTEGER CHECK (active_slot IS NULL OR active_slot = 1),
   started_at TEXT NOT NULL,
+  monitoring_started_at TEXT,
   save_marked_at TEXT,
   finished_at TEXT,
-  monitored_roots_json TEXT NOT NULL DEFAULT '[]',
-  overflowed INTEGER NOT NULL DEFAULT 0 CHECK (overflowed IN (0, 1)),
+  root_pid INTEGER,
+  approved_scopes_json TEXT NOT NULL DEFAULT '[]',
+  unavailable_scopes_json TEXT NOT NULL DEFAULT '[]',
+  overflowed_scopes_json TEXT NOT NULL DEFAULT '[]',
+  truncated_scopes_json TEXT NOT NULL DEFAULT '[]',
+  process_tracking_degraded INTEGER NOT NULL DEFAULT 0
+    CHECK (process_tracking_degraded IN (0, 1)),
   result_summary_json TEXT NOT NULL DEFAULT '{}',
-  error_summary TEXT
+  error_code TEXT,
+  error_summary TEXT,
+  CHECK (
+    (status IN ('preparing', 'monitoring', 'settling') AND active_slot = 1)
+    OR (status NOT IN ('preparing', 'monitoring', 'settling') AND active_slot IS NULL)
+  )
 );
+
+CREATE UNIQUE INDEX save_detection_one_active
+  ON save_detection_sessions(active_slot)
+  WHERE active_slot = 1;
 
 CREATE TABLE save_discoveries (
   id TEXT PRIMARY KEY,
@@ -110,15 +129,30 @@ CREATE TABLE save_discoveries (
   detection_session_id TEXT REFERENCES save_detection_sessions(id) ON DELETE CASCADE,
   candidate_template TEXT NOT NULL,
   display_path TEXT NOT NULL,
+  path_key TEXT NOT NULL,
   kind TEXT NOT NULL CHECK (kind IN ('directory', 'file', 'registry')),
   suggested_game TEXT,
   engine_id TEXT,
   confidence REAL NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
   evidence_json TEXT NOT NULL DEFAULT '[]',
+  representative_files_json TEXT NOT NULL DEFAULT '[]',
+  first_changed_at TEXT,
+  last_changed_at TEXT,
+  mark_offset_ms INTEGER,
+  affected_by_overflow INTEGER NOT NULL DEFAULT 0
+    CHECK (affected_by_overflow IN (0, 1)),
+  affected_by_truncation INTEGER NOT NULL DEFAULT 0
+    CHECK (affected_by_truncation IN (0, 1)),
+  preselected INTEGER NOT NULL DEFAULT 0 CHECK (preselected IN (0, 1)),
   review_status TEXT NOT NULL DEFAULT 'unreviewed'
-    CHECK (review_status IN ('unreviewed', 'linked', 'save_only', 'ignored')),
+    CHECK (review_status IN ('unreviewed', 'accepted', 'ignored', 'linked', 'save_only')),
   linked_game_id TEXT REFERENCES games(id) ON DELETE SET NULL,
-  CHECK (scan_session_id IS NOT NULL OR detection_session_id IS NOT NULL)
+  save_location_id TEXT REFERENCES save_locations(id) ON DELETE SET NULL,
+  CHECK (
+    (scan_session_id IS NOT NULL AND detection_session_id IS NULL)
+    OR (scan_session_id IS NULL AND detection_session_id IS NOT NULL)
+  ),
+  UNIQUE(detection_session_id, kind, path_key)
 );
 
 CREATE TABLE settings (

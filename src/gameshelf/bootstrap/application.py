@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from threading import Lock
+from time import monotonic_ns
+from typing import cast
 
 from gameshelf.bootstrap.config import ConfigService, JsonConfigStore
 from gameshelf.bootstrap.logging import configure_logging
@@ -21,17 +23,32 @@ from gameshelf.engines.service import EngineDetectionService
 from gameshelf.library.launcher import GameLauncher
 from gameshelf.library.repository import LibraryRepository
 from gameshelf.library.service import LibraryService
+from gameshelf.platform.windows.directory_watcher import WindowsDirectoryWatcher
 from gameshelf.platform.windows.known_folders import WindowsKnownFolderProvider
+from gameshelf.platform.windows.process_tree import WindowsProcessTreeTracker
 from gameshelf.platform.windows.processes import WindowsProcessLauncher
 from gameshelf.platform.windows.registry import WindowsRegistry
 from gameshelf.platform.windows.shell import WindowsShell
 from gameshelf.saves.custom_manifest_provider import CustomManifestProvider
 from gameshelf.saves.engine_hints import EngineSaveHintProvider
+from gameshelf.saves.guided_models import GuidedScopeOption
+from gameshelf.saves.guided_registry import RegistryMetadataReader
+from gameshelf.saves.guided_repository import GuidedSaveRepository
+from gameshelf.saves.guided_review import GuidedSaveReviewService
+from gameshelf.saves.guided_scanner import BoundedMetadataScanner
+from gameshelf.saves.guided_scope import GuidedSaveScopeBuilder
+from gameshelf.saves.guided_scoring import GuidedScoringContext
+from gameshelf.saves.guided_service import (
+    DirectoryWatcher,
+    GuidedSaveSessionService,
+    ProcessTracker,
+)
 from gameshelf.saves.ludusavi_provider import LudusaviProvider
 from gameshelf.saves.repository import SaveLocationRepository
 from gameshelf.saves.service import SaveLocationService
 from gameshelf.saves.static_discovery import StaticSaveDiscovery
 from gameshelf.saves.templates import PathTemplateResolver
+from gameshelf.scanning.path_keys import windows_path_key
 from gameshelf.scanning.service import ScanService
 from gameshelf.web.asset_server import AssetServer, AssetServerAddress
 
@@ -48,6 +65,7 @@ class Application:
     schema_version: int
     asset_server: AssetServer
     asset_address: AssetServerAddress
+    guided_saves: GuidedSaveSessionService
     _close_lock: Lock = field(default_factory=Lock, repr=False)
     _closed: bool = field(default=False, init=False, repr=False)
 
@@ -56,6 +74,7 @@ class Application:
             if self._closed:
                 return
             self._closed = True
+        self.guided_saves.close()
         self.tasks.close()
         self.asset_server.stop()
         self.writer.close()
@@ -83,15 +102,17 @@ def build_application(paths: AppPaths) -> Application:
     shell = WindowsShell()
     launcher = GameLauncher(repository, writer, WindowsProcessLauncher(), shell)
     covers = CoverService(paths, repository, writer)
-    resolver = PathTemplateResolver(WindowsKnownFolderProvider().load())
+    known_folders = WindowsKnownFolderProvider().load()
+    resolver = PathTemplateResolver(known_folders)
     save_repository = SaveLocationRepository(database)
+    registry = WindowsRegistry()
     save_locations = SaveLocationService(
         save_repository,
         writer,
         resolver,
         library,
         shell,
-        WindowsRegistry(),
+        registry,
     )
     custom_manifest_directory = paths.manifests_dir / "custom"
     custom_provider = CustomManifestProvider(custom_manifest_directory)
@@ -108,6 +129,51 @@ def build_application(paths: AppPaths) -> Application:
         custom_provider=custom_provider,
         engine_hints=EngineSaveHintProvider(resolver),
         engine_is_experimental=engine_detection.is_experimental,
+    )
+    guided_repository = GuidedSaveRepository(database, writer)
+    guided_scope_builder = GuidedSaveScopeBuilder(
+        library=library,
+        save_repository=save_repository,
+        resolver=resolver,
+        known_folders=known_folders,
+        static_discovery=static_discovery,
+    )
+
+    def guided_scoring_context(
+        game_id: str,
+        scopes: tuple[GuidedScopeOption, ...],
+        overflowed_root_keys: tuple[str, ...],
+        truncated_root_keys: tuple[str, ...],
+    ) -> GuidedScoringContext:
+        game_dir = library.install_directory(game_id)
+        existing_location_keys = tuple(
+            location.path_key for location in save_repository.list_for_game(game_id)
+        )
+        return GuidedScoringContext(
+            resolver=resolver,
+            game_dir=game_dir,
+            trusted_root_keys=tuple(
+                windows_path_key(Path(scope.display_path)) for scope in scopes
+            ),
+            existing_location_keys=existing_location_keys,
+            overflowed_root_keys=overflowed_root_keys,
+            truncated_root_keys=truncated_root_keys,
+        )
+
+    guided_saves = GuidedSaveSessionService(
+        repository=guided_repository,
+        scope_builder=guided_scope_builder,
+        registry_reader=RegistryMetadataReader(registry),
+        watcher=cast(DirectoryWatcher, WindowsDirectoryWatcher()),
+        launcher=launcher,
+        process_tracker=cast(ProcessTracker, WindowsProcessTreeTracker()),
+        scanner=BoundedMetadataScanner(),
+        scoring_context_factory=guided_scoring_context,
+        monotonic_ns=monotonic_ns,
+    )
+    guided_saves.recover_interrupted()
+    guided_review = GuidedSaveReviewService(
+        database, writer, guided_repository, save_locations
     )
 
     def cover_lookup(game_id: str, variant: str) -> Path | None:
@@ -138,6 +204,9 @@ def build_application(paths: AppPaths) -> Application:
         engine_detection=engine_detection,
         save_locations=save_locations,
         static_discovery=static_discovery,
+        guided_saves=guided_saves,
+        guided_repository=guided_repository,
+        guided_review=guided_review,
         ludusavi_provider=ludusavi_provider,
         custom_provider=custom_provider,
         custom_manifest_directory=custom_manifest_directory,
@@ -155,6 +224,7 @@ def build_application(paths: AppPaths) -> Application:
         schema_version=schema_version,
         asset_server=asset_server,
         asset_address=asset_address,
+        guided_saves=guided_saves,
     )
 
 

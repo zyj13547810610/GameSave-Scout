@@ -113,5 +113,24 @@
 .manifest-update-result.invalid { color: #f1cc87; background: #332815; }
 .manifest-update-result.failed, .ludusavi-settings > p.manifest-unavailable { color: #ffb0b0; background: #351d25; }
 .manifest-unavailable { margin: 0; border-radius: .5rem; padding: .55rem .65rem; }
+.guided-save-status-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; margin: 0 0 1rem; border: 1px solid #5a477b; border-radius: .75rem; padding: .75rem 1rem; background: #211a2e; }
+.guided-save-status-bar div { display: grid; min-width: 0; gap: .2rem; }
+.guided-save-status-bar span { color: #aaa3b7; font-size: .78rem; }
+.guided-save-panel, .guided-discoveries { display: grid; min-width: 0; gap: .7rem; border-top: 1px solid #302c38; padding-top: 1rem; }
+.guided-save-panel h4, .guided-discoveries h4 { margin: 0; }
+.guided-scope-preview, .guided-session-state { display: grid; min-width: 0; gap: .7rem; border: 1px solid #4b435e; border-radius: .65rem; padding: .75rem; background: #15121c; }
+.guided-scope-preview p, .guided-session-state p { margin: 0; }
+.guided-scope-preview code, .guided-registry-targets code, .guided-extra-directories code { max-width: 100%; overflow-wrap: anywhere; }
+.guided-privacy { color: #aaa3b7; font-size: .78rem; }
+.guided-scope-preview fieldset { display: grid; min-width: 0; gap: .45rem; margin: 0; border: 1px solid #393641; border-radius: .55rem; padding: .65rem; }
+.guided-scope-option { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .55rem; align-items: start; }
+.guided-scope-option > span, .guided-registry-targets, .guided-extra-directories { display: grid; min-width: 0; gap: .25rem; }
+.guided-scope-option small { color: #918b9d; overflow-wrap: anywhere; }
+.warning-text { color: #f3cc87 !important; }
+.guided-discovery-group { min-width: 0; border: 1px solid #393641; border-radius: .6rem; padding: .55rem; }
+.guided-discovery-group > summary { cursor: pointer; color: #cfc2f5; font-weight: 700; }
+.guided-discovery-group .save-suggestion-card { margin-top: .5rem; }
+.guided-discovery-group ul { margin: .35rem 0; padding-left: 1.2rem; }
+.guided-discovery-group code { display: block; overflow-wrap: anywhere; }
 @container (max-width: 33rem) { .library-toolbar { grid-template-columns: 1fr; } }
 @media (max-width: 700px) { .library-toolbar { grid-template-columns: 1fr; } }

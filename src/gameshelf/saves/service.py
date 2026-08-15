@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import glob
-import json
 import os
 import sqlite3
 from collections.abc import Sequence
@@ -12,13 +11,16 @@ from datetime import UTC, datetime
 from itertools import islice
 from pathlib import Path
 from typing import Protocol, cast
-from uuid import uuid4
 
 from gameshelf.db.writer import DbWriter
 from gameshelf.library.service import (
     GameNotFoundError,
     InvalidGameConfiguration,
     LibraryService,
+)
+from gameshelf.saves.location_persistence import (
+    PreparedSaveLocation,
+    upsert_confirmed_location,
 )
 from gameshelf.saves.models import (
     SaveLocation,
@@ -127,6 +129,13 @@ class SaveLocationService:
         game_id: str,
         suggestion: SaveLocationSuggestion,
     ) -> SaveLocation:
+        return self._persist_prepared(self.prepare_suggestion(game_id, suggestion))
+
+    def prepare_suggestion(
+        self,
+        game_id: str,
+        suggestion: SaveLocationSuggestion,
+    ) -> PreparedSaveLocation:
         kind = _validate_kind(suggestion.kind)
         source = _validate_source(suggestion.source)
         confidence = _validate_confidence(suggestion.confidence)
@@ -144,7 +153,7 @@ class SaveLocationService:
             display_path = str(expanded)
             path_key = windows_path_key(expanded)
 
-        return self._persist_confirmed(
+        return PreparedSaveLocation(
             game_id=game_id,
             kind=kind,
             path_template=path_template,
@@ -152,12 +161,14 @@ class SaveLocationService:
             path_key=path_key,
             source=source,
             confidence=confidence,
-            evidence=(
-                *suggestion.evidence,
-                *(
+            evidence=_validate_evidence(
+                (
+                    *suggestion.evidence,
+                    *(
                     f"[{item.source}] {item.detail}"
                     for item in suggestion.source_evidence
-                ),
+                    ),
+                )
             ),
         )
 
@@ -246,47 +257,27 @@ class SaveLocationService:
         evidence: Sequence[str],
     ) -> SaveLocation:
         self._require_game(game_id)
-        clean_evidence = _validate_evidence(evidence)
-
-        def operation(connection: sqlite3.Connection) -> SaveLocation:
-            existing = connection.execute(
-                """
-                SELECT * FROM save_locations
-                WHERE game_id = ? AND kind = ? AND path_key = ?
-                """,
-                (game_id, kind, path_key),
-            ).fetchone()
-            if existing is not None:
-                return save_location_from_row(existing)
-
-            location_id = str(uuid4())
-            connection.execute(
-                """
-                INSERT INTO save_locations(
-                    id, game_id, kind, path_template, display_path, path_key,
-                    source, confidence, evidence_json, confirmed, enabled
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, json(?), 1, 1)
-                """,
-                (
-                    location_id,
-                    game_id,
-                    kind,
-                    path_template,
-                    display_path,
-                    path_key,
-                    source,
-                    confidence,
-                    json.dumps(clean_evidence, ensure_ascii=False, separators=(",", ":")),
-                ),
+        return self._persist_prepared(
+            PreparedSaveLocation(
+                game_id=game_id,
+                kind=kind,
+                path_template=path_template,
+                display_path=display_path,
+                path_key=path_key,
+                source=source,
+                confidence=confidence,
+                evidence=_validate_evidence(evidence),
             )
-            row = connection.execute(
-                "SELECT * FROM save_locations WHERE id = ?", (location_id,)
-            ).fetchone()
-            assert row is not None
-            return save_location_from_row(row)
+        )
 
-        location = self._writer.submit(operation).result()
-        return self._with_existence(location, self._game_directory(game_id))
+    def _persist_prepared(self, prepared: PreparedSaveLocation) -> SaveLocation:
+        self._require_game(prepared.game_id)
+        location = self._writer.submit(
+            lambda connection: upsert_confirmed_location(connection, prepared)
+        ).result()
+        return self._with_existence(
+            location, self._game_directory(prepared.game_id)
+        )
 
     def _with_existence(
         self,

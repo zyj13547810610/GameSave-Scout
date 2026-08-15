@@ -133,6 +133,78 @@ export type SaveSuggestion = {
   group: 'exact' | 'possible' | 'experimental'
 }
 
+export type GuidedSessionStatus =
+  | 'preparing'
+  | 'monitoring'
+  | 'settling'
+  | 'completed'
+  | 'cancelled'
+  | 'failed'
+  | 'interrupted'
+
+export type GuidedSaveScope = {
+  id: string
+  label: string
+  displayPath: string
+  pathTemplate: string
+  source: 'game' | 'documents' | 'saved_games' | 'app_data' | 'local_app_data'
+    | 'local_app_data_low' | 'program_data' | 'confirmed' | 'extra'
+  defaultSelected: boolean
+  available: boolean
+  unavailableReason: string | null
+}
+
+export type GuidedRegistryTarget = {
+  key: string
+  source: string
+  available: boolean
+}
+
+export type GuidedSavePreview = {
+  gameId: string
+  gameTitle: string
+  executable: string
+  scopes: GuidedSaveScope[]
+  registryTargets: GuidedRegistryTarget[]
+  privacyNotice: string
+}
+
+export type GuidedSaveSession = {
+  id: string
+  gameId: string
+  gameTitle: string
+  status: GuidedSessionStatus
+  startedAt: string
+  monitoringStartedAt: string | null
+  saveMarkedAt: string | null
+  finishedAt: string | null
+  changeCount: number
+  processTrackingDegraded: boolean
+  overflowedScopes: string[]
+  truncatedScopes: string[]
+  closeRequested: boolean
+  error: { code: string; message: string } | null
+}
+
+export type GuidedSaveDiscovery = {
+  id: string
+  sessionId: string
+  candidateTemplate: string
+  displayPath: string
+  kind: 'directory' | 'file' | 'registry'
+  confidence: number
+  evidence: string[]
+  representativeFiles: string[]
+  firstChangedAt: string | null
+  lastChangedAt: string | null
+  markOffsetMs: number | null
+  affectedByOverflow: boolean
+  affectedByTruncation: boolean
+  preselected: boolean
+  reviewStatus: 'unreviewed' | 'accepted' | 'ignored'
+  saveLocationId: string | null
+}
+
 export type LudusaviStatus = {
   available: boolean
   unavailableReason: string | null
@@ -250,6 +322,28 @@ export interface GameShelfBridge {
     suggestionIds: string[]
     confirmRegistry: boolean
   }): Promise<ApiResult<SaveLocation[]>>
+  preview_guided_save_detection(input: { gameId: string }): Promise<ApiResult<GuidedSavePreview>>
+  start_guided_save_detection(input: {
+    gameId: string
+    selectedScopeIds: string[]
+    additionalDirectories: string[]
+  }): Promise<ApiResult<GuidedSaveSession>>
+  current_guided_save_detection(): Promise<ApiResult<GuidedSaveSession | null>>
+  guided_save_detection_status(input: { sessionId: string }): Promise<ApiResult<GuidedSaveSession>>
+  latest_guided_save_detection_for_game(input: { gameId: string }): Promise<ApiResult<GuidedSaveSession | null>>
+  mark_guided_save_saved(input: { sessionId: string }): Promise<ApiResult<GuidedSaveSession>>
+  stop_guided_save_detection(input: { sessionId: string }): Promise<ApiResult<GuidedSaveSession>>
+  cancel_guided_save_detection(input: { sessionId: string }): Promise<ApiResult<GuidedSaveSession>>
+  list_guided_save_discoveries(input: { sessionId: string }): Promise<ApiResult<GuidedSaveDiscovery[]>>
+  accept_guided_save_discoveries(input: {
+    sessionId: string
+    discoveryIds: string[]
+    confirmRegistry: boolean
+  }): Promise<ApiResult<SaveLocation[]>>
+  discard_guided_save_detection(input: { sessionId: string }): Promise<ApiResult<{ discarded: number }>>
+  resolve_guided_close(input: {
+    resolution: 'return' | 'cancel_and_exit' | 'analyze_and_exit'
+  }): Promise<ApiResult<{ resolved: boolean }>>
   ludusavi_status(): Promise<ApiResult<LudusaviStatus>>
   update_ludusavi(input: Record<string, never>): Promise<ApiResult<{ taskId: string }>>
   open_custom_manifest_directory(): Promise<ApiResult<{ opened: boolean }>>

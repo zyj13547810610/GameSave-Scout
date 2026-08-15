@@ -4,6 +4,7 @@ import type { GameShelfBridge, SaveLocation } from '../../api/contracts'
 import AddSaveLocationDialog from './AddSaveLocationDialog.vue'
 import LudusaviSettings from './LudusaviSettings.vue'
 import { confidenceLabel, saveKindLabel, saveSourceLabel } from './saveLocationLabels'
+import GuidedSavePanel from './GuidedSavePanel.vue'
 import SaveSuggestionList from './SaveSuggestionList.vue'
 
 const props = defineProps<{
@@ -112,6 +113,7 @@ function verifiedLabel(value: string | null): string {
       </article>
 
       <p class="status-message" aria-live="polite">{{ loading ? '正在读取存档位置…' : message }}</p>
+      <GuidedSavePanel :game-id="gameId" :bridge="bridge" @accepted="refresh" />
       <SaveSuggestionList :game-id="gameId" :bridge="bridge" @accepted="refresh" />
       <details class="ludusavi-settings-details">
         <summary>存档规则设置</summary>

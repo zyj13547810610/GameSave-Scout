@@ -1,4 +1,4 @@
-import type { ApiResult, Game, GameShelfBridge, ScanRoot } from './contracts'
+import type { ApiResult, Game, GameShelfBridge, GuidedSaveSession, ScanRoot } from './contracts'
 
 export function ok<T>(data: T): ApiResult<T> {
   return { ok: true, data }
@@ -102,6 +102,33 @@ export function createMockBridge(overrides: Partial<GameShelfBridge> = {}): Game
     async open_save_location() { return ok({ opened: true }) },
     async suggest_save_locations() { return ok([]) },
     async accept_save_suggestions() { return ok([]) },
+    async preview_guided_save_detection(input) {
+      return ok({
+        gameId: input.gameId,
+        gameTitle: 'Alice',
+        executable: 'D:\\Games\\Alice\\Alice.exe',
+        scopes: [],
+        registryTargets: [],
+        privacyNotice: '只读取文件路径、大小和修改时间等元数据，不读取或修改存档内容。',
+      })
+    },
+    async start_guided_save_detection(input) {
+      return ok(fixtureGuidedSession({ gameId: input.gameId }))
+    },
+    async current_guided_save_detection() { return ok(null) },
+    async guided_save_detection_status() { return ok(fixtureGuidedSession()) },
+    async latest_guided_save_detection_for_game() { return ok(null) },
+    async mark_guided_save_saved() {
+      return ok(fixtureGuidedSession({ status: 'settling', saveMarkedAt: new Date().toISOString() }))
+    },
+    async stop_guided_save_detection() { return ok(fixtureGuidedSession()) },
+    async cancel_guided_save_detection() {
+      return ok(fixtureGuidedSession({ status: 'cancelled', finishedAt: new Date().toISOString() }))
+    },
+    async list_guided_save_discoveries() { return ok([]) },
+    async accept_guided_save_discoveries() { return ok([]) },
+    async discard_guided_save_detection() { return ok({ discarded: 0 }) },
+    async resolve_guided_close() { return ok({ resolved: true }) },
     async ludusavi_status() {
       return ok({
         available: true,
@@ -122,4 +149,26 @@ export function createMockBridge(overrides: Partial<GameShelfBridge> = {}): Game
     async cancel_task() { return ok({ cancelled: false }) },
   }
   return Object.assign(bridge, overrides)
+}
+
+export function fixtureGuidedSession(
+  overrides: Partial<GuidedSaveSession> = {},
+): GuidedSaveSession {
+  return {
+    id: 'guided-session-1',
+    gameId: 'game-1',
+    gameTitle: 'Alice',
+    status: 'monitoring',
+    startedAt: '2026-08-15T00:00:00+00:00',
+    monitoringStartedAt: '2026-08-15T00:00:01+00:00',
+    saveMarkedAt: null,
+    finishedAt: null,
+    changeCount: 0,
+    processTrackingDegraded: false,
+    overflowedScopes: [],
+    truncatedScopes: [],
+    closeRequested: false,
+    error: null,
+    ...overrides,
+  }
 }

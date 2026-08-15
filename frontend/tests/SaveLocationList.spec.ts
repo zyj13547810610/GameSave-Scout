@@ -1,10 +1,12 @@
 import { enableAutoUnmount, mount } from '@vue/test-utils'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SaveLocation } from '../src/api/contracts'
 import { createMockBridge } from '../src/api/mockBridge'
 import SaveLocationList from '../src/features/saves/SaveLocationList.vue'
 
 enableAutoUnmount(afterEach)
+beforeEach(() => setActivePinia(createPinia()))
 
 function fixtureSave(overrides: Partial<SaveLocation> = {}): SaveLocation {
   return {

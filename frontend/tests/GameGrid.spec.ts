@@ -12,6 +12,8 @@ describe('GameGrid', () => {
     })
 
     await wrapper.get('[data-test="game-card-1"]').trigger('click')
+    expect(wrapper.emitted('update:selectedGameId')).toEqual([['1']])
+    await wrapper.setProps({ selectedGameId: '1' })
 
     expect(wrapper.find('[data-test="game-grid"]').exists()).toBe(true)
     expect(wrapper.find('[data-test="game-detail-drawer"]').exists()).toBe(true)
@@ -25,7 +27,9 @@ describe('GameGrid', () => {
     const card = wrapper.get('[data-test="game-card-1"]')
 
     await card.trigger('click')
+    await wrapper.setProps({ selectedGameId: '1' })
     await wrapper.get('[data-test="drawer-backdrop"]').trigger('click')
+    await wrapper.setProps({ selectedGameId: null })
     await nextTick()
 
     expect(document.activeElement).toBe(card.element)
@@ -38,10 +42,12 @@ describe('GameGrid', () => {
     const remove = vi.fn(async () => ok({ removed: true }))
     ;(bridge as GameShelfBridge & { delete_missing_game: typeof remove }).delete_missing_game = remove
     const game = fixtureGame({ id: 'missing-1', status: 'missing', scanRootId: null })
-    const wrapper = mount(GameGrid, { props: { games: [game], bridge } })
-    await wrapper.get('[data-test="game-card-missing-1"]').trigger('click')
+    const wrapper = mount(GameGrid, {
+      props: { games: [game], bridge, selectedGameId: game.id },
+    })
 
     await wrapper.get('[data-test="delete-missing-game"]').trigger('click')
+    await wrapper.setProps({ selectedGameId: null })
 
     expect(wrapper.find('[data-test="game-detail-drawer"]').exists()).toBe(false)
     expect(wrapper.emitted('removed')).toEqual([[game.id]])

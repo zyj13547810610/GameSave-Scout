@@ -184,6 +184,15 @@ class StaticSaveDiscovery:
     def invalidate_ludusavi(self) -> None:
         self._official_matcher = None
 
+    def registry_targets_for_game(
+        self, game_id: str
+    ) -> tuple[tuple[str, tuple[str, ...]], ...]:
+        return tuple(
+            (suggestion.path_template, suggestion.evidence)
+            for suggestion in self.suggest_for_game(game_id)
+            if suggestion.kind == "registry"
+        )
+
     def _manifest_suggestions(
         self,
         matches: tuple[ManifestMatch, ...],

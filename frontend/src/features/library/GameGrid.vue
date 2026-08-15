@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue'
+import { computed, nextTick, watch } from 'vue'
 import type { Game, GameShelfBridge } from '../../api/contracts'
 import GameCard from './GameCard.vue'
 import GameDetailDrawer from './GameDetailDrawer.vue'
@@ -9,16 +9,21 @@ const props = withDefaults(defineProps<{
   bridge: GameShelfBridge
   batchMode?: boolean
   selectedGameIds?: Set<string>
+  selectedGameId?: string | null
 }>(), {
   batchMode: false,
   selectedGameIds: () => new Set<string>(),
+  selectedGameId: null,
 })
 const emit = defineEmits<{
   updated: [game: Game]
   removed: [gameId: string]
   toggleSelection: [game: Game]
+  'update:selectedGameId': [gameId: string | null]
 }>()
-const selected = ref<Game | null>(null)
+const selected = computed(
+  () => props.games.find((game) => game.id === props.selectedGameId) ?? null,
+)
 let opener: HTMLElement | null = null
 
 function activate(game: Game, event: Event) {
@@ -27,31 +32,27 @@ function activate(game: Game, event: Event) {
     return
   }
   opener = event.currentTarget as HTMLElement
-  selected.value = game
+  emit('update:selectedGameId', game.id)
 }
 
 async function close() {
-  selected.value = null
+  emit('update:selectedGameId', null)
   await nextTick()
   opener?.focus()
 }
 
 function updated(game: Game) {
-  selected.value = game
+  emit('update:selectedGameId', game.id)
   emit('updated', game)
 }
 
 function removed(gameId: string) {
-  selected.value = null
+  emit('update:selectedGameId', null)
   emit('removed', gameId)
 }
 
-watch(() => props.games, (games) => {
-  if (selected.value) selected.value = games.find((game) => game.id === selected.value?.id) ?? null
-})
-
 watch(() => props.batchMode, (enabled) => {
-  if (enabled) selected.value = null
+  if (enabled) emit('update:selectedGameId', null)
 })
 </script>
 

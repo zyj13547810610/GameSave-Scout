@@ -23,6 +23,7 @@ from gameshelf.saves.ludusavi_index import LudusaviIndex
 from gameshelf.saves.ludusavi_index_builder import build_ludusavi_index
 from gameshelf.saves.ludusavi_parser import parse_manifest
 from gameshelf.saves.ludusavi_provider import SnapshotUpdateError
+from gameshelf.saves.models import SaveLocationSuggestion
 from gameshelf.saves.repository import SaveLocationRepository
 from gameshelf.saves.service import SaveLocationService
 from gameshelf.saves.static_discovery import StaticSaveDiscovery
@@ -192,6 +193,41 @@ def test_official_index_is_loaded_only_on_explicit_suggestion_call(
 
     assert provider.session_calls == 2
     assert static_harness.discovery._official_matcher is first_matcher
+
+
+def test_registry_targets_for_game_returns_only_registry_suggestions(
+    static_harness: StaticHarness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    suggestions = (
+        SaveLocationSuggestion(
+            kind="directory",
+            path_template=r"<winAppData>\Alice",
+            display_path=r"C:\Users\Alice\AppData\Roaming\Alice",
+            source="ludusavi",
+            confidence=1.0,
+            evidence=("文件规则",),
+        ),
+        SaveLocationSuggestion(
+            kind="registry",
+            path_template=r"HKEY_CURRENT_USER\Software\Studio\Alice",
+            display_path=r"HKEY_CURRENT_USER\Software\Studio\Alice",
+            source="ludusavi",
+            confidence=1.0,
+            evidence=("注册表规则",),
+        ),
+    )
+    monkeypatch.setattr(
+        StaticSaveDiscovery, "suggest_for_game", lambda _self, _game_id: suggestions
+    )
+
+    targets = static_harness.discovery.registry_targets_for_game(static_harness.game_id)
+
+    assert targets == (
+        (
+            r"HKEY_CURRENT_USER\Software\Studio\Alice",
+            ("注册表规则",),
+        ),
+    )
 
 
 def test_invalidate_ludusavi_reloads_index_on_next_explicit_search(

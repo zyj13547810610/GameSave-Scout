@@ -39,6 +39,24 @@ from gameshelf.library.service import (
     RootNotFoundError,
 )
 from gameshelf.saves.custom_manifest_provider import CustomManifestProvider
+from gameshelf.saves.guided_models import (
+    GuidedSaveDiscovery,
+    GuidedSavePreview,
+    GuidedSaveSession,
+)
+from gameshelf.saves.guided_repository import (
+    ActiveGuidedSessionError,
+    GuidedSaveRepository,
+    GuidedSessionNotFoundError,
+    InvalidGuidedSessionState,
+)
+from gameshelf.saves.guided_review import GuidedReviewError, GuidedSaveReviewService
+from gameshelf.saves.guided_scope import InvalidGuidedScope
+from gameshelf.saves.guided_service import (
+    CloseResolution,
+    GuidedSaveError,
+    GuidedSaveSessionService,
+)
 from gameshelf.saves.ludusavi_provider import (
     LudusaviProvider,
     SnapshotUpdateError,
@@ -74,6 +92,9 @@ class BridgeApi:
         engine_detection: EngineDetectionService | None = None,
         save_locations: SaveLocationService | None = None,
         static_discovery: StaticSaveDiscovery | None = None,
+        guided_saves: GuidedSaveSessionService | None = None,
+        guided_repository: GuidedSaveRepository | None = None,
+        guided_review: GuidedSaveReviewService | None = None,
         ludusavi_provider: LudusaviProvider | None = None,
         custom_provider: CustomManifestProvider | None = None,
         custom_manifest_directory: Path | None = None,
@@ -91,6 +112,9 @@ class BridgeApi:
         self._engine_detection = engine_detection
         self._save_locations = save_locations
         self._static_discovery = static_discovery
+        self._guided_saves = guided_saves
+        self._guided_repository = guided_repository
+        self._guided_review = guided_review
         self._ludusavi_provider = ludusavi_provider
         self._custom_provider = custom_provider
         self._custom_manifest_directory = custom_manifest_directory
@@ -585,6 +609,196 @@ class BridgeApi:
         except GameNotFoundError:
             return failure("game_not_found", "没有找到对应的游戏。")
 
+    def preview_guided_save_detection(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(payload, {"gameId"})
+            preview = self._require_guided_saves().preview(_string(payload, "gameId"))
+            return success(_guided_preview_dto(preview))
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except GameNotFoundError:
+            return failure("game_not_found", "没有找到对应的游戏。")
+        except InvalidGuidedScope as error:
+            return failure("invalid_guided_scope", str(error))
+        except OSError:
+            return failure("guided_operation_failed", "引导式寻找操作失败。")
+
+    def start_guided_save_detection(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(
+                payload, {"gameId", "selectedScopeIds", "additionalDirectories"}
+            )
+            game_id = _string(payload, "gameId")
+            selected = tuple(_clean_string_list(payload, "selectedScopeIds"))
+            additional = tuple(_clean_string_list(payload, "additionalDirectories"))
+            if not selected and not additional:
+                return failure("guided_scope_empty", "至少选择一个监控范围。")
+            session = self._require_guided_saves().start(
+                game_id, selected, additional
+            )
+            return success(self._guided_session_dto(session))
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except GameNotFoundError:
+            return failure("game_not_found", "没有找到对应的游戏。")
+        except InvalidGuidedScope as error:
+            return failure("invalid_guided_scope", str(error))
+        except ActiveGuidedSessionError:
+            return failure("guided_session_active", "已有游戏正在引导式寻找存档。")
+        except GuidedSaveError as error:
+            return _guided_service_failure(error)
+        except OSError:
+            return failure("guided_operation_failed", "引导式寻找操作失败。")
+
+    def current_guided_save_detection(self) -> ApiResult:
+        try:
+            session = self._require_guided_saves().current()
+            return success(None if session is None else self._guided_session_dto(session))
+        except GameNotFoundError:
+            return failure("game_not_found", "没有找到对应的游戏。")
+        except GuidedSaveError as error:
+            return _guided_service_failure(error)
+
+    def guided_save_detection_status(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(payload, {"sessionId"})
+            session = self._require_guided_saves().status(
+                _string(payload, "sessionId")
+            )
+            return success(self._guided_session_dto(session))
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except GameNotFoundError:
+            return failure("game_not_found", "没有找到对应的游戏。")
+        except GuidedSaveError as error:
+            return _guided_service_failure(error)
+
+    def latest_guided_save_detection_for_game(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(payload, {"gameId"})
+            game_id = _string(payload, "gameId")
+            self._require_game(game_id)
+            session = self._require_guided_saves().latest_for_game(game_id)
+            return success(None if session is None else self._guided_session_dto(session))
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except GameNotFoundError:
+            return failure("game_not_found", "没有找到对应的游戏。")
+        except GuidedSaveError as error:
+            return _guided_service_failure(error)
+
+    def mark_guided_save_saved(self, request: object) -> ApiResult:
+        return self._guided_session_command(request, "mark")
+
+    def stop_guided_save_detection(self, request: object) -> ApiResult:
+        return self._guided_session_command(request, "stop")
+
+    def cancel_guided_save_detection(self, request: object) -> ApiResult:
+        return self._guided_session_command(request, "cancel")
+
+    def list_guided_save_discoveries(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(payload, {"sessionId"})
+            session_id = _string(payload, "sessionId")
+            self._require_guided_saves().status(session_id)
+            discoveries = self._require_guided_repository().list_discoveries(session_id)
+            return success([_guided_discovery_dto(item) for item in discoveries])
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except GuidedSaveError as error:
+            return _guided_service_failure(error)
+        except OSError:
+            return failure("guided_operation_failed", "引导式寻找操作失败。")
+
+    def accept_guided_save_discoveries(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(
+                payload, {"sessionId", "discoveryIds", "confirmRegistry"}
+            )
+            locations = self._require_guided_review().accept(
+                _string(payload, "sessionId"),
+                tuple(_clean_string_list(payload, "discoveryIds")),
+                _boolean(payload, "confirmRegistry"),
+            )
+            return success([_save_location_dto(item) for item in locations])
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except GameNotFoundError:
+            return failure("game_not_found", "没有找到对应的游戏。")
+        except InvalidSaveLocation:
+            return failure(
+                "guided_discovery_invalid", "引导式存档候选已经失效，请刷新后重试。"
+            )
+        except GuidedReviewError as error:
+            return _guided_review_failure(error)
+        except OSError:
+            return failure("guided_operation_failed", "引导式寻找操作失败。")
+
+    def discard_guided_save_detection(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(payload, {"sessionId"})
+            discarded = self._require_guided_review().discard(
+                _string(payload, "sessionId")
+            )
+            return success({"discarded": discarded})
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except GuidedSessionNotFoundError:
+            return failure("guided_session_not_found", "找不到引导式寻找会话。")
+        except InvalidGuidedSessionState:
+            return failure(
+                "guided_session_not_reviewable", "该引导式寻找会话尚不能审核。"
+            )
+        except GuidedReviewError as error:
+            return _guided_review_failure(error)
+
+    def resolve_guided_close(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(payload, {"resolution"})
+            resolution = _string(payload, "resolution")
+            self._require_guided_saves().resolve_close(
+                cast(CloseResolution, resolution)
+            )
+            return success({"resolved": True})
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except GuidedSaveError as error:
+            return _guided_service_failure(error)
+
+    def _guided_session_command(self, request: object, command: str) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(payload, {"sessionId"})
+            session_id = _string(payload, "sessionId")
+            guided = self._require_guided_saves()
+            if command == "mark":
+                session = guided.mark_saved(session_id)
+            elif command == "stop":
+                session = guided.stop_and_analyze(session_id)
+            else:
+                session = guided.cancel(session_id)
+            return success(self._guided_session_dto(session))
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except GameNotFoundError:
+            return failure("game_not_found", "没有找到对应的游戏。")
+        except GuidedSaveError as error:
+            return _guided_service_failure(error)
+        except InvalidGuidedSessionState:
+            return failure(
+                "guided_session_not_active", "该引导式寻找会话当前不能执行此操作。"
+            )
+        except OSError:
+            return failure("guided_operation_failed", "引导式寻找操作失败。")
+
     def ludusavi_status(self) -> ApiResult:
         custom = self._require_custom_provider().load_all()
         directory = self._require_custom_manifest_directory()
@@ -782,6 +996,21 @@ class BridgeApi:
             raise RuntimeError("Save-location services are not configured.")
         return self._save_locations
 
+    def _require_guided_saves(self) -> GuidedSaveSessionService:
+        if self._guided_saves is None:
+            raise RuntimeError("Guided save services are not configured.")
+        return self._guided_saves
+
+    def _require_guided_repository(self) -> GuidedSaveRepository:
+        if self._guided_repository is None:
+            raise RuntimeError("Guided save repository is not configured.")
+        return self._guided_repository
+
+    def _require_guided_review(self) -> GuidedSaveReviewService:
+        if self._guided_review is None:
+            raise RuntimeError("Guided save review is not configured.")
+        return self._guided_review
+
     def _require_static_discovery(self) -> StaticSaveDiscovery:
         if self._static_discovery is None:
             raise RuntimeError("Static save discovery is not configured.")
@@ -865,6 +1094,33 @@ class BridgeApi:
             raise GameNotFoundError(game_id)
         return game
 
+    def _guided_session_dto(
+        self, session: GuidedSaveSession
+    ) -> dict[str, JSONValue]:
+        game = self._require_game(session.game_id)
+        error: dict[str, JSONValue] | None = None
+        if session.error_code is not None:
+            error = {
+                "code": session.error_code,
+                "message": session.error_summary or "引导式寻找未能完成。",
+            }
+        return {
+            "id": session.id,
+            "gameId": session.game_id,
+            "gameTitle": game.title,
+            "status": session.status,
+            "startedAt": session.started_at,
+            "monitoringStartedAt": session.monitoring_started_at,
+            "saveMarkedAt": session.save_marked_at,
+            "finishedAt": session.finished_at,
+            "changeCount": session.result_summary.get("eventCount", 0),
+            "processTrackingDegraded": session.process_tracking_degraded,
+            "overflowedScopes": list(session.overflowed_scopes),
+            "truncatedScopes": list(session.truncated_scopes),
+            "closeRequested": self._require_guided_saves().close_requested,
+            "error": error,
+        }
+
     def _cover_url(self, game: Game, variant: str) -> str | None:
         relative = (
             game.cover_thumb_relpath if variant == "thumb" else game.cover_original_relpath
@@ -944,6 +1200,89 @@ def _save_suggestion_dto(suggestion: SaveLocationSuggestion) -> dict[str, JSONVa
     }
 
 
+def _guided_preview_dto(preview: GuidedSavePreview) -> dict[str, JSONValue]:
+    return {
+        "gameId": preview.game_id,
+        "gameTitle": preview.game_title,
+        "executable": preview.executable,
+        "scopes": [
+            {
+                "id": scope.id,
+                "label": scope.label,
+                "displayPath": scope.display_path,
+                "pathTemplate": scope.path_template,
+                "source": scope.source,
+                "defaultSelected": scope.default_selected,
+                "available": scope.available,
+                "unavailableReason": scope.unavailable_reason,
+            }
+            for scope in preview.scopes
+        ],
+        "registryTargets": [
+            {
+                "key": target.key,
+                "source": target.source,
+                "available": target.available,
+            }
+            for target in preview.registry_targets
+        ],
+        "privacyNotice": (
+            "只读取文件路径、大小和修改时间等元数据，不读取或修改存档内容。"
+        ),
+    }
+
+
+def _guided_discovery_dto(discovery: GuidedSaveDiscovery) -> dict[str, JSONValue]:
+    return {
+        "id": discovery.id,
+        "sessionId": discovery.detection_session_id,
+        "candidateTemplate": discovery.candidate_template,
+        "displayPath": discovery.display_path,
+        "kind": discovery.kind,
+        "confidence": discovery.confidence,
+        "evidence": list(discovery.evidence),
+        "representativeFiles": list(discovery.representative_files),
+        "firstChangedAt": discovery.first_changed_at,
+        "lastChangedAt": discovery.last_changed_at,
+        "markOffsetMs": discovery.mark_offset_ms,
+        "affectedByOverflow": discovery.affected_by_overflow,
+        "affectedByTruncation": discovery.affected_by_truncation,
+        "preselected": discovery.preselected,
+        "reviewStatus": discovery.review_status,
+        "saveLocationId": discovery.save_location_id,
+    }
+
+
+def _guided_service_failure(error: GuidedSaveError) -> ApiResult:
+    messages = {
+        "guided_service_closed": "引导式寻找服务已经关闭。",
+        "guided_session_active": "已有游戏正在引导式寻找存档。",
+        "guided_scope_empty": "至少选择一个监控范围。",
+        "guided_start_failed": "引导式寻找启动失败。",
+        "guided_session_not_found": "找不到引导式寻找会话。",
+        "guided_session_not_active": "该引导式寻找会话当前不能执行此操作。",
+        "invalid_close_resolution": "未知的关闭处理方式。",
+    }
+    return failure(
+        error.code,
+        messages.get(error.code, "引导式寻找操作失败。"),
+    )
+
+
+def _guided_review_failure(error: GuidedReviewError) -> ApiResult:
+    messages = {
+        "guided_discovery_empty": "至少选择一个引导式存档候选。",
+        "guided_discovery_invalid": "引导式存档候选已经失效，请刷新后重试。",
+        "guided_session_not_found": "找不到引导式寻找会话。",
+        "guided_session_not_reviewable": "该引导式寻找会话尚不能审核。",
+        "registry_confirmation_required": "注册表候选需要额外确认后才能接受。",
+    }
+    return failure(
+        error.code,
+        messages.get(error.code, "引导式存档候选审核失败。"),
+    )
+
+
 def _update_result_dto(result: UpdateResult) -> dict[str, JSONValue]:
     return {
         "status": result.status,
@@ -989,6 +1328,12 @@ def _payload(request: object) -> dict[str, object]:
     return cast(dict[str, object], request)
 
 
+def _only_keys(payload: dict[str, object], allowed: set[str]) -> None:
+    unexpected = sorted(set(payload) - allowed)
+    if unexpected:
+        raise InvalidRequest(f"Unexpected request fields: {', '.join(unexpected)}.")
+
+
 def _string(payload: dict[str, object], key: str) -> str:
     value = payload.get(key)
     if not isinstance(value, str) or not value.strip():
@@ -1024,6 +1369,13 @@ def _string_list(payload: dict[str, object], key: str) -> list[str]:
     if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
         raise InvalidRequest(f"{key} must be an array of strings.")
     return cast(list[str], value)
+
+
+def _clean_string_list(payload: dict[str, object], key: str) -> list[str]:
+    values = _string_list(payload, key)
+    if any(not item.strip() for item in values):
+        raise InvalidRequest(f"{key} entries must be non-empty strings.")
+    return [item.strip() for item in values]
 
 
 def _game_removal_requests(

@@ -38,6 +38,40 @@ def test_migrator_creates_v1_schema_with_foreign_keys_and_wal(tmp_path: Path) ->
     assert journal_mode == "wal"
 
 
+def test_v1_guided_save_schema_has_single_active_slot_and_review_fields(
+    tmp_path: Path,
+) -> None:
+    factory = ConnectionFactory(tmp_path / "library.db")
+    Migrator(factory, tmp_path / "backups").migrate()
+
+    with factory.connect() as connection:
+        session_sql = connection.execute(
+            "SELECT sql FROM sqlite_master WHERE name = 'save_detection_sessions'"
+        ).fetchone()[0]
+        discovery_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(save_discoveries)")
+        }
+        indexes = {
+            row[1]
+            for row in connection.execute("PRAGMA index_list(save_detection_sessions)")
+        }
+
+    assert "interrupted" in session_sql
+    assert "active_slot" in session_sql
+    assert "save_detection_one_active" in indexes
+    assert {
+        "path_key",
+        "representative_files_json",
+        "first_changed_at",
+        "last_changed_at",
+        "mark_offset_ms",
+        "affected_by_overflow",
+        "affected_by_truncation",
+        "preselected",
+        "save_location_id",
+    } <= discovery_columns
+
+
 def test_readonly_connection_uses_rows_and_rejects_writes(tmp_path: Path) -> None:
     factory = ConnectionFactory(tmp_path / "library.db")
     Migrator(factory, tmp_path / "backups").migrate()

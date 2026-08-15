@@ -46,6 +46,8 @@ def _run_desktop(application: Application) -> int:
         application.close()
         raise RuntimeError("无法创建 GameShelf 桌面窗口。")
     application.api.attach_window(window)
+    application.guided_saves.set_exit_callback(window.destroy)
+    window.events.closing += lambda: _allow_window_close(application)
     window.events.closed += application.close
     try:
         webview.start(
@@ -56,3 +58,7 @@ def _run_desktop(application: Application) -> int:
     finally:
         application.close()
     return 0
+
+
+def _allow_window_close(application: Application) -> bool:
+    return application.guided_saves.request_close()

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { createPinia, getActivePinia, storeToRefs } from 'pinia'
-import { computed, inject, nextTick, onMounted, ref } from 'vue'
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { bridgeKey, createBridge } from './api/bridge'
 import type { Game, RemovableGameStatus, ScanRoot } from './api/contracts'
 import BatchManagementBar from './features/library/BatchManagementBar.vue'
@@ -10,14 +10,27 @@ import { filterGames } from './features/library/libraryFilters'
 import { useLibraryStore } from './features/library/libraryStore'
 import MoveSuggestionPanel from './features/library/MoveSuggestionPanel.vue'
 import UiScaleControl from './features/preferences/UiScaleControl.vue'
+import GuidedSaveCloseDialog from './features/saves/GuidedSaveCloseDialog.vue'
+import GuidedSaveStatusBar from './features/saves/GuidedSaveStatusBar.vue'
+import { useGuidedSaveStore } from './features/saves/guidedSaveStore'
 import { applyUiScale, type UiScale } from './features/preferences/uiScale'
 import ScanRootDialog from './features/scan-roots/ScanRootDialog.vue'
 import ScanRootList from './features/scan-roots/ScanRootList.vue'
 import './features/library/library.css'
 
 const bridge = inject(bridgeKey, createBridge())
-const store = useLibraryStore(getActivePinia() ?? createPinia())
-const { roots, games, error, scanTasks, taskSnapshots, moveSuggestions } = storeToRefs(store)
+const pinia = getActivePinia() ?? createPinia()
+const store = useLibraryStore(pinia)
+const guidedStore = useGuidedSaveStore(pinia)
+const {
+  roots,
+  games,
+  error,
+  scanTasks,
+  taskSnapshots,
+  moveSuggestions,
+  selectedGameId,
+} = storeToRefs(store)
 const state = ref<'connecting' | 'ready' | 'failed'>('connecting')
 const errorMessage = ref('')
 const showAddRoot = ref(false)
@@ -59,6 +72,7 @@ function isRemovableGame(game: Game): game is Game & { status: RemovableGameStat
 }
 
 function enterBatchMode() {
+  selectedGameId.value = null
   batchMode.value = true
   batchError.value = ''
   batchNotice.value = ''
@@ -141,6 +155,7 @@ async function bootstrap() {
   uiScale.value = result.data.uiScale
   applyUiScale(uiScale.value, document.documentElement)
   await store.load(bridge)
+  await guidedStore.refreshActive(bridge)
   state.value = 'ready'
   await nextTick()
   for (const root of roots.value.filter((item) => item.enabled)) {
@@ -163,6 +178,12 @@ async function scan(rootId: string) {
 }
 
 onMounted(bootstrap)
+onBeforeUnmount(() => guidedStore.clearPolling())
+
+function restoreGuidedSave(gameId: string) {
+  batchMode.value = false
+  selectedGameId.value = gameId
+}
 </script>
 
 <template>
@@ -177,6 +198,7 @@ onMounted(bootstrap)
         <button v-if="state === 'ready'" type="button" @click="showAddRoot = true">＋ 添加游戏目录</button>
       </div>
     </header>
+    <GuidedSaveStatusBar @restore="restoreGuidedSave" />
 
     <section v-if="state === 'connecting'" class="empty-state" aria-live="polite"><h2>正在连接本地数据库…</h2></section>
     <section v-else-if="state === 'failed'" class="empty-state" role="alert"><h2>无法连接本地数据库</h2><p>{{ errorMessage }}</p><button type="button" @click="bootstrap">重试</button></section>
@@ -215,6 +237,8 @@ onMounted(bootstrap)
               :bridge="bridge"
               :batch-mode="batchMode"
               :selected-game-ids="selectedGameIds"
+              :selected-game-id="selectedGameId"
+              @update:selected-game-id="selectedGameId = $event"
               @toggle-selection="toggleBatchGame"
               @updated="store.updateGame"
               @removed="gameRemoved"
@@ -224,6 +248,7 @@ onMounted(bootstrap)
       </div>
       <div v-if="showAddRoot" class="dialog-backdrop" @click.self="showAddRoot = false"><ScanRootDialog :bridge="bridge" @saved="rootSaved" @close="showAddRoot = false" /></div>
       <div v-if="editingRoot" class="dialog-backdrop" @click.self="editingRoot = null"><ScanRootDialog :bridge="bridge" :root="editingRoot" @saved="rootSaved" @close="editingRoot = null" /></div>
+      <GuidedSaveCloseDialog :bridge="bridge" />
     </template>
   </main>
 </template>
