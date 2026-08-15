@@ -2,3 +2,4 @@
 frontend/index.html text eol=lf
 resources/ui/** text eol=lf
 resources/manifests/ludusavi/manifest.yaml text eol=lf
+resources/manifests/ludusavi/manifest-index.sqlite binary

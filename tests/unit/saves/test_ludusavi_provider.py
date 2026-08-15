@@ -4,13 +4,16 @@ import hashlib
 import json
 import os
 import urllib.error
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from io import BytesIO
+from io import BytesIO, StringIO
 from pathlib import Path
 
 import pytest
 
 import gameshelf.saves.ludusavi_provider as provider_module
+from gameshelf.saves.ludusavi_index_builder import build_ludusavi_index
+from gameshelf.saves.ludusavi_parser import parse_manifest
 from gameshelf.saves.ludusavi_provider import LudusaviProvider, SnapshotUpdateError
 
 OLD_MANIFEST = (
@@ -87,6 +90,15 @@ def _provider_with_resource(
         encoding="utf-8",
     )
     (resources / "LICENSE").write_text("MIT", encoding="utf-8")
+    manifest = parse_manifest(
+        StringIO(expected_bytes.decode("utf-8")),
+        skip_invalid_paths=True,
+    )
+    build_ludusavi_index(
+        resources / "manifest-index.sqlite",
+        manifest,
+        manifest_sha256=hashlib.sha256(expected_bytes).hexdigest(),
+    )
     fake_http = FakeHttp()
     return (
         LudusaviProvider(
@@ -133,7 +145,8 @@ def test_initial_snapshot_copies_resource_without_network(
     service.ensure_initial_snapshot()
 
     assert service.active_manifest.read_bytes() == OLD_MANIFEST
-    assert service.load().games["Alice"].canonical_name == "Alice"
+    with service.index_session() as index:
+        assert index.load_games({1})[1].canonical_name == "Alice"
     assert fake_http.calls == []
 
 
@@ -152,6 +165,182 @@ def test_metadata_uses_integrity_check_without_parsing_installed_manifest(
     metadata = service.metadata()
 
     assert metadata.sha256 == hashlib.sha256(OLD_MANIFEST).hexdigest()
+
+
+def test_metadata_validates_index_without_parsing_or_rebuilding(
+    provider: tuple[LudusaviProvider, FakeHttp],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, _ = provider
+    service.ensure_initial_snapshot()
+
+    def fail_parse(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("状态查询不得解析 YAML")
+
+    def fail_build(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("状态查询不得重建索引")
+
+    monkeypatch.setattr(provider_module, "parse_manifest", fail_parse)
+    monkeypatch.setattr(provider_module, "build_ludusavi_index", fail_build)
+
+    metadata = service.metadata()
+
+    assert metadata.sha256 == hashlib.sha256(OLD_MANIFEST).hexdigest()
+
+
+def test_metadata_reports_missing_index_without_rebuilding(
+    provider: tuple[LudusaviProvider, FakeHttp],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, _ = provider
+    service.ensure_initial_snapshot()
+    service.active_index.unlink()
+
+    def fail_build(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("状态查询不得重建索引")
+
+    monkeypatch.setattr(provider_module, "build_ludusavi_index", fail_build)
+
+    with pytest.raises(SnapshotUpdateError, match="索引"):
+        service.metadata()
+
+    assert not service.active_index.exists()
+
+
+def test_index_session_rebuilds_missing_active_index_once(
+    provider: tuple[LudusaviProvider, FakeHttp],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, _ = provider
+    service.ensure_initial_snapshot()
+    service.active_index.unlink()
+    (service.resource_dir / "manifest-index.sqlite").unlink()
+    real_build = provider_module.build_ludusavi_index
+    calls = 0
+
+    def counted_build(*args: object, **kwargs: object) -> object:
+        nonlocal calls
+        calls += 1
+        return real_build(*args, **kwargs)
+
+    monkeypatch.setattr(provider_module, "build_ludusavi_index", counted_build)
+
+    with service.index_session() as first:
+        first_digest = first.metadata.manifest_sha256
+    with service.index_session() as second:
+        second_digest = second.metadata.manifest_sha256
+
+    assert first_digest == second_digest == hashlib.sha256(OLD_MANIFEST).hexdigest()
+    assert calls == 1
+
+
+def test_concurrent_index_sessions_rebuild_once(
+    provider: tuple[LudusaviProvider, FakeHttp],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, _ = provider
+    service.ensure_initial_snapshot()
+    service.active_index.unlink()
+    (service.resource_dir / "manifest-index.sqlite").unlink()
+    real_build = provider_module.build_ludusavi_index
+    calls = 0
+
+    def counted_build(*args: object, **kwargs: object) -> object:
+        nonlocal calls
+        calls += 1
+        return real_build(*args, **kwargs)
+
+    def read_digest(_item: int) -> str:
+        with service.index_session() as index:
+            return index.metadata.manifest_sha256
+
+    monkeypatch.setattr(provider_module, "build_ludusavi_index", counted_build)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        digests = tuple(executor.map(read_digest, range(2)))
+
+    assert digests == (hashlib.sha256(OLD_MANIFEST).hexdigest(),) * 2
+    assert calls == 1
+
+
+def test_index_session_copies_matching_resource_index_without_parsing(
+    provider: tuple[LudusaviProvider, FakeHttp],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, _ = provider
+    service.ensure_initial_snapshot()
+    service.active_index.unlink()
+
+    def fail_parse(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("同摘要内置索引可用时不得解析 YAML")
+
+    def fail_build(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("同摘要内置索引可用时不得重建索引")
+
+    monkeypatch.setattr(provider_module, "parse_manifest", fail_parse)
+    monkeypatch.setattr(provider_module, "build_ludusavi_index", fail_build)
+
+    with service.index_session() as index:
+        assert index.metadata.manifest_sha256 == hashlib.sha256(
+            OLD_MANIFEST
+        ).hexdigest()
+
+    assert service.active_index.is_file()
+
+
+def test_index_session_recovers_damaged_source_before_opening_index(
+    provider: tuple[LudusaviProvider, FakeHttp],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, _ = provider
+    service.ensure_initial_snapshot()
+    backup = service._backup_active_pair()
+    assert backup is not None
+    service.active_manifest.write_bytes(b"broken")
+
+    def fail_build(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("不得从摘要损坏的 YAML 构建索引")
+
+    monkeypatch.setattr(provider_module, "build_ludusavi_index", fail_build)
+
+    with service.index_session() as index:
+        assert index.load_games({1})[1].canonical_name == "Alice"
+
+    assert service.active_manifest.read_bytes() == OLD_MANIFEST
+
+
+def test_index_digest_mismatch_rebuilds_current_source_without_restoring_resource(
+    provider: tuple[LudusaviProvider, FakeHttp],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, fake_http = provider
+    service.ensure_initial_snapshot()
+    fake_http.respond(200, NEW_MANIFEST)
+    assert service.update_explicitly().status == "updated"
+    service.active_index.write_bytes(
+        (service.resource_dir / "manifest-index.sqlite").read_bytes()
+    )
+    real_build = provider_module.build_ludusavi_index
+    builds = 0
+
+    def counted_build(*args: object, **kwargs: object) -> object:
+        nonlocal builds
+        builds += 1
+        return real_build(*args, **kwargs)
+
+    def fail_restore() -> bool:
+        raise AssertionError("仅索引损坏时不得恢复较旧源快照")
+
+    monkeypatch.setattr(provider_module, "build_ludusavi_index", counted_build)
+    monkeypatch.setattr(service, "_restore_latest_valid_backup", fail_restore)
+
+    with service.index_session() as index:
+        assert index.metadata.manifest_sha256 == hashlib.sha256(
+            NEW_MANIFEST
+        ).hexdigest()
+
+    assert service.active_manifest.read_bytes() == NEW_MANIFEST
+    assert builds == 1
 
 
 def test_explicit_update_uses_etag_and_keeps_old_file_on_invalid_yaml(
@@ -178,10 +367,12 @@ def test_not_modified_does_not_rewrite_snapshot(
     before_bytes = (
         service.active_manifest.read_bytes(),
         service.active_metadata.read_bytes(),
+        service.active_index.read_bytes(),
     )
     before_mtimes = (
         service.active_manifest.stat().st_mtime_ns,
         service.active_metadata.stat().st_mtime_ns,
+        service.active_index.stat().st_mtime_ns,
     )
     fake_http.respond(304, b"")
 
@@ -189,18 +380,21 @@ def test_not_modified_does_not_rewrite_snapshot(
     assert (
         service.active_manifest.read_bytes(),
         service.active_metadata.read_bytes(),
+        service.active_index.read_bytes(),
     ) == before_bytes
     assert (
         service.active_manifest.stat().st_mtime_ns,
         service.active_metadata.stat().st_mtime_ns,
+        service.active_index.stat().st_mtime_ns,
     ) == before_mtimes
 
 
-def test_successful_update_atomically_replaces_manifest_and_metadata(
+def test_successful_update_replaces_manifest_metadata_and_index(
     provider: tuple[LudusaviProvider, FakeHttp],
 ) -> None:
     service, fake_http = provider
     service.ensure_initial_snapshot()
+    old_index_digest = _sha256(service.active_index)
     fake_http.respond(
         200,
         NEW_MANIFEST,
@@ -213,7 +407,33 @@ def test_successful_update_atomically_replaces_manifest_and_metadata(
     assert service.active_manifest.read_bytes() == NEW_MANIFEST
     assert service.metadata().etag == '"new"'
     assert service.metadata().sha256 == hashlib.sha256(NEW_MANIFEST).hexdigest()
+    assert _sha256(service.active_index) != old_index_digest
+    with service.index_session() as index:
+        assert index.metadata.manifest_sha256 == hashlib.sha256(
+            NEW_MANIFEST
+        ).hexdigest()
     assert len(list(service.previous_dir.glob("*.yaml"))) == 1
+    assert len(list(service.previous_dir.glob("*.sqlite"))) == 1
+
+
+def test_index_build_failure_preserves_active_bundle(
+    provider: tuple[LudusaviProvider, FakeHttp],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, fake_http = provider
+    service.ensure_initial_snapshot()
+    before = _bundle_bytes(service)
+    fake_http.respond(200, NEW_MANIFEST)
+
+    def fail_build(*_args: object, **_kwargs: object) -> object:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(provider_module, "build_ludusavi_index", fail_build)
+
+    result = service.update_explicitly()
+
+    assert result.status == "failed"
+    assert _bundle_bytes(service) == before
 
 
 def test_invalid_active_pair_restores_latest_valid_backup(
@@ -223,13 +443,33 @@ def test_invalid_active_pair_restores_latest_valid_backup(
     service.ensure_initial_snapshot()
     backup = service._backup_active_pair()
     assert backup is not None
+    backup_index = backup.manifest.with_suffix(".sqlite")
+    assert backup_index.is_file()
     service.active_manifest.write_bytes(b"broken")
 
-    loaded = service.load()
+    with service.index_session() as index:
+        loaded = index.load_games({1})
 
-    assert loaded.games["Alice"].canonical_name == "Alice"
+    assert loaded[1].canonical_name == "Alice"
     assert service.active_manifest.read_bytes() == OLD_MANIFEST
+    assert service.active_index.read_bytes() == backup_index.read_bytes()
     assert fake_http.calls == []
+
+
+def test_legacy_two_file_backup_restores_without_stale_index(
+    provider: tuple[LudusaviProvider, FakeHttp],
+) -> None:
+    service, _ = provider
+    service.ensure_initial_snapshot()
+    backup = service._backup_active_pair()
+    assert backup is not None
+    backup.manifest.with_suffix(".sqlite").unlink()
+    service.active_manifest.write_bytes(b"broken")
+
+    service.ensure_initial_snapshot()
+
+    assert service.active_manifest.read_bytes() == OLD_MANIFEST
+    assert not service.active_index.exists()
 
 
 def test_metadata_recovers_hash_mismatched_active_pair(
@@ -272,6 +512,7 @@ def test_backup_pairs_are_pruned_together(
 
     assert len(list(service.previous_dir.glob("*.yaml"))) == 2
     assert len(list(service.previous_dir.glob("*.json"))) == 2
+    assert len(list(service.previous_dir.glob("*.sqlite"))) == 2
 
 
 def test_update_reports_stages_and_rechecks_download_hash(
@@ -285,9 +526,36 @@ def test_update_reports_stages_and_rechecks_download_hash(
     result = service.update_explicitly(stages.append)
 
     assert result.status == "updated"
-    assert stages == ["connecting", "downloading", "validating", "replacing"]
+    assert stages == [
+        "connecting",
+        "downloading",
+        "validating",
+        "indexing",
+        "replacing",
+    ]
     assert result.metadata is not None
     assert _sha256(service.active_manifest) == result.metadata.sha256
+
+
+def test_update_parses_downloaded_yaml_once(
+    provider: tuple[LudusaviProvider, FakeHttp],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, fake_http = provider
+    service.ensure_initial_snapshot()
+    fake_http.respond(200, NEW_MANIFEST)
+    real_parse = provider_module.parse_manifest
+    calls = 0
+
+    def counted_parse(*args: object, **kwargs: object) -> object:
+        nonlocal calls
+        calls += 1
+        return real_parse(*args, **kwargs)
+
+    monkeypatch.setattr(provider_module, "parse_manifest", counted_parse)
+
+    assert service.update_explicitly().status == "updated"
+    assert calls == 1
 
 
 def test_update_without_existing_snapshot_can_create_first_valid_pair(
@@ -300,7 +568,8 @@ def test_update_without_existing_snapshot_can_create_first_valid_pair(
 
     assert result.status == "updated"
     assert "If-None-Match" not in fake_http.calls[0][1]
-    assert service.load().games["Bob"].canonical_name == "Bob"
+    with service.index_session() as index:
+        assert index.load_games({1})[1].canonical_name == "Bob"
 
 
 def test_metadata_replace_failure_restores_old_pair(
@@ -311,6 +580,7 @@ def test_metadata_replace_failure_restores_old_pair(
     service.ensure_initial_snapshot()
     before_manifest = service.active_manifest.read_bytes()
     before_metadata = service.active_metadata.read_bytes()
+    before_index = service.active_index.read_bytes()
     fake_http.respond(200, NEW_MANIFEST)
     original_replace = os.replace
     failed = False
@@ -332,6 +602,33 @@ def test_metadata_replace_failure_restores_old_pair(
     assert result.status == "failed"
     assert service.active_manifest.read_bytes() == before_manifest
     assert service.active_metadata.read_bytes() == before_metadata
+    assert service.active_index.read_bytes() == before_index
+
+
+def test_index_replace_failure_restores_old_bundle(
+    provider: tuple[LudusaviProvider, FakeHttp],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, fake_http = provider
+    service.ensure_initial_snapshot()
+    before = _bundle_bytes(service)
+    fake_http.respond(200, NEW_MANIFEST)
+    original_replace = os.replace
+    failed = False
+
+    def fail_first_new_index(source: Path, destination: Path) -> None:
+        nonlocal failed
+        if destination == service.active_index and not failed:
+            failed = True
+            raise OSError("index disk failure")
+        original_replace(source, destination)
+
+    monkeypatch.setattr(provider_module.os, "replace", fail_first_new_index)
+
+    result = service.update_explicitly()
+
+    assert result.status == "failed"
+    assert _bundle_bytes(service) == before
 
 
 def test_backup_failure_preserves_active_pair_and_reports_backup_stage(
@@ -497,3 +794,11 @@ def test_update_rejects_non_https_url_and_oversize_response(
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _bundle_bytes(service: LudusaviProvider) -> tuple[bytes, bytes, bytes]:
+    return (
+        service.active_manifest.read_bytes(),
+        service.active_metadata.read_bytes(),
+        service.active_index.read_bytes(),
+    )

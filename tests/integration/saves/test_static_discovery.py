@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from io import StringIO
 from pathlib import Path
@@ -18,7 +19,8 @@ from gameshelf.saves.custom_manifest_provider import (
     LoadedCustomManifest,
 )
 from gameshelf.saves.engine_hints import EngineSaveHintProvider
-from gameshelf.saves.ludusavi_models import LudusaviManifest
+from gameshelf.saves.ludusavi_index import LudusaviIndex
+from gameshelf.saves.ludusavi_index_builder import build_ludusavi_index
 from gameshelf.saves.ludusavi_parser import parse_manifest
 from gameshelf.saves.ludusavi_provider import SnapshotUpdateError
 from gameshelf.saves.repository import SaveLocationRepository
@@ -29,15 +31,20 @@ from gameshelf.saves.templates import PathTemplateResolver
 
 @dataclass
 class FakeLudusaviProvider:
-    manifest: LudusaviManifest
+    index: LudusaviIndex
+    session_calls: int = 0
 
-    def load(self) -> LudusaviManifest:
-        return self.manifest
+    @contextmanager
+    def index_session(self) -> Iterator[LudusaviIndex]:
+        self.session_calls += 1
+        yield self.index
 
 
 class UnavailableLudusaviProvider:
-    def load(self) -> LudusaviManifest:
+    @contextmanager
+    def index_session(self) -> Iterator[LudusaviIndex]:
         raise SnapshotUpdateError("内置清单损坏")
+        yield
 
 
 @dataclass
@@ -66,6 +73,7 @@ class StaticHarness:
     discovery: StaticSaveDiscovery
     save_service: SaveLocationService
     game_id: str
+    official_provider: FakeLudusaviProvider
 
 
 @pytest.fixture
@@ -100,6 +108,11 @@ def static_harness(tmp_path: Path) -> Iterator[StaticHarness]:
     resolver = PathTemplateResolver(folders)
     document = "Alice:\n  files:\n    <winAppData>/RenPy/Alice: {tags: [save]}\n"
     official = parse_manifest(StringIO(document))
+    index_path = tmp_path / "manifest-index.sqlite"
+    build_ludusavi_index(index_path, official, manifest_sha256="d" * 64)
+    official_provider = FakeLudusaviProvider(
+        LudusaviIndex.open(index_path, manifest_sha256="d" * 64)
+    )
     custom = parse_manifest(StringIO(document))
     custom_result = CustomManifestLoadResult(
         (LoadedCustomManifest("local.yaml", custom),), ()
@@ -117,12 +130,12 @@ def static_harness(tmp_path: Path) -> Iterator[StaticHarness]:
         library=library,
         save_repository=save_repository,
         resolver=resolver,
-        ludusavi_provider=FakeLudusaviProvider(official),
+        ludusavi_provider=official_provider,
         custom_provider=FakeCustomProvider(custom_result),
         engine_hints=EngineSaveHintProvider(resolver),
     )
     try:
-        yield StaticHarness(discovery, save_service, game.id)
+        yield StaticHarness(discovery, save_service, game.id, official_provider)
     finally:
         writer.close()
 
@@ -165,3 +178,31 @@ def test_static_discovery_skips_unavailable_official_manifest(
         "custom",
         "engine",
     }
+
+
+def test_official_index_is_loaded_only_on_explicit_suggestion_call(
+    static_harness: StaticHarness,
+) -> None:
+    provider = static_harness.official_provider
+    assert provider.session_calls == 0
+
+    static_harness.discovery.suggest_for_game(static_harness.game_id)
+    first_matcher = static_harness.discovery._official_matcher
+    static_harness.discovery.suggest_for_game(static_harness.game_id)
+
+    assert provider.session_calls == 2
+    assert static_harness.discovery._official_matcher is first_matcher
+
+
+def test_invalidate_ludusavi_reloads_index_on_next_explicit_search(
+    static_harness: StaticHarness,
+) -> None:
+    provider = static_harness.official_provider
+    static_harness.discovery.suggest_for_game(static_harness.game_id)
+    first_matcher = static_harness.discovery._official_matcher
+
+    static_harness.discovery.invalidate_ludusavi()
+    static_harness.discovery.suggest_for_game(static_harness.game_id)
+
+    assert provider.session_calls == 2
+    assert static_harness.discovery._official_matcher is not first_matcher

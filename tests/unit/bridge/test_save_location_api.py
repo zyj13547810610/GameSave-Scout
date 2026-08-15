@@ -101,7 +101,13 @@ class FakeSnapshotProvider:
 
     def update_explicitly(self, report=None) -> UpdateResult:
         self.update_calls += 1
-        for stage in ("connecting", "downloading", "validating", "replacing"):
+        for stage in (
+            "connecting",
+            "downloading",
+            "validating",
+            "indexing",
+            "replacing",
+        ):
             if report is not None:
                 report(stage)
         return self.result or UpdateResult("updated", "已更新", self.metadata())

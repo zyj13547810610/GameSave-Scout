@@ -45,7 +45,7 @@ class LudusaviMatcher:
 
     def find(self, game: Game, install_dir: Path) -> tuple[ManifestMatch, ...]:
         matches: list[ManifestMatch] = []
-        signals = self._game_signals(game, install_dir)
+        signals = ludusavi_game_signals(game, install_dir)
         for manifest_game in self._manifest.games.values():
             if manifest_game.alias is not None:
                 continue
@@ -53,7 +53,11 @@ class LudusaviMatcher:
             if scored is None:
                 continue
             confidence, matched_name, exact, evidence = scored
-            locations = self._locations(manifest_game, install_dir)
+            locations = materialize_manifest_locations(
+                manifest_game,
+                install_dir,
+                self._resolver,
+            )
             if not locations:
                 continue
             matches.append(
@@ -85,7 +89,7 @@ class LudusaviMatcher:
         )
         for signal_kind, signal in signals:
             for candidate in candidate_names:
-                if _normalize_name(signal) == _normalize_name(candidate):
+                if normalize_ludusavi_name(signal) == normalize_ludusavi_name(candidate):
                     return (
                         1.0,
                         candidate,
@@ -98,7 +102,13 @@ class LudusaviMatcher:
         best_candidate = ""
         for _, signal in signals:
             for candidate in candidate_names:
-                score = ratio(_normalize_name(signal), _normalize_name(candidate)) / 100
+                score = (
+                    ratio(
+                        normalize_ludusavi_name(signal),
+                        normalize_ludusavi_name(candidate),
+                    )
+                    / 100
+                )
                 if score > best_score:
                     best_score = score
                     best_signal = signal
@@ -110,74 +120,6 @@ class LudusaviMatcher:
             best_candidate,
             False,
             (f"名称相似：{best_signal} ↔ {best_candidate}",),
-        )
-
-    def _locations(
-        self,
-        game: ManifestGame,
-        install_dir: Path,
-    ) -> tuple[MatchedLocation, ...]:
-        locations: list[MatchedLocation] = []
-        for rule in game.files:
-            location = self._file_location(rule, install_dir)
-            if location is not None:
-                locations.append(location)
-        for rule in game.registry:
-            locations.append(self._registry_location(rule))
-        return tuple(locations)
-
-    def _file_location(
-        self,
-        rule: ManifestLocationRule,
-        install_dir: Path,
-    ) -> MatchedLocation | None:
-        match = _TOKEN_PATTERN.fullmatch(rule.path)
-        if match is None:
-            return None
-        token, suffix = match.groups()
-        if token in _UNSUPPORTED_CONTEXT_TOKENS:
-            return None
-        try:
-            if token in _DIRECT_INSTALL_TOKENS:
-                path = install_dir
-                if suffix:
-                    path = path.joinpath(*PureWindowsPath(suffix).parts)
-            else:
-                portable_input = token if not suffix else f"{token}\\{suffix}"
-                path = self._resolver.expand(portable_input, install_dir)
-            path_template = self._resolver.collapse(path, install_dir)
-        except InvalidPathTemplate:
-            return None
-        category = _category(rule.tags)
-        evidence = _condition_evidence(rule)
-        preselected = category == "save" and not any(
-            condition.store for condition in rule.conditions
-        )
-        return MatchedLocation(
-            kind="glob",
-            path_template=path_template,
-            display_path=str(path),
-            category=category,
-            preselected=preselected,
-            tags=rule.tags,
-            evidence=evidence,
-        )
-
-    @staticmethod
-    def _registry_location(rule: ManifestLocationRule) -> MatchedLocation:
-        display_path = rule.path.replace("/", "\\")
-        category = _category(rule.tags)
-        evidence = _condition_evidence(rule)
-        return MatchedLocation(
-            kind="registry",
-            path_template=display_path,
-            display_path=display_path,
-            category=category,
-            preselected=category == "save" and not any(
-                condition.store for condition in rule.conditions
-            ),
-            tags=rule.tags,
-            evidence=evidence,
         )
 
     def _aliases_by_canonical(self) -> dict[str, tuple[str, ...]]:
@@ -198,33 +140,105 @@ class LudusaviMatcher:
             current = target
         return current
 
-    @staticmethod
-    def _game_signals(game: Game, install_dir: Path) -> tuple[tuple[str, str], ...]:
-        values: list[tuple[str, str | None]] = [
-            ("安装目录", install_dir.name),
-            ("检测标题", game.detected_title),
-            ("显示标题", game.title),
-            (
-                "主程序",
-                Path(game.main_exe_relpath).stem if game.main_exe_relpath else None,
-            ),
-        ]
-        seen: set[str] = set()
-        result: list[tuple[str, str]] = []
-        for label, value in values:
-            if value is None or not value.strip():
-                continue
-            key = _normalize_name(value)
-            if key in seen:
-                continue
-            seen.add(key)
-            result.append((label, value))
-        return tuple(result)
-
-
-def _normalize_name(value: str) -> str:
+def normalize_ludusavi_name(value: str) -> str:
     normalized = unicodedata.normalize("NFKC", value).casefold()
     return "".join(character for character in normalized if character.isalnum())
+
+
+def ludusavi_game_signals(
+    game: Game,
+    install_dir: Path,
+) -> tuple[tuple[str, str], ...]:
+    values: list[tuple[str, str | None]] = [
+        ("安装目录", install_dir.name),
+        ("检测标题", game.detected_title),
+        ("显示标题", game.title),
+        (
+            "主程序",
+            Path(game.main_exe_relpath).stem if game.main_exe_relpath else None,
+        ),
+    ]
+    seen: set[str] = set()
+    result: list[tuple[str, str]] = []
+    for label, value in values:
+        if value is None or not value.strip():
+            continue
+        key = normalize_ludusavi_name(value)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append((label, value))
+    return tuple(result)
+
+
+def materialize_manifest_locations(
+    game: ManifestGame,
+    install_dir: Path,
+    resolver: PathTemplateResolver,
+) -> tuple[MatchedLocation, ...]:
+    locations: list[MatchedLocation] = []
+    for rule in game.files:
+        location = _file_location(rule, install_dir, resolver)
+        if location is not None:
+            locations.append(location)
+    for rule in game.registry:
+        locations.append(_registry_location(rule))
+    return tuple(locations)
+
+
+def _file_location(
+    rule: ManifestLocationRule,
+    install_dir: Path,
+    resolver: PathTemplateResolver,
+) -> MatchedLocation | None:
+    match = _TOKEN_PATTERN.fullmatch(rule.path)
+    if match is None:
+        return None
+    token, suffix = match.groups()
+    if token in _UNSUPPORTED_CONTEXT_TOKENS:
+        return None
+    try:
+        if token in _DIRECT_INSTALL_TOKENS:
+            path = install_dir
+            if suffix:
+                path = path.joinpath(*PureWindowsPath(suffix).parts)
+        else:
+            portable_input = token if not suffix else f"{token}\\{suffix}"
+            path = resolver.expand(portable_input, install_dir)
+        path_template = resolver.collapse(path, install_dir)
+    except InvalidPathTemplate:
+        return None
+    category = _category(rule.tags)
+    evidence = _condition_evidence(rule)
+    preselected = category == "save" and not any(
+        condition.store for condition in rule.conditions
+    )
+    return MatchedLocation(
+        kind="glob",
+        path_template=path_template,
+        display_path=str(path),
+        category=category,
+        preselected=preselected,
+        tags=rule.tags,
+        evidence=evidence,
+    )
+
+
+def _registry_location(rule: ManifestLocationRule) -> MatchedLocation:
+    display_path = rule.path.replace("/", "\\")
+    category = _category(rule.tags)
+    evidence = _condition_evidence(rule)
+    return MatchedLocation(
+        kind="registry",
+        path_template=display_path,
+        display_path=display_path,
+        category=category,
+        preselected=category == "save" and not any(
+            condition.store for condition in rule.conditions
+        ),
+        tags=rule.tags,
+        evidence=evidence,
+    )
 
 
 def _category(tags: frozenset[str]) -> MatchLocationCategory:

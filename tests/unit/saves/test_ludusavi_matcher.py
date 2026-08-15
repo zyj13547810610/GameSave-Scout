@@ -2,11 +2,17 @@ from pathlib import Path
 
 from gameshelf.library.models import Game
 from gameshelf.platform.windows.known_folders import KnownFolders
-from gameshelf.saves.ludusavi_matcher import LudusaviMatcher
+from gameshelf.saves.ludusavi_matcher import LudusaviMatcher, normalize_ludusavi_name
 from gameshelf.saves.ludusavi_parser import parse_manifest
 from gameshelf.saves.templates import PathTemplateResolver
 
 FIXTURE = Path(__file__).parents[2] / "fixtures" / "ludusavi" / "manifest.yaml"
+
+
+def test_name_normalization_is_unicode_aware_and_separator_insensitive() -> None:
+    assert normalize_ludusavi_name("Ｃｌａｉｒ： Expedition-33") == "clairexpedition33"
+    assert normalize_ludusavi_name("３３号远征队") == "33号远征队"
+    assert normalize_ludusavi_name("コイカツ！") == "コイカツ"
 
 
 def test_matcher_uses_title_install_dir_and_bounded_aliases() -> None:

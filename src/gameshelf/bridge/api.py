@@ -633,6 +633,7 @@ class BridgeApi:
                     "connecting": "正在连接 Ludusavi 数据源……",
                     "downloading": "正在下载 Ludusavi 清单……",
                     "validating": "正在验证下载的清单……",
+                    "indexing": "正在生成 Ludusavi 查找索引……",
                     "replacing": "正在替换当前有效清单……",
                 }
 
