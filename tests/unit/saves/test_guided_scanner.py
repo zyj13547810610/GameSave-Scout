@@ -4,6 +4,8 @@ import os
 import time
 from pathlib import Path
 
+import pytest
+
 from gameshelf.saves.guided_scanner import BoundedMetadataScanner
 
 
@@ -16,7 +18,12 @@ def test_scanner_returns_only_files_changed_inside_the_session_window(
     old_file.write_bytes(b"old")
     old_timestamp = time.time() - 60
     os.utime(old_file, (old_timestamp, old_timestamp))
-    started_ns = time.time_ns()
+    old_created_ns = old_file.stat().st_ctime_ns
+    deadline = time.monotonic() + 1.0
+    while (started_ns := time.time_ns()) <= old_created_ns:
+        if time.monotonic() >= deadline:
+            pytest.fail("The system clock did not advance before the deadline.")
+        time.sleep(0.001)
     new_file = root / "slot1.sav"
     new_file.write_bytes(b"new-save")
     finished_ns = time.time_ns()

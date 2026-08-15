@@ -1,6 +1,7 @@
 .worktrees/
 .superpowers/
 .venv/
+.vscode/
 __pycache__/
 *.py[cod]
 *.egg-info/
