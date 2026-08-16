@@ -2,7 +2,7 @@
   --ui-scale: 1;
   color: #eceaf2;
   background: #111017;
-  font-size: calc(16px * var(--ui-scale));
+  font-size: calc(15px * var(--ui-scale));
   font-family:
     Inter, "Segoe UI", "Microsoft YaHei UI", sans-serif;
   font-synthesis: none;
