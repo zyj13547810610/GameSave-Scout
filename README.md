@@ -16,6 +16,26 @@ GameShelf 不需要账号或云服务。游戏库、配置、封面、日志和 
 
 V0.1 不包含存档备份、恢复、同步、云服务和常驻后台监控。
 
+## 界面预览
+
+### 游戏库概览
+
+![GameShelf 游戏库概览](docs/assets/readme/library-overview.png)
+
+扫描多个游戏目录，在封面网格中搜索、筛选和管理已识别的游戏。
+
+### 游戏详情与启动设置
+
+![GameShelf 游戏详情与启动设置](docs/assets/readme/game-detail.png)
+
+在右侧详情面板中启动游戏、管理封面，并调整标题、主程序和其他启动设置。
+
+### 存档位置与引擎识别
+
+![GameShelf 存档位置与引擎识别](docs/assets/readme/save-locations.png)
+
+集中维护已确认的存档目录，按需查找或引导式寻找存档，并查看游戏引擎识别结果。
+
 ## 便携版选择与使用
 
 V0.1 提供两个 Windows x64 便携包：
