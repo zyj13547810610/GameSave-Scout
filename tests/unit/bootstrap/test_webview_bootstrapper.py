@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import subprocess
-from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 
 import pytest
@@ -10,35 +8,41 @@ import pytest
 import gameshelf.bootstrap.webview_bootstrapper as bootstrapper_module
 from gameshelf.bootstrap.release_runtime import ReleaseRuntimeConfig, RuntimeMode
 from gameshelf.bootstrap.webview_bootstrapper import (
-    EvergreenRuntimeInstaller,
+    EvergreenRuntimeGuide,
     WebViewBootstrapperError,
     WebViewInstallCancelled,
-    _run_bootstrapper,
+    WebViewManualInstallRequired,
     detect_evergreen_version,
 )
 
 
-def test_existing_evergreen_skips_prompt_and_installer(tmp_path: Path) -> None:
-    installer = EvergreenRuntimeInstaller(
+def test_existing_evergreen_skips_prompt_and_location_opener(tmp_path: Path) -> None:
+    guide = EvergreenRuntimeGuide(
         detector=lambda: "151.0.4129.86",
         prompt=lambda: pytest.fail("prompt must not run"),
-        runner=lambda _command: pytest.fail("installer must not run"),
+        opener=lambda _path: pytest.fail("Explorer must not open"),
     )
 
-    version = installer.ensure_available(_evergreen_config(tmp_path), allow_install=True)
+    version = guide.ensure_available(
+        _evergreen_config(tmp_path),
+        allow_manual_guide=True,
+    )
 
     assert version == "151.0.4129.86"
 
 
-def test_smoke_does_not_prompt_or_run_installer(tmp_path: Path) -> None:
-    installer = EvergreenRuntimeInstaller(
+def test_smoke_does_not_prompt_or_open_location(tmp_path: Path) -> None:
+    guide = EvergreenRuntimeGuide(
         detector=lambda: None,
         prompt=lambda: pytest.fail("prompt must not run"),
-        runner=lambda _command: pytest.fail("installer must not run"),
+        opener=lambda _path: pytest.fail("Explorer must not open"),
     )
 
-    with pytest.raises(WebViewBootstrapperError, match="smoke.*不会运行安装器"):
-        installer.ensure_available(_evergreen_config(tmp_path), allow_install=False)
+    with pytest.raises(WebViewBootstrapperError, match="smoke.*不会打开安装位置"):
+        guide.ensure_available(
+            _evergreen_config(tmp_path),
+            allow_manual_guide=False,
+        )
 
 
 def test_smoke_validates_bootstrapper_even_when_evergreen_exists(
@@ -50,132 +54,212 @@ def test_smoke_validates_bootstrapper_even_when_evergreen_exists(
         config.bootstrapper_path,
         hashlib.sha256(b"official").hexdigest(),
     )
-    installer = EvergreenRuntimeInstaller(
+    guide = EvergreenRuntimeGuide(
         detector=lambda: "151.0.4129.86",
         prompt=lambda: pytest.fail("prompt must not run"),
-        runner=lambda _command: pytest.fail("installer must not run"),
+        opener=lambda _path: pytest.fail("Explorer must not open"),
     )
 
     with pytest.raises(WebViewBootstrapperError, match="SHA-256 不匹配"):
-        installer.ensure_available(config, allow_install=False)
+        guide.ensure_available(config, allow_manual_guide=False)
 
 
 def test_user_can_cancel_evergreen_install(tmp_path: Path) -> None:
-    installer = EvergreenRuntimeInstaller(
+    guide = EvergreenRuntimeGuide(
         detector=lambda: None,
         prompt=lambda: False,
-        runner=lambda _command: pytest.fail("installer must not run"),
+        opener=lambda _path: pytest.fail("Explorer must not open"),
     )
 
     with pytest.raises(WebViewInstallCancelled):
-        installer.ensure_available(_evergreen_config(tmp_path), allow_install=True)
+        guide.ensure_available(
+            _evergreen_config(tmp_path),
+            allow_manual_guide=True,
+        )
 
 
-def test_missing_evergreen_installs_and_rechecks_in_same_call(tmp_path: Path) -> None:
+def test_missing_evergreen_opens_verified_bootstrapper_location(
+    tmp_path: Path,
+) -> None:
     config = _evergreen_config(tmp_path, payload=b"official bootstrapper")
-    detected = iter((None, None, "151.0.4129.86"))
-    commands: list[tuple[str, ...]] = []
-    installer = EvergreenRuntimeInstaller(
-        detector=lambda: next(detected),
-        prompt=lambda: True,
-        runner=lambda command: commands.append(tuple(command))
-        or subprocess.CompletedProcess(command, 0, "", ""),
-        monotonic=_monotonic(0.0, 0.1, 0.2),
-        sleeper=lambda _seconds: None,
-        timeout_seconds=1.0,
-    )
-
-    version = installer.ensure_available(config, allow_install=True)
-
-    assert version == "151.0.4129.86"
-    assert commands == [(str(config.bootstrapper_path), "/silent", "/install")]
-
-
-def test_missing_bootstrapper_is_rejected_before_process_start(tmp_path: Path) -> None:
-    config = _evergreen_config(tmp_path)
-    assert config.bootstrapper_path is not None
-    config.bootstrapper_path.unlink()
-    installer = EvergreenRuntimeInstaller(
+    opened: list[Path] = []
+    guide = EvergreenRuntimeGuide(
         detector=lambda: None,
         prompt=lambda: True,
-        runner=lambda _command: pytest.fail("installer must not run"),
+        opener=opened.append,
     )
 
-    with pytest.raises(WebViewBootstrapperError, match="Bootstrapper 文件不存在"):
-        installer.ensure_available(config, allow_install=True)
+    with pytest.raises(WebViewManualInstallRequired):
+        guide.ensure_available(config, allow_manual_guide=True)
+
+    assert opened == [config.bootstrapper_path]
 
 
-def test_bootstrapper_digest_mismatch_is_rejected(tmp_path: Path) -> None:
+def test_invalid_bootstrapper_is_rejected_before_prompt(tmp_path: Path) -> None:
     config = _evergreen_config(tmp_path, payload=b"tampered")
     config = ReleaseRuntimeConfig(
         config.mode,
         config.bootstrapper_path,
         hashlib.sha256(b"official").hexdigest(),
     )
-    installer = EvergreenRuntimeInstaller(
+    guide = EvergreenRuntimeGuide(
         detector=lambda: None,
-        prompt=lambda: True,
-        runner=lambda _command: pytest.fail("installer must not run"),
+        prompt=lambda: pytest.fail("prompt must not run"),
+        opener=lambda _path: pytest.fail("Explorer must not open"),
     )
 
     with pytest.raises(WebViewBootstrapperError, match="SHA-256 不匹配"):
-        installer.ensure_available(config, allow_install=True)
+        guide.ensure_available(config, allow_manual_guide=True)
 
 
-def test_installer_failure_preserves_stdout_and_stderr(tmp_path: Path) -> None:
-    installer = EvergreenRuntimeInstaller(
-        detector=lambda: None,
-        prompt=lambda: True,
-        runner=lambda command: subprocess.CompletedProcess(
-            command,
-            7,
-            "installer output",
-            "installer error",
-        ),
-    )
-
-    with pytest.raises(WebViewBootstrapperError) as raised:
-        installer.ensure_available(_evergreen_config(tmp_path), allow_install=True)
-
-    message = str(raised.value)
-    assert "退出码 7" in message
-    assert "installer output" in message
-    assert "installer error" in message
-
-
-def test_install_times_out_when_runtime_remains_missing(tmp_path: Path) -> None:
-    installer = EvergreenRuntimeInstaller(
-        detector=lambda: None,
-        prompt=lambda: True,
-        runner=lambda command: subprocess.CompletedProcess(command, 0, "", ""),
-        monotonic=_monotonic(0.0, 0.5, 1.0),
-        sleeper=lambda _seconds: None,
-        timeout_seconds=1.0,
-    )
-
-    with pytest.raises(WebViewBootstrapperError, match="安装完成后.*仍未检测到"):
-        installer.ensure_available(_evergreen_config(tmp_path), allow_install=True)
-
-
-def test_bootstrapper_process_disables_shell(
+def test_reparse_bootstrapper_is_rejected_before_prompt(
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    calls: list[tuple[tuple[str, ...], dict[str, object]]] = []
+    guide = EvergreenRuntimeGuide(
+        detector=lambda: None,
+        prompt=lambda: pytest.fail("prompt must not run"),
+        opener=lambda _path: pytest.fail("Explorer must not open"),
+    )
+    monkeypatch.setattr(
+        bootstrapper_module,
+        "_is_reparse_point",
+        lambda _path: True,
+        raising=False,
+    )
 
-    def fake_run(
-        command: Sequence[str],
-        **kwargs: object,
-    ) -> subprocess.CompletedProcess[str]:
-        calls.append((tuple(command), kwargs))
-        return subprocess.CompletedProcess(command, 0, "", "")
+    with pytest.raises(WebViewBootstrapperError, match="重解析点"):
+        guide.ensure_available(
+            _evergreen_config(tmp_path),
+            allow_manual_guide=True,
+        )
 
-    monkeypatch.setattr(subprocess, "run", fake_run)
 
-    result = _run_bootstrapper(("setup.exe", "/silent", "/install"))
+def test_location_opener_selects_bootstrapper_with_system_explorer(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    windows = tmp_path / "Windows"
+    windows.mkdir()
+    explorer = windows / "explorer.exe"
+    explorer.write_bytes(b"explorer")
+    bootstrapper = (
+        tmp_path
+        / "GameShelf"
+        / "prerequisites"
+        / "MicrosoftEdgeWebview2Setup.exe"
+    )
+    bootstrapper.parent.mkdir(parents=True)
+    bootstrapper.write_bytes(b"official")
+    calls: list[tuple[Path, Path]] = []
+    monkeypatch.setenv("WINDIR", str(windows))
+    monkeypatch.setattr(
+        bootstrapper_module,
+        "_shell_execute_explorer",
+        lambda executable, selected: calls.append((executable, selected)) or 33,
+        raising=False,
+    )
 
-    assert result.returncode == 0
-    assert calls[0][0] == ("setup.exe", "/silent", "/install")
-    assert calls[0][1]["shell"] is False
+    bootstrapper_module._open_bootstrapper_location(bootstrapper)
+
+    assert calls == [(explorer, bootstrapper)]
+
+
+def test_location_opener_reports_shell_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    windows = tmp_path / "Windows"
+    windows.mkdir()
+    (windows / "explorer.exe").write_bytes(b"explorer")
+    bootstrapper = tmp_path / "MicrosoftEdgeWebview2Setup.exe"
+    bootstrapper.write_bytes(b"official")
+    monkeypatch.setenv("WINDIR", str(windows))
+    monkeypatch.setattr(
+        bootstrapper_module,
+        "_shell_execute_explorer",
+        lambda _executable, _selected: 31,
+        raising=False,
+    )
+
+    with pytest.raises(WebViewBootstrapperError, match="ShellExecuteW 返回 31"):
+        bootstrapper_module._open_bootstrapper_location(bootstrapper)
+
+
+def test_location_opener_wraps_shell_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    windows = tmp_path / "Windows"
+    windows.mkdir()
+    (windows / "explorer.exe").write_bytes(b"explorer")
+    bootstrapper = tmp_path / "MicrosoftEdgeWebview2Setup.exe"
+    bootstrapper.write_bytes(b"official")
+    monkeypatch.setenv("WINDIR", str(windows))
+
+    def fail_to_open(_executable: Path, _selected: Path) -> int:
+        raise OSError("access denied")
+
+    monkeypatch.setattr(
+        bootstrapper_module,
+        "_shell_execute_explorer",
+        fail_to_open,
+    )
+
+    with pytest.raises(WebViewBootstrapperError, match="无法打开.*access denied"):
+        bootstrapper_module._open_bootstrapper_location(bootstrapper)
+
+
+def test_default_guide_uses_native_dependencies(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        bootstrapper_module,
+        "detect_evergreen_version",
+        lambda: "151.0.4129.86",
+    )
+
+    guide = EvergreenRuntimeGuide()
+
+    assert (
+        guide.ensure_available(
+            _evergreen_config(tmp_path),
+            allow_manual_guide=True,
+        )
+        == "151.0.4129.86"
+    )
+
+
+def test_missing_bootstrapper_is_rejected_before_prompt(tmp_path: Path) -> None:
+    config = _evergreen_config(tmp_path)
+    assert config.bootstrapper_path is not None
+    config.bootstrapper_path.unlink()
+    guide = EvergreenRuntimeGuide(
+        detector=lambda: None,
+        prompt=lambda: pytest.fail("prompt must not run"),
+        opener=lambda _path: pytest.fail("Explorer must not open"),
+    )
+
+    with pytest.raises(WebViewBootstrapperError, match="Bootstrapper 文件不存在"):
+        guide.ensure_available(config, allow_manual_guide=True)
+
+
+def test_bootstrapper_digest_mismatch_is_rejected_before_prompt(tmp_path: Path) -> None:
+    config = _evergreen_config(tmp_path, payload=b"tampered")
+    config = ReleaseRuntimeConfig(
+        config.mode,
+        config.bootstrapper_path,
+        hashlib.sha256(b"official").hexdigest(),
+    )
+    guide = EvergreenRuntimeGuide(
+        detector=lambda: None,
+        prompt=lambda: pytest.fail("prompt must not run"),
+        opener=lambda _path: pytest.fail("Explorer must not open"),
+    )
+
+    with pytest.raises(WebViewBootstrapperError, match="SHA-256 不匹配"):
+        guide.ensure_available(config, allow_manual_guide=True)
 
 
 def test_detector_returns_none_only_for_runtime_not_found(
@@ -231,15 +315,3 @@ def _evergreen_config(
         bootstrapper,
         hashlib.sha256(payload).hexdigest(),
     )
-
-
-def _monotonic(*values: float) -> Callable[[], float]:
-    iterator: Iterator[float] = iter(values)
-
-    def read() -> float:
-        try:
-            return next(iterator)
-        except StopIteration:
-            pytest.fail("monotonic clock exhausted")
-
-    return read

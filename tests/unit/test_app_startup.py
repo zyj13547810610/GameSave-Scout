@@ -5,16 +5,15 @@ import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
-from typing import cast
 
 import pytest
 
 import gameshelf.app as app_module
 from gameshelf.app import main
-from gameshelf.bootstrap.application import Application
 from gameshelf.bootstrap.webview_bootstrapper import (
     WebViewBootstrapperError,
     WebViewInstallCancelled,
+    WebViewManualInstallRequired,
 )
 from gameshelf.bootstrap.webview_runtime import WebViewRuntime
 
@@ -50,16 +49,19 @@ def test_json_smoke_writes_success_without_creating_desktop_window(
         return real_import(module_name, package)
 
     monkeypatch.setattr(app_module, "import_module", import_without_desktop_window)
-    allow_install_calls: list[bool] = []
+    allow_manual_guide_calls: list[bool] = []
     real_ensure_available = WebViewRuntime.ensure_available
 
     def record_ensure_available(
         runtime: WebViewRuntime,
         *,
-        allow_install: bool,
+        allow_manual_guide: bool,
     ) -> str | None:
-        allow_install_calls.append(allow_install)
-        return real_ensure_available(runtime, allow_install=allow_install)
+        allow_manual_guide_calls.append(allow_manual_guide)
+        return real_ensure_available(
+            runtime,
+            allow_manual_guide=allow_manual_guide,
+        )
 
     monkeypatch.setattr(
         WebViewRuntime,
@@ -97,7 +99,7 @@ def test_json_smoke_writes_success_without_creating_desktop_window(
     }
     assert payload["error"] is None
     assert reporter.calls == []
-    assert allow_install_calls == [False]
+    assert allow_manual_guide_calls == [False]
 
 
 @pytest.mark.parametrize(
@@ -220,7 +222,7 @@ def test_user_cancelled_webview_install_exits_without_error_log(
     monkeypatch.setattr(
         WebViewRuntime,
         "ensure_available",
-        lambda _self, *, allow_install: (_ for _ in ()).throw(
+        lambda _self, *, allow_manual_guide: (_ for _ in ()).throw(
             WebViewInstallCancelled
         ),
     )
@@ -232,7 +234,7 @@ def test_user_cancelled_webview_install_exits_without_error_log(
     assert not (app_root / "data" / "logs" / "startup-error.log").exists()
 
 
-def test_evergreen_install_success_continues_in_same_process(
+def test_manual_install_location_opened_exits_without_building_application(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -241,42 +243,27 @@ def test_evergreen_install_success_continues_in_same_process(
     _create_required_resources(bundle_root / "resources")
     _write_release_manifest(app_root, mode="evergreen")
     reporter = RecordingReporter()
-    application = cast(Application, SimpleNamespace())
-    ensure_calls: list[bool] = []
-    build_calls: list[tuple[object, object]] = []
-    desktop_calls: list[tuple[object, object]] = []
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(sys, "_MEIPASS", str(bundle_root), raising=False)
     monkeypatch.setattr(app_module, "_validate_desktop_dependencies", lambda: None)
     monkeypatch.setattr(
         WebViewRuntime,
         "ensure_available",
-        lambda _self, *, allow_install: ensure_calls.append(allow_install)
-        or "151.0.4129.86",
+        lambda _self, *, allow_manual_guide: (_ for _ in ()).throw(
+            WebViewManualInstallRequired
+        ),
     )
     monkeypatch.setattr(
         app_module,
         "build_application",
-        lambda paths, *, resources: build_calls.append((paths, resources))
-        or application,
-    )
-    monkeypatch.setattr(
-        app_module,
-        "_run_desktop",
-        lambda built_application, runtime: desktop_calls.append(
-            (built_application, runtime)
-        )
-        or 0,
+        lambda *_args, **_kwargs: pytest.fail("application must not build"),
     )
 
     exit_code = main(["--app-root", str(app_root)], reporter=reporter)
 
     assert exit_code == 0
-    assert ensure_calls == [True]
-    assert len(build_calls) == 1
-    assert len(desktop_calls) == 1
-    assert desktop_calls[0][0] is application
     assert reporter.calls == []
+    assert not (app_root / "data" / "logs" / "startup-error.log").exists()
 
 
 def test_evergreen_install_failure_uses_existing_reporter_once(
@@ -294,8 +281,8 @@ def test_evergreen_install_failure_uses_existing_reporter_once(
     monkeypatch.setattr(
         WebViewRuntime,
         "ensure_available",
-        lambda _self, *, allow_install: (_ for _ in ()).throw(
-            WebViewBootstrapperError("installer failed")
+        lambda _self, *, allow_manual_guide: (_ for _ in ()).throw(
+            WebViewBootstrapperError("guide failed")
         ),
     )
 
@@ -303,7 +290,7 @@ def test_evergreen_install_failure_uses_existing_reporter_once(
 
     assert exit_code == 1
     assert len(reporter.calls) == 1
-    assert "installer failed" in str(reporter.calls[0][0])
+    assert "guide failed" in str(reporter.calls[0][0])
 
 
 def test_evergreen_smoke_records_detection_and_bootstrapper_checks(
@@ -322,7 +309,9 @@ def test_evergreen_smoke_records_detection_and_bootstrapper_checks(
     monkeypatch.setattr(
         WebViewRuntime,
         "ensure_available",
-        lambda _self, *, allow_install: ensure_calls.append(allow_install)
+        lambda _self, *, allow_manual_guide: ensure_calls.append(
+            allow_manual_guide
+        )
         or "151.0.4129.86",
     )
     monkeypatch.setattr(

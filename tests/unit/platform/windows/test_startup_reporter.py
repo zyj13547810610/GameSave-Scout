@@ -43,7 +43,7 @@ def test_reporter_failure_does_not_raise_or_hide_startup_error(tmp_path: Path) -
     assert log_file is None
 
 
-def test_runtime_prompt_uses_yes_no_and_defaults_to_no() -> None:
+def test_runtime_prompt_explains_manual_install_and_restart() -> None:
     calls: list[tuple[str, str, int]] = []
     prompt = FrozenRuntimeInstallPrompt(
         message_box=lambda message, title, flags: calls.append(
@@ -54,6 +54,9 @@ def test_runtime_prompt_uses_yes_no_and_defaults_to_no() -> None:
 
     assert prompt.confirm() is True
     message, title, flags = calls[0]
+    assert "打开安装器所在文件夹" in message
+    assert "双击 MicrosoftEdgeWebview2Setup.exe" in message
+    assert "安装完成后重新启动 GameShelf" in message
     assert "联网" in message
     assert "Microsoft WebView2 Runtime" in message
     assert title == "GameShelf 需要 WebView2"

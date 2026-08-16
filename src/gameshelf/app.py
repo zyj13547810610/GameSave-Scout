@@ -16,7 +16,10 @@ from gameshelf.bootstrap.paths import AppPaths
 from gameshelf.bootstrap.release_runtime import ReleaseRuntimeConfig, RuntimeMode
 from gameshelf.bootstrap.resources import ResourcePaths
 from gameshelf.bootstrap.smoke import SmokeReport, write_smoke_report
-from gameshelf.bootstrap.webview_bootstrapper import WebViewInstallCancelled
+from gameshelf.bootstrap.webview_bootstrapper import (
+    WebViewInstallCancelled,
+    WebViewManualInstallRequired,
+)
 from gameshelf.bootstrap.webview_runtime import WebViewRuntime
 from gameshelf.platform.windows.startup_reporter import FrozenStartupReporter
 
@@ -81,7 +84,7 @@ def main(
                 checks["webviewBootstrapper"] = False
         checks["webviewRuntime"] = False
         runtime_version = webview_runtime.ensure_available(
-            allow_install=not args.smoke_test
+            allow_manual_guide=not args.smoke_test
         )
         checks["webviewRuntime"] = True
         if release_config.mode is RuntimeMode.EVERGREEN:
@@ -112,7 +115,7 @@ def main(
                 print(f"GameShelf bootstrap OK (schema {schema_version})")
             return 0
         return _run_desktop(application, webview_runtime)
-    except WebViewInstallCancelled:
+    except (WebViewInstallCancelled, WebViewManualInstallRequired):
         if application is not None:
             application.close()
         return 0

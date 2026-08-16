@@ -27,7 +27,7 @@ def _native_message_box(message: str, title: str, flags: int) -> int:
 
 @dataclass
 class FrozenRuntimeInstallPrompt:
-    """Ask for explicit consent before running the bundled installer."""
+    """Ask whether to open the verified manual installer location."""
 
     message_box: MessageBox = _native_message_box
 
@@ -35,7 +35,10 @@ class FrozenRuntimeInstallPrompt:
         try:
             result = self.message_box(
                 "系统未检测到 Microsoft WebView2 Runtime。\n\n"
-                "是否现在联网安装微软官方运行时？",
+                "GameShelf 将打开安装器所在文件夹。\n"
+                "请双击 MicrosoftEdgeWebview2Setup.exe 联网完成安装，\n"
+                "安装完成后重新启动 GameShelf。\n\n"
+                "是否打开安装位置？",
                 "GameShelf 需要 WebView2",
                 _INSTALL_PROMPT_FLAGS,
             )

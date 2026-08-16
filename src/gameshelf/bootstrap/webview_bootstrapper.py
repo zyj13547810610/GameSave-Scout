@@ -1,24 +1,23 @@
-"""Detect and, with explicit consent, install Evergreen WebView2."""
+"""Detect Evergreen WebView2 and guide the user to its manual installer."""
 
 from __future__ import annotations
 
+import ctypes
 import hashlib
 import importlib
 import os
-import subprocess
-import time
-from collections.abc import Callable, Sequence
+import stat
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Protocol, cast
+from pathlib import Path
+from typing import Any, Protocol, cast
 
 from gameshelf.bootstrap.release_runtime import ReleaseRuntimeConfig, RuntimeMode
 from gameshelf.platform.windows.startup_reporter import FrozenRuntimeInstallPrompt
 
 type VersionDetector = Callable[[], str | None]
 type ConsentPrompt = Callable[[], bool]
-type CommandRunner = Callable[[Sequence[str]], subprocess.CompletedProcess[str]]
-type Clock = Callable[[], float]
-type Sleeper = Callable[[float], None]
+type LocationOpener = Callable[[Path], None]
 
 
 class _CoreWebView2Environment(Protocol):
@@ -27,65 +26,52 @@ class _CoreWebView2Environment(Protocol):
 
 
 class WebViewInstallCancelled(Exception):
-    """Raised only when the user declines the Evergreen installation prompt."""
+    """Raised when the user declines to open the manual installer location."""
+
+
+class WebViewManualInstallRequired(Exception):
+    """Raised after Explorer opens so the user can install and restart."""
 
 
 class WebViewBootstrapperError(RuntimeError):
-    """Raised when Evergreen detection or controlled installation fails."""
+    """Raised when Evergreen detection or manual-install guidance fails."""
 
 
 @dataclass
-class EvergreenRuntimeInstaller:
-    """Ensure Evergreen WebView2 is available without restarting GameShelf."""
+class EvergreenRuntimeGuide:
+    """Guide a missing Evergreen runtime to a verified manual installer."""
 
     detector: VersionDetector = field(default_factory=lambda: detect_evergreen_version)
     prompt: ConsentPrompt = field(
         default_factory=lambda: FrozenRuntimeInstallPrompt().confirm
     )
-    runner: CommandRunner = field(default_factory=lambda: _run_bootstrapper)
-    monotonic: Clock = time.monotonic
-    sleeper: Sleeper = time.sleep
-    timeout_seconds: float = 15.0
+    opener: LocationOpener = field(default_factory=lambda: _open_bootstrapper_location)
 
     def ensure_available(
         self,
         config: ReleaseRuntimeConfig,
         *,
-        allow_install: bool,
+        allow_manual_guide: bool,
     ) -> str:
         version = self.detector()
-        if not allow_install:
+        if not allow_manual_guide:
             _validate_bootstrapper(config)
             if version is not None:
                 return version
             raise WebViewBootstrapperError(
-                "系统未安装 Evergreen WebView2；smoke 不会运行安装器。"
+                "系统未安装 Evergreen WebView2；smoke 不会打开安装位置。"
             )
         if version is not None:
             return version
-        if not self.prompt():
-            raise WebViewInstallCancelled
 
         _validate_bootstrapper(config)
+        if not self.prompt():
+            raise WebViewInstallCancelled
         path = config.bootstrapper_path
         if path is None:
             raise WebViewBootstrapperError("发布配置缺少 WebView2 Bootstrapper 路径。")
-        result = self.runner((str(path), "/silent", "/install"))
-        _require_success(result)
-        return self._wait_for_runtime()
-
-    def _wait_for_runtime(self) -> str:
-        deadline = self.monotonic() + self.timeout_seconds
-        while self.monotonic() < deadline:
-            version = self.detector()
-            if version is not None:
-                return version
-            self.sleeper(0.1)
-        raise WebViewBootstrapperError(
-            "WebView2 安装完成后仍未检测到 Evergreen Runtime。"
-        )
-
-
+        self.opener(path)
+        raise WebViewManualInstallRequired
 def detect_evergreen_version() -> str | None:
     """Return the installed Evergreen version or ``None`` when it is absent."""
 
@@ -136,6 +122,10 @@ def _validate_bootstrapper(config: ReleaseRuntimeConfig) -> None:
     digest = config.bootstrapper_sha256
     if path is None or not path.is_absolute() or not path.is_file():
         raise WebViewBootstrapperError(f"WebView2 Bootstrapper 文件不存在：{path}")
+    if _is_reparse_point(path):
+        raise WebViewBootstrapperError(
+            f"WebView2 Bootstrapper 不能是重解析点：{path}"
+        )
     if digest is None:
         raise WebViewBootstrapperError("发布配置缺少 WebView2 Bootstrapper SHA-256。")
     actual_digest = _sha256(path)
@@ -154,27 +144,53 @@ def _sha256(path: os.PathLike[str]) -> str:
     return digest.hexdigest()
 
 
-def _require_success(result: subprocess.CompletedProcess[str]) -> None:
-    if result.returncode == 0:
-        return
-    details = "\n".join(
-        detail.strip()
-        for detail in (result.stdout, result.stderr)
-        if detail and detail.strip()
-    )
-    if not details:
-        details = "无输出"
-    raise WebViewBootstrapperError(
-        f"WebView2 Bootstrapper 退出码 {result.returncode}：{details}"
-    )
+def _is_reparse_point(path: Path) -> bool:
+    try:
+        attributes = path.lstat().st_file_attributes
+    except OSError as exc:
+        raise WebViewBootstrapperError(
+            f"无法检查 WebView2 Bootstrapper 文件属性：{path}"
+        ) from exc
+    return bool(attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT)
 
 
-def _run_bootstrapper(command: Sequence[str]) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        command,
-        capture_output=True,
-        text=True,
-        errors="replace",
-        check=False,
-        shell=False,
+def _open_bootstrapper_location(path: Path) -> None:
+    windows_directory = os.environ.get("WINDIR")
+    if not windows_directory:
+        raise WebViewBootstrapperError("无法确定 Windows 目录，不能打开安装位置。")
+    explorer = Path(windows_directory) / "explorer.exe"
+    if not explorer.is_absolute() or not explorer.is_file():
+        raise WebViewBootstrapperError(f"找不到 Windows Explorer：{explorer}")
+    try:
+        result = _shell_execute_explorer(explorer, path)
+    except OSError as exc:
+        raise WebViewBootstrapperError(
+            f"无法打开 WebView2 安装位置：{exc}"
+        ) from exc
+    if result <= 32:
+        raise WebViewBootstrapperError(
+            f"无法打开 WebView2 安装位置，ShellExecuteW 返回 {result}。"
+        )
+
+
+def _shell_execute_explorer(explorer: Path, selected_file: Path) -> int:
+    shell32: Any = ctypes.WinDLL("shell32", use_last_error=True)
+    shell_execute = shell32.ShellExecuteW
+    shell_execute.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_wchar_p,
+        ctypes.c_wchar_p,
+        ctypes.c_wchar_p,
+        ctypes.c_wchar_p,
+        ctypes.c_int,
+    ]
+    shell_execute.restype = ctypes.c_void_p
+    result = shell_execute(
+        None,
+        "open",
+        str(explorer),
+        f'/select,"{selected_file}"',
+        str(selected_file.parent),
+        1,
     )
+    return int(result or 0)

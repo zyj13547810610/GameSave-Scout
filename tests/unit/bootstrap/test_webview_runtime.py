@@ -4,11 +4,12 @@ import subprocess
 from collections.abc import Sequence
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 
 from gameshelf.bootstrap.release_runtime import ReleaseRuntimeConfig, RuntimeMode
-from gameshelf.bootstrap.webview_bootstrapper import EvergreenRuntimeInstaller
+from gameshelf.bootstrap.webview_bootstrapper import EvergreenRuntimeGuide
 from gameshelf.bootstrap.webview_runtime import WebViewRuntime, WebViewRuntimeError
 
 
@@ -212,17 +213,26 @@ def test_fixed_runtime_ensure_available_validates_bundled_path(
         system_directory=tmp_path / "Windows" / "System32",
     )
 
-    assert runtime.ensure_available(allow_install=False) is None
+    assert runtime.ensure_available(allow_manual_guide=False) is None
 
 
 def test_evergreen_runtime_uses_system_and_never_sets_fixed_path(
     tmp_path: Path,
 ) -> None:
-    installer = EvergreenRuntimeInstaller(
-        detector=lambda: "151.0.4129.86",
-        prompt=lambda: pytest.fail("prompt must not run"),
-        runner=lambda _command: pytest.fail("installer must not run"),
-    )
+    class RecordingGuide:
+        def __init__(self) -> None:
+            self.calls: list[bool] = []
+
+        def ensure_available(
+            self,
+            _config: ReleaseRuntimeConfig,
+            *,
+            allow_manual_guide: bool,
+        ) -> str:
+            self.calls.append(allow_manual_guide)
+            return "151.0.4129.86"
+
+    guide = RecordingGuide()
     config = ReleaseRuntimeConfig(
         RuntimeMode.EVERGREEN,
         tmp_path / "prerequisites" / "MicrosoftEdgeWebview2Setup.exe",
@@ -233,11 +243,15 @@ def test_evergreen_runtime_uses_system_and_never_sets_fixed_path(
         tmp_path,
         frozen=True,
         release_config=config,
-        evergreen_installer=installer,
+        evergreen_guide=cast(EvergreenRuntimeGuide, guide),
         drive_type=lambda _path: pytest.fail("drive type must not be inspected"),
     )
 
-    assert runtime.ensure_available(allow_install=True) == "151.0.4129.86"
+    assert (
+        runtime.ensure_available(allow_manual_guide=True)
+        == "151.0.4129.86"
+    )
+    assert guide.calls == [True]
     assert runtime.prepare_windows10_permissions() is False
     runtime.configure(webview)
 

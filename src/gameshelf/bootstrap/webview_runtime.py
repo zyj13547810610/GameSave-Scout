@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from gameshelf.bootstrap.release_runtime import ReleaseRuntimeConfig, RuntimeMode
-from gameshelf.bootstrap.webview_bootstrapper import EvergreenRuntimeInstaller
+from gameshelf.bootstrap.webview_bootstrapper import EvergreenRuntimeGuide
 
 DRIVE_FIXED = 3
 WINDOWS_11_FIRST_BUILD = 22000
@@ -40,7 +40,7 @@ class WebViewRuntime:
     _drive_type: DriveTypeLookup = field(repr=False)
     _runner: CommandRunner = field(repr=False)
     _system_directory: Path | None = field(repr=False)
-    _evergreen_installer: EvergreenRuntimeInstaller = field(repr=False)
+    _evergreen_guide: EvergreenRuntimeGuide = field(repr=False)
     _permissions_prepared: bool = field(default=False, init=False, repr=False)
 
     @classmethod
@@ -54,14 +54,14 @@ class WebViewRuntime:
         runner: CommandRunner | None = None,
         system_directory: Path | None = None,
         release_config: ReleaseRuntimeConfig | None = None,
-        evergreen_installer: EvergreenRuntimeInstaller | None = None,
+        evergreen_guide: EvergreenRuntimeGuide | None = None,
     ) -> WebViewRuntime:
         is_frozen = bool(getattr(sys, "frozen", False)) if frozen is None else frozen
         config = release_config or ReleaseRuntimeConfig.for_runtime(
             app_root,
             frozen=is_frozen,
         )
-        installer = evergreen_installer or EvergreenRuntimeInstaller()
+        guide = evergreen_guide or EvergreenRuntimeGuide()
         if config.mode is not RuntimeMode.FIXED:
             return cls(
                 path=None,
@@ -71,7 +71,7 @@ class WebViewRuntime:
                 _drive_type=drive_type or _windows_drive_type,
                 _runner=runner or _run_command,
                 _system_directory=None,
-                _evergreen_installer=installer,
+                _evergreen_guide=guide,
             )
         return cls(
             path=Path(app_root) / "runtime",
@@ -85,7 +85,7 @@ class WebViewRuntime:
                 if system_directory is None
                 else system_directory
             ),
-            _evergreen_installer=installer,
+            _evergreen_guide=guide,
         )
 
     @property
@@ -138,14 +138,14 @@ class WebViewRuntime:
         self._permissions_prepared = True
         return True
 
-    def ensure_available(self, *, allow_install: bool) -> str | None:
+    def ensure_available(self, *, allow_manual_guide: bool) -> str | None:
         if self.release_config.mode is RuntimeMode.FIXED:
             self.validate()
             return None
         if self.release_config.mode is RuntimeMode.EVERGREEN:
-            return self._evergreen_installer.ensure_available(
+            return self._evergreen_guide.ensure_available(
                 self.release_config,
-                allow_install=allow_install,
+                allow_manual_guide=allow_manual_guide,
             )
         return None
 
