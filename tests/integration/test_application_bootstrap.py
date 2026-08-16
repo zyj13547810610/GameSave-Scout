@@ -2,9 +2,12 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from urllib.request import urlopen
 
+import pytest
+
 from gameshelf.bootstrap.application import build_application
 from gameshelf.bootstrap.paths import AppPaths
 from gameshelf.bootstrap.resources import ResourcePaths
+from gameshelf.engines.rule_schema import RuleSchemaError
 
 
 def test_application_bootstrap_creates_only_portable_state(tmp_path: Path) -> None:
@@ -89,6 +92,70 @@ rules:
         assert application.api.ludusavi_status()["data"]["available"] is False
     finally:
         application.close()
+
+
+@pytest.mark.parametrize(
+    "rules_content",
+    (
+        "version: [",
+        "version: test\nrules: not-a-list\n",
+    ),
+)
+def test_application_degrades_to_builtin_detectors_for_invalid_rules(
+    tmp_path: Path,
+    rules_content: str,
+) -> None:
+    resource_root = tmp_path / "resources"
+    ui_dir = resource_root / "ui"
+    ui_dir.mkdir(parents=True)
+    (ui_dir / "index.html").write_text("test ui", encoding="utf-8")
+    rules_file = resource_root / "rules" / "engines.yaml"
+    rules_file.parent.mkdir()
+    rules_file.write_text(rules_content, encoding="utf-8")
+    resources = ResourcePaths(
+        root=resource_root,
+        ui_dir=ui_dir,
+        engine_rules_file=rules_file,
+        ludusavi_dir=resource_root / "missing-ludusavi",
+    )
+    paths = AppPaths.from_root(tmp_path / "便携应用")
+
+    application = build_application(paths, resources=resources)
+    try:
+        option_ids = {
+            item["id"] for item in application.api.list_engine_options()["data"]
+        }
+        log_text = paths.logs_dir.joinpath("gameshelf.log").read_text(
+            encoding="utf-8"
+        )
+
+        assert application.api.bootstrap()["ok"] is True
+        assert "unity" in option_ids
+        assert "声明式引擎规则加载失败" in log_text
+        assert str(rules_file) in log_text
+    finally:
+        application.close()
+
+
+def test_application_rejects_missing_engine_rules_before_database_start(
+    tmp_path: Path,
+) -> None:
+    resource_root = tmp_path / "resources"
+    ui_dir = resource_root / "ui"
+    ui_dir.mkdir(parents=True)
+    (ui_dir / "index.html").write_text("test ui", encoding="utf-8")
+    resources = ResourcePaths(
+        root=resource_root,
+        ui_dir=ui_dir,
+        engine_rules_file=resource_root / "rules" / "missing.yaml",
+        ludusavi_dir=resource_root / "missing-ludusavi",
+    )
+    paths = AppPaths.from_root(tmp_path / "便携应用")
+
+    with pytest.raises(RuleSchemaError, match="Cannot read engine rules"):
+        build_application(paths, resources=resources)
+
+    assert not paths.database_file.exists()
 
 
 def test_application_closes_guided_session_before_shared_writer(

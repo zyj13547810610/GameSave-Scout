@@ -20,6 +20,7 @@ from gameshelf.covers.service import CoverService
 from gameshelf.db.connection import ConnectionFactory
 from gameshelf.db.migrator import Migrator
 from gameshelf.db.writer import DbWriter
+from gameshelf.engines.rule_schema import RuleSchemaError
 from gameshelf.engines.service import EngineDetectionService
 from gameshelf.library.launcher import GameLauncher
 from gameshelf.library.repository import LibraryRepository
@@ -95,6 +96,10 @@ def build_application(
     paths.ensure_writable()
     logger = configure_logging(paths.logs_dir)
     config = ConfigService(JsonConfigStore(paths.config_file))
+    engine_detection = _load_engine_detection(
+        resource_paths.engine_rules_file,
+        logger,
+    )
     database = ConnectionFactory(paths.database_file)
     schema_version = Migrator(database, paths.backups_dir).migrate()
     writer = DbWriter(database)
@@ -102,9 +107,6 @@ def build_application(
     tasks = TaskRegistry(logger=logger)
     repository = LibraryRepository(database)
     library = LibraryService(repository, writer)
-    engine_detection = EngineDetectionService.from_rules_file(
-        resource_paths.engine_rules_file
-    )
     scanner = ScanService(repository, writer, engine_detection)
     shell = WindowsShell()
     launcher = GameLauncher(repository, writer, WindowsProcessLauncher(), shell)
@@ -233,3 +235,20 @@ def build_application(
         asset_address=asset_address,
         guided_saves=guided_saves,
     )
+
+
+def _load_engine_detection(
+    rules_file: Path,
+    logger: logging.Logger,
+) -> EngineDetectionService:
+    try:
+        return EngineDetectionService.from_rules_file(rules_file)
+    except RuleSchemaError as error:
+        if not rules_file.is_file() or isinstance(error.__cause__, OSError):
+            raise
+        logger.warning(
+            "声明式引擎规则加载失败，已仅启用内置检测器（%s）：%s",
+            rules_file,
+            error,
+        )
+        return EngineDetectionService.builtins_only()

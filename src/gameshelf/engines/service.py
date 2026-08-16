@@ -15,7 +15,7 @@ from gameshelf.engines.detectors.wolf import WolfRpgDetector
 from gameshelf.engines.models import DetectionOutcome
 from gameshelf.engines.registry import DetectorRegistry
 from gameshelf.engines.rule_detector import RuleDetector
-from gameshelf.engines.rule_schema import load_engine_rules
+from gameshelf.engines.rule_schema import EngineRule, load_engine_rules
 
 
 @dataclass(frozen=True)
@@ -55,8 +55,18 @@ class EngineDetectionService:
         self._options_by_id = {option.id: option for option in options}
 
     @classmethod
+    def builtins_only(cls) -> EngineDetectionService:
+        return cls._from_rules(())
+
+    @classmethod
     def from_rules_file(cls, rules_file: Path) -> EngineDetectionService:
-        rules = load_engine_rules(rules_file)
+        return cls._from_rules(load_engine_rules(rules_file))
+
+    @classmethod
+    def _from_rules(
+        cls,
+        rules: tuple[EngineRule, ...],
+    ) -> EngineDetectionService:
         detectors: tuple[EngineDetector, ...] = (
             RpgMakerDetector(),
             RenPyDetector(),
