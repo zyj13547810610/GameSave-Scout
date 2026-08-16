@@ -7,8 +7,11 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 .mypy_cache/
+.release-inputs/
 .ruff_cache/
 *.tsbuildinfo
 frontend/node_modules/
 frontend/dist/
 data/
+build/
+dist/

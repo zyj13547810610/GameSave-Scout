@@ -1,0 +1,40 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+from gameshelf.platform.windows.startup_reporter import FrozenStartupReporter
+
+
+def test_reporter_writes_log_and_shows_one_native_error(tmp_path: Path) -> None:
+    calls: list[tuple[str, str, int]] = []
+
+    def message_box(message: str, title: str, flags: int) -> int:
+        calls.append((message, title, flags))
+        return 1
+
+    reporter = FrozenStartupReporter(message_box=message_box)
+
+    log_file = reporter.show(RuntimeError("runtime missing"), tmp_path / "logs")
+
+    assert log_file == tmp_path / "logs" / "startup-error.log"
+    assert "runtime missing" in log_file.read_text(encoding="utf-8")
+    assert len(calls) == 1
+    message, title, flags = calls[0]
+    assert "runtime missing" in message
+    assert str(log_file) in message
+    assert title == "GameShelf 启动失败"
+    assert flags != 0
+
+
+def test_reporter_failure_does_not_raise_or_hide_startup_error(tmp_path: Path) -> None:
+    blocked_logs = tmp_path / "blocked"
+    blocked_logs.write_text("not a directory", encoding="utf-8")
+
+    def broken_message_box(_message: str, _title: str, _flags: int) -> int:
+        raise OSError("message box unavailable")
+
+    reporter = FrozenStartupReporter(message_box=broken_message_box)
+
+    log_file = reporter.show(RuntimeError("original startup error"), blocked_logs)
+
+    assert log_file is None

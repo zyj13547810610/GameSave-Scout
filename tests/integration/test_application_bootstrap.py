@@ -1,8 +1,10 @@
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from urllib.request import urlopen
 
 from gameshelf.bootstrap.application import build_application
 from gameshelf.bootstrap.paths import AppPaths
+from gameshelf.bootstrap.resources import ResourcePaths
 
 
 def test_application_bootstrap_creates_only_portable_state(tmp_path: Path) -> None:
@@ -40,6 +42,53 @@ def test_application_close_releases_its_logging_handler(tmp_path: Path) -> None:
 
     assert logger.propagate is True
     assert not any(isinstance(handler, RotatingFileHandler) for handler in logger.handlers)
+
+
+def test_application_uses_injected_resource_paths(tmp_path: Path) -> None:
+    resource_root = tmp_path / "injected-resources"
+    ui_dir = resource_root / "ui"
+    ui_dir.mkdir(parents=True)
+    ui_marker = "injected portable UI"
+    (ui_dir / "index.html").write_text(ui_marker, encoding="utf-8")
+    rules_file = resource_root / "rules" / "engines.yaml"
+    rules_file.parent.mkdir()
+    rules_file.write_text(
+        """\
+version: test
+rules:
+  - id: injected_engine
+    label: Injected Engine
+    all:
+      - op: path_exists
+        path: injected.marker
+        weight: 1.0
+""",
+        encoding="utf-8",
+    )
+    resources = ResourcePaths(
+        root=resource_root,
+        ui_dir=ui_dir,
+        engine_rules_file=rules_file,
+        ludusavi_dir=resource_root / "missing-ludusavi",
+    )
+
+    application = build_application(
+        AppPaths.from_root(tmp_path / "便携应用"),
+        resources=resources,
+    )
+    try:
+        engine_options = application.api.list_engine_options()
+        with urlopen(application.asset_address.ui_url) as response:
+            served_ui = response.read().decode("utf-8")
+
+        assert engine_options["ok"] is True
+        assert any(
+            item["id"] == "injected_engine" for item in engine_options["data"]
+        )
+        assert served_ui == ui_marker
+        assert application.api.ludusavi_status()["data"]["available"] is False
+    finally:
+        application.close()
 
 
 def test_application_closes_guided_session_before_shared_writer(

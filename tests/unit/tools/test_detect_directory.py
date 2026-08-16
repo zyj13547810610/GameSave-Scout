@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+from gameshelf.bootstrap.resources import ResourcePaths
 from gameshelf.tools.detect_directory import main
 
 
@@ -47,3 +48,36 @@ def test_detect_directory_rejects_unreadable_directory(
     payload = json.loads(capsys.readouterr().err)
     assert exit_code == 2
     assert payload["error"] == "directory_unreadable"
+
+
+def test_detect_directory_uses_injected_engine_rules(tmp_path: Path, capsys) -> None:
+    game = tmp_path / "Sample"
+    game.mkdir()
+    (game / "injected.marker").write_text("marker", encoding="utf-8")
+    rules_file = tmp_path / "resources" / "rules" / "engines.yaml"
+    rules_file.parent.mkdir(parents=True)
+    rules_file.write_text(
+        """\
+version: test
+rules:
+  - id: injected_engine
+    label: Injected Engine
+    all:
+      - op: path_exists
+        path: injected.marker
+        weight: 1.0
+""",
+        encoding="utf-8",
+    )
+    resources = ResourcePaths(
+        root=tmp_path / "resources",
+        ui_dir=tmp_path / "resources" / "ui",
+        engine_rules_file=rules_file,
+        ludusavi_dir=tmp_path / "resources" / "manifests" / "ludusavi",
+    )
+
+    exit_code = main([str(game)], resources=resources)
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["best"]["engineId"] == "injected_engine"

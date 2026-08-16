@@ -28,8 +28,8 @@ conda activate .\.venv
 
 ```powershell
 python -m pytest
-python -m ruff check src tests
-python -m mypy src
+python -m ruff check src tests scripts
+python -m mypy src scripts
 ```
 
 前端检查与生产构建：
@@ -45,6 +45,34 @@ npm --prefix frontend run build
 ```powershell
 python -m gameshelf --smoke-test
 ```
+
+## 构建 Windows x64 便携候选包
+
+正式构建只接受微软官方 WebView2 Fixed Version Runtime x64 CAB 的绝对路径。CAB 的文件名、版本和 SHA-256 必须与受版本控制的 `release/webview2-runtime.json` 完全一致；构建脚本不会联网下载或自动选择其他版本。
+
+在已激活仓库 `.venv` 的 PowerShell 中执行：
+
+```powershell
+.\scripts\build_release.ps1 `
+  -WebView2Archive "D:\absolute\Microsoft.WebView2.FixedVersionRuntime.151.0.4129.86.x64.cab"
+```
+
+脚本会运行全部 Python/前端门禁、生成无控制台 PyInstaller onedir、解包内置 WebView2、执行源码及冻结版 JSON smoke、验证发布清单，再原子发布以下三个目标：
+
+```text
+dist/GameShelf-0.1.0-win-x64/
+dist/GameShelf-0.1.0-win-x64.zip
+dist/GameShelf-0.1.0-win-x64.zip.sha256
+```
+
+可以独立复核 ZIP 哈希：
+
+```powershell
+Get-FileHash .\dist\GameShelf-0.1.0-win-x64.zip -Algorithm SHA256
+Get-Content .\dist\GameShelf-0.1.0-win-x64.zip.sha256
+```
+
+成功生成只代表本机候选包通过自动验证。正式分发前仍需按模块 07 固定设计，在无 Python、Node.js、Visual Studio 和系统 WebView2 的干净 Windows 10/11 x64 虚拟机中断网验收。
 
 ## 启动项目
 

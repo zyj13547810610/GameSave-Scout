@@ -13,6 +13,7 @@ from typing import cast
 from gameshelf.bootstrap.config import ConfigService, JsonConfigStore
 from gameshelf.bootstrap.logging import configure_logging
 from gameshelf.bootstrap.paths import AppPaths
+from gameshelf.bootstrap.resources import ResourcePaths
 from gameshelf.bridge.api import BridgeApi
 from gameshelf.bridge.tasks import TaskRegistry
 from gameshelf.covers.service import CoverService
@@ -86,7 +87,11 @@ class Application:
         self.logger.propagate = True
 
 
-def build_application(paths: AppPaths) -> Application:
+def build_application(
+    paths: AppPaths,
+    resources: ResourcePaths | None = None,
+) -> Application:
+    resource_paths = resources or ResourcePaths.for_runtime()
     paths.ensure_writable()
     logger = configure_logging(paths.logs_dir)
     config = ConfigService(JsonConfigStore(paths.config_file))
@@ -97,7 +102,9 @@ def build_application(paths: AppPaths) -> Application:
     tasks = TaskRegistry(logger=logger)
     repository = LibraryRepository(database)
     library = LibraryService(repository, writer)
-    engine_detection = EngineDetectionService.from_rules_file(_engine_rules_file(paths))
+    engine_detection = EngineDetectionService.from_rules_file(
+        resource_paths.engine_rules_file
+    )
     scanner = ScanService(repository, writer, engine_detection)
     shell = WindowsShell()
     launcher = GameLauncher(repository, writer, WindowsProcessLauncher(), shell)
@@ -117,7 +124,7 @@ def build_application(paths: AppPaths) -> Application:
     custom_manifest_directory = paths.manifests_dir / "custom"
     custom_provider = CustomManifestProvider(custom_manifest_directory)
     ludusavi_provider = LudusaviProvider(
-        resource_dir=_ludusavi_resource_dir(paths),
+        resource_dir=resource_paths.ludusavi_dir,
         active_dir=paths.manifests_dir / "ludusavi",
         temp_dir=paths.temp_dir,
     )
@@ -187,7 +194,7 @@ def build_application(paths: AppPaths) -> Application:
         return paths.data_dir.joinpath(*str(row[0]).split("/"))
 
     asset_server = AssetServer(
-        paths.app_root / "resources" / "ui",
+        resource_paths.ui_dir,
         cover_lookup,
         managed_cover_roots=(paths.covers_original_dir, paths.covers_thumbs_dir),
     )
@@ -226,17 +233,3 @@ def build_application(paths: AppPaths) -> Application:
         asset_address=asset_address,
         guided_saves=guided_saves,
     )
-
-
-def _engine_rules_file(paths: AppPaths) -> Path:
-    adjacent = paths.app_root / "resources" / "rules" / "engines.yaml"
-    if adjacent.is_file():
-        return adjacent
-    return Path(__file__).resolve().parents[3] / "resources" / "rules" / "engines.yaml"
-
-
-def _ludusavi_resource_dir(paths: AppPaths) -> Path:
-    adjacent = paths.app_root / "resources" / "manifests" / "ludusavi"
-    if adjacent.is_dir():
-        return adjacent
-    return Path(__file__).resolve().parents[3] / "resources" / "manifests" / "ludusavi"

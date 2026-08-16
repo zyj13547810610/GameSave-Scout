@@ -6,35 +6,167 @@ import argparse
 import os
 import sys
 from collections.abc import Sequence
+from importlib import import_module
 from pathlib import Path
+from typing import Any, Protocol
 
+from gameshelf import __version__
 from gameshelf.bootstrap.application import Application, build_application
 from gameshelf.bootstrap.paths import AppPaths
+from gameshelf.bootstrap.resources import ResourcePaths
+from gameshelf.bootstrap.smoke import SmokeReport, write_smoke_report
+from gameshelf.bootstrap.webview_runtime import WebViewRuntime
+from gameshelf.platform.windows.startup_reporter import FrozenStartupReporter
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+class StartupReporter(Protocol):
+    def show(self, error: BaseException, logs_dir: Path) -> Path | None: ...
+
+
+def main(
+    argv: Sequence[str] | None = None,
+    *,
+    reporter: StartupReporter | None = None,
+) -> int:
     parser = argparse.ArgumentParser(prog="gameshelf")
     parser.add_argument("--smoke-test", action="store_true")
+    parser.add_argument("--json-output", type=Path)
     parser.add_argument("--app-root", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
+    if args.json_output is not None and not args.smoke_test:
+        parser.error("--json-output 只能与 --smoke-test 一起使用。")
+    if args.json_output is not None and not args.json_output.is_absolute():
+        parser.error("--json-output 必须使用绝对路径。")
+
+    is_frozen = bool(getattr(sys, "frozen", False))
     paths = AppPaths.from_root(args.app_root) if args.app_root else AppPaths.for_runtime()
-    application = build_application(paths)
-    if args.smoke_test:
-        try:
-            print(f"GameShelf bootstrap OK (schema {application.schema_version})")
-            return 0
-        finally:
+    resources: ResourcePaths | None = None
+    webview_runtime: WebViewRuntime | None = None
+    application: Application | None = None
+    checks: dict[str, bool] = {}
+    try:
+        resources = ResourcePaths.for_runtime()
+        resource_status = resources.status()
+        checks.update(
+            {
+                "resources": resource_status.ok,
+                "ui": "ui/index.html" not in resource_status.missing,
+                "engineRules": (
+                    "rules/engines.yaml" not in resource_status.missing
+                ),
+                "ludusavi": (
+                    "manifests/ludusavi" not in resource_status.missing
+                ),
+            }
+        )
+        if not resource_status.ok:
+            missing = ", ".join(resource_status.missing)
+            raise RuntimeError(f"GameShelf 资源不完整：{missing}")
+        checks["desktopDependencies"] = False
+        _validate_desktop_dependencies()
+        checks["desktopDependencies"] = True
+        webview_runtime = WebViewRuntime.for_runtime(paths.app_root)
+        webview_runtime.validate()
+        checks["webviewRuntime"] = True
+        webview_runtime.prepare_windows10_permissions()
+        checks["windows10Permissions"] = True
+        application = build_application(paths, resources=resources)
+        checks["applicationBootstrap"] = True
+        if args.smoke_test:
+            schema_version = application.schema_version
             application.close()
-    return _run_desktop(application)
+            application = None
+            if args.json_output is not None:
+                write_smoke_report(
+                    _smoke_report(
+                        ok=True,
+                        frozen=is_frozen,
+                        resources=resources,
+                        webview_runtime=webview_runtime,
+                        checks=checks,
+                    ),
+                    args.json_output,
+                )
+            else:
+                print(f"GameShelf bootstrap OK (schema {schema_version})")
+            return 0
+        return _run_desktop(application, webview_runtime)
+    except Exception as error:
+        if application is not None:
+            application.close()
+        if args.smoke_test and args.json_output is not None:
+            write_smoke_report(
+                _smoke_report(
+                    ok=False,
+                    frozen=is_frozen,
+                    resources=resources,
+                    webview_runtime=webview_runtime,
+                    checks=checks,
+                    error=error,
+                ),
+                args.json_output,
+            )
+            return 1
+        if is_frozen:
+            active_reporter = reporter if reporter is not None else FrozenStartupReporter()
+            active_reporter.show(error, paths.logs_dir)
+            return 1
+        raise
 
 
-def _run_desktop(application: Application) -> int:
-    import webview
+def _smoke_report(
+    *,
+    ok: bool,
+    frozen: bool,
+    resources: ResourcePaths | None,
+    webview_runtime: WebViewRuntime | None,
+    checks: dict[str, bool],
+    error: BaseException | None = None,
+) -> SmokeReport:
+    return SmokeReport(
+        schema_version=1,
+        ok=ok,
+        app_version=__version__,
+        frozen=frozen,
+        executable=Path(sys.executable),
+        resource_root=None if resources is None else resources.root,
+        webview_runtime=(
+            None if webview_runtime is None else webview_runtime.path
+        ),
+        checks=dict(checks),
+        error=None if error is None else str(error),
+    )
+
+
+def _validate_desktop_dependencies() -> None:
+    for module_name in (
+        "ssl",
+        "sqlite3",
+        "webview",
+        "webview.platforms.edgechromium",
+    ):
+        import_module(module_name)
+
+
+def _run_desktop(
+    application: Application,
+    webview_runtime: WebViewRuntime,
+    *,
+    webview_module: Any | None = None,
+) -> int:
+    if webview_module is None:
+        import webview
+
+        module: Any = webview
+    else:
+        module = webview_module
+
+    webview_runtime.configure(module)
 
     dev_url = os.environ.get("GAMESHELF_DEV_SERVER_URL")
     is_frozen = bool(getattr(sys, "frozen", False))
     url = dev_url if dev_url and not is_frozen else application.asset_address.ui_url
-    window = webview.create_window(
+    window = module.create_window(
         "GameShelf",
         url,
         js_api=application.api,
@@ -50,10 +182,11 @@ def _run_desktop(application: Application) -> int:
     window.events.closing += lambda: _allow_window_close(application)
     window.events.closed += application.close
     try:
-        webview.start(
+        module.start(
             debug=False,
             private_mode=False,
             storage_path=str(application.paths.webview_dir),
+            gui="edgechromium",
         )
     finally:
         application.close()
@@ -62,3 +195,7 @@ def _run_desktop(application: Application) -> int:
 
 def _allow_window_close(application: Application) -> bool:
     return application.guided_saves.request_close()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -9,11 +9,16 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import TextIO
 
+from gameshelf.bootstrap.resources import ResourcePaths
 from gameshelf.engines.models import EngineMatch
 from gameshelf.engines.service import EngineDetectionService
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def main(
+    argv: Sequence[str] | None = None,
+    *,
+    resources: ResourcePaths | None = None,
+) -> int:
     parser = argparse.ArgumentParser(prog="python -m gameshelf.tools.detect_directory")
     parser.add_argument("directory", type=Path)
     parser.add_argument("--executable", type=Path)
@@ -39,9 +44,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             {"error": "invalid_executable", "path": str(executable)},
         )
         return 2
-    app_root = Path(__file__).resolve().parents[3]
     service = EngineDetectionService.from_rules_file(
-        app_root / "resources" / "rules" / "engines.yaml"
+        (resources or ResourcePaths.for_runtime()).engine_rules_file
     )
     outcome = service.detect(game_dir, executable)
     _write_json(
