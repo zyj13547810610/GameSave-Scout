@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Any
 
 _MESSAGE_BOX_FLAGS = 0x00000010 | 0x00002000
+_IDYES = 6
+_INSTALL_PROMPT_FLAGS = 0x00000004 | 0x00000020 | 0x00000100 | 0x00002000
 
 type MessageBox = Callable[[str, str, int], int]
 
@@ -21,6 +23,25 @@ def _native_message_box(message: str, title: str, flags: int) -> int:
     message_box.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_uint]
     message_box.restype = ctypes.c_int
     return int(message_box(None, message, title, flags))
+
+
+@dataclass
+class FrozenRuntimeInstallPrompt:
+    """Ask for explicit consent before running the bundled installer."""
+
+    message_box: MessageBox = _native_message_box
+
+    def confirm(self) -> bool:
+        try:
+            result = self.message_box(
+                "系统未检测到 Microsoft WebView2 Runtime。\n\n"
+                "是否现在联网安装微软官方运行时？",
+                "GameShelf 需要 WebView2",
+                _INSTALL_PROMPT_FLAGS,
+            )
+        except Exception:
+            return False
+        return result == _IDYES
 
 
 @dataclass

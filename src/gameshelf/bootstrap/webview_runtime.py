@@ -10,6 +10,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
+from gameshelf.bootstrap.release_runtime import ReleaseRuntimeConfig, RuntimeMode
+from gameshelf.bootstrap.webview_bootstrapper import EvergreenRuntimeInstaller
+
 DRIVE_FIXED = 3
 WINDOWS_11_FIRST_BUILD = 22000
 _APPCONTAINER_SIDS = ("S-1-15-2-2", "S-1-15-2-1")
@@ -33,9 +36,11 @@ class WebViewRuntime:
     path: Path | None
     frozen: bool
     windows_build: int | None
+    release_config: ReleaseRuntimeConfig
     _drive_type: DriveTypeLookup = field(repr=False)
     _runner: CommandRunner = field(repr=False)
     _system_directory: Path | None = field(repr=False)
+    _evergreen_installer: EvergreenRuntimeInstaller = field(repr=False)
     _permissions_prepared: bool = field(default=False, init=False, repr=False)
 
     @classmethod
@@ -48,14 +53,31 @@ class WebViewRuntime:
         windows_build: int | None = None,
         runner: CommandRunner | None = None,
         system_directory: Path | None = None,
+        release_config: ReleaseRuntimeConfig | None = None,
+        evergreen_installer: EvergreenRuntimeInstaller | None = None,
     ) -> WebViewRuntime:
         is_frozen = bool(getattr(sys, "frozen", False)) if frozen is None else frozen
-        if not is_frozen:
-            return cls(None, False, None, _windows_drive_type, _run_command, None)
+        config = release_config or ReleaseRuntimeConfig.for_runtime(
+            app_root,
+            frozen=is_frozen,
+        )
+        installer = evergreen_installer or EvergreenRuntimeInstaller()
+        if config.mode is not RuntimeMode.FIXED:
+            return cls(
+                path=None,
+                frozen=is_frozen,
+                windows_build=None,
+                release_config=config,
+                _drive_type=drive_type or _windows_drive_type,
+                _runner=runner or _run_command,
+                _system_directory=None,
+                _evergreen_installer=installer,
+            )
         return cls(
             path=Path(app_root) / "runtime",
-            frozen=True,
+            frozen=is_frozen,
             windows_build=_windows_build() if windows_build is None else windows_build,
+            release_config=config,
             _drive_type=drive_type or _windows_drive_type,
             _runner=runner or _run_command,
             _system_directory=(
@@ -63,6 +85,7 @@ class WebViewRuntime:
                 if system_directory is None
                 else system_directory
             ),
+            _evergreen_installer=installer,
         )
 
     @property
@@ -70,7 +93,7 @@ class WebViewRuntime:
         return None if self.path is None else self.path / "msedgewebview2.exe"
 
     def validate(self) -> None:
-        if not self.frozen:
+        if self.release_config.mode is not RuntimeMode.FIXED:
             return
         if self.path is None:
             raise WebViewRuntimeError("冻结环境缺少内置 WebView2 Runtime 路径。")
@@ -86,7 +109,7 @@ class WebViewRuntime:
 
     def prepare_windows10_permissions(self) -> bool:
         if (
-            not self.frozen
+            self.release_config.mode is not RuntimeMode.FIXED
             or self.windows_build is None
             or self.windows_build >= WINDOWS_11_FIRST_BUILD
             or self._permissions_prepared
@@ -115,8 +138,20 @@ class WebViewRuntime:
         self._permissions_prepared = True
         return True
 
+    def ensure_available(self, *, allow_install: bool) -> str | None:
+        if self.release_config.mode is RuntimeMode.FIXED:
+            self.validate()
+            return None
+        if self.release_config.mode is RuntimeMode.EVERGREEN:
+            return self._evergreen_installer.ensure_available(
+                self.release_config,
+                allow_install=allow_install,
+            )
+        return None
+
     def configure(self, webview_module: WebViewSettings) -> None:
-        if not self.frozen:
+        if self.release_config.mode is not RuntimeMode.FIXED:
+            webview_module.settings["WEBVIEW2_RUNTIME_PATH"] = None
             return
         self.validate()
         if self.path is None:

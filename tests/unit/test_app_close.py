@@ -6,6 +6,7 @@ from typing import cast
 
 from gameshelf.app import _allow_window_close, _run_desktop
 from gameshelf.bootstrap.application import Application
+from gameshelf.bootstrap.release_runtime import ReleaseRuntimeConfig, RuntimeMode
 from gameshelf.bootstrap.webview_runtime import WebViewRuntime
 
 
@@ -79,6 +80,7 @@ def test_desktop_configures_fixed_runtime_and_forces_edgechromium(
     runtime = WebViewRuntime.for_runtime(
         runtime_dir.parent,
         frozen=True,
+        release_config=ReleaseRuntimeConfig(RuntimeMode.FIXED),
         drive_type=lambda _path: 3,
         windows_build=22631,
         system_directory=tmp_path / "Windows" / "System32",

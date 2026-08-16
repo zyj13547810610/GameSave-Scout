@@ -76,4 +76,12 @@ GameShelf 只读取这些位置规则来生成待用户确认的建议，不使�
 - 用途：提供离线、固定版本的 Edge Chromium WebView2 运行时
 - 原始运行时文件完整保留；其内部第三方许可证入口 `runtime/show_third_party_software_licenses.bat` 及随附的组件许可证文件未被裁剪
 
+## Microsoft Edge WebView2 Evergreen Bootstrapper
+
+- 来源：https://developer.microsoft.com/en-us/microsoft-edge/webview2/#download-section
+- 发布文件名：`prerequisites/MicrosoftEdgeWebview2Setup.exe`
+- 用途：仅在轻量联网版检测不到系统共享 Evergreen WebView2 Runtime、且用户明确同意后，联网安装微软官方运行时
+- 该文件由 Microsoft Corporation 签名并按发布受控配置复核版本和 SHA-256；它不是 GameShelf 自有二进制
+- 安装后的 Evergreen Runtime 属于系统共享组件，删除 GameShelf 目录不会将其卸载
+
 本声明不改变任何第三方许可。各项目的完整许可文本、版权声明和例外条款以随附文件及上表来源为准。

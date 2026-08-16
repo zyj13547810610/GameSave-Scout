@@ -2,7 +2,11 @@
 param(
     [Parameter(Mandatory = $true)]
     [ValidateNotNullOrEmpty()]
-    [string]$WebView2Archive
+    [string]$WebView2Archive,
+
+    [Parameter(Mandatory = $true)]
+    [ValidateNotNullOrEmpty()]
+    [string]$WebView2Bootstrapper
 )
 
 Set-StrictMode -Version Latest
@@ -33,6 +37,24 @@ function Get-NativeOutput {
     return (($output | ForEach-Object { $_.ToString() }) -join [Environment]::NewLine).Trim()
 }
 
+function Assert-MicrosoftSignature {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+
+    $signature = Get-AuthenticodeSignature -LiteralPath $Path
+    if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
+        throw "$Label Authenticode signature is not valid."
+    }
+    if (
+        $null -eq $signature.SignerCertificate -or
+        $signature.SignerCertificate.Subject -notmatch '(^|, )O=Microsoft Corporation(,|$)'
+    ) {
+        throw "$Label signer is not Microsoft Corporation."
+    }
+}
+
 function Remove-ControlledSmokeCopy {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -45,12 +67,72 @@ function Remove-ControlledSmokeCopy {
     if ($null -eq $parent -or $parent.FullName -ine $fullBuildRoot) {
         throw "Refusing to remove a work directory outside build/release: $fullPath"
     }
-    if ((Split-Path -Leaf $fullPath) -ne 'smoke-copy') {
+    $allowedNames = @('smoke-copy-fixed', 'smoke-copy-evergreen')
+    if ($allowedNames -notcontains (Split-Path -Leaf $fullPath)) {
         throw "Refusing to remove an unexpected work directory: $fullPath"
     }
     if (Test-Path -LiteralPath $fullPath) {
         Remove-Item -LiteralPath $fullPath -Recurse -Force
     }
+}
+
+function Invoke-FrozenSmoke {
+    param(
+        [Parameter(Mandatory = $true)][string]$ReleaseDirectory,
+        [Parameter(Mandatory = $true)][ValidateSet('fixed', 'evergreen')][string]$RuntimeMode,
+        [Parameter(Mandatory = $true)][string]$BuildRoot,
+        [Parameter(Mandatory = $true)][string]$ExpectedVersion
+    )
+
+    $smokeCopy = Join-Path $BuildRoot "smoke-copy-$RuntimeMode"
+    Copy-Item -LiteralPath $ReleaseDirectory -Destination $smokeCopy -Recurse
+    $frozenSmoke = Join-Path $smokeCopy 'frozen-smoke.json'
+    $smokeArguments = "--smoke-test --json-output `"$frozenSmoke`""
+    $smokeProcess = Start-Process `
+        -FilePath (Join-Path $smokeCopy 'GameShelf.exe') `
+        -ArgumentList $smokeArguments `
+        -Wait `
+        -PassThru `
+        -WindowStyle Hidden
+    if ($smokeProcess.ExitCode -ne 0) {
+        $detail = ''
+        if (Test-Path -LiteralPath $frozenSmoke -PathType Leaf) {
+            $failedPayload = Get-Content -LiteralPath $frozenSmoke -Raw -Encoding utf8 | ConvertFrom-Json
+            $detail = [string]$failedPayload.error
+        }
+        if ($RuntimeMode -eq 'evergreen') {
+            throw "Evergreen frozen smoke failed. Install WebView2 Runtime on the build machine first. $detail"
+        }
+        throw "Fixed frozen smoke failed with exit code $($smokeProcess.ExitCode). $detail"
+    }
+    $payload = Get-Content -LiteralPath $frozenSmoke -Raw -Encoding utf8 | ConvertFrom-Json
+    if (
+        -not $payload.ok -or
+        -not $payload.frozen -or
+        $payload.appVersion -ne $ExpectedVersion -or
+        $payload.runtimeMode -ne $RuntimeMode
+    ) {
+        throw "$RuntimeMode frozen startup smoke report is invalid."
+    }
+    foreach ($check in $payload.checks.PSObject.Properties) {
+        if ($check.Value -ne $true) {
+            throw "$RuntimeMode frozen startup smoke check failed: $($check.Name)"
+        }
+    }
+    if ($RuntimeMode -eq 'fixed') {
+        $expectedRuntime = [IO.Path]::GetFullPath((Join-Path $smokeCopy 'runtime'))
+        if ([IO.Path]::GetFullPath([string]$payload.webviewRuntime) -ine $expectedRuntime) {
+            throw 'Fixed frozen smoke did not use the bundled runtime.'
+        }
+    }
+    elseif (
+        $null -ne $payload.webviewRuntime -or
+        $payload.checks.evergreenRuntime -ne $true -or
+        $payload.checks.webviewBootstrapper -ne $true
+    ) {
+        throw 'Evergreen frozen smoke did not validate the system runtime and Bootstrapper.'
+    }
+    Remove-ControlledSmokeCopy -Path $smokeCopy -BuildRoot $BuildRoot
 }
 
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
@@ -61,9 +143,19 @@ $archivePath = [IO.Path]::GetFullPath($WebView2Archive)
 if (-not (Test-Path -LiteralPath $archivePath -PathType Leaf)) {
     throw "WebView2Archive does not exist or is not a file: $archivePath"
 }
+if ($WebView2Bootstrapper -notmatch '^[A-Za-z]:[\\/]') {
+    throw 'WebView2Bootstrapper must be an absolute path.'
+}
+$bootstrapperPath = [IO.Path]::GetFullPath($WebView2Bootstrapper)
+if (-not (Test-Path -LiteralPath $bootstrapperPath -PathType Leaf)) {
+    throw "WebView2Bootstrapper does not exist or is not a file: $bootstrapperPath"
+}
 if (-not [Environment]::Is64BitOperatingSystem -or -not [Environment]::Is64BitProcess) {
     throw 'GameShelf release builds require 64-bit Windows and a 64-bit process.'
 }
+
+Assert-MicrosoftSignature -Path $archivePath -Label 'WebView2 Fixed Runtime CAB'
+Assert-MicrosoftSignature -Path $bootstrapperPath -Label 'WebView2 Bootstrapper'
 
 $expectedPrefix = [IO.Path]::GetFullPath((Join-Path $repositoryRoot '.venv'))
 $expectedPython = [IO.Path]::GetFullPath((Join-Path $expectedPrefix 'python.exe'))
@@ -116,10 +208,12 @@ $contextJson = Get-NativeOutput $expectedPython @(
     $releaseTools,
     'verify-context',
     '--repository-root', $repositoryRoot,
-    '--webview-archive', $archivePath
+    '--webview-archive', $archivePath,
+    '--webview-bootstrapper', $bootstrapperPath
 )
 $releaseContext = $contextJson | ConvertFrom-Json
-$releaseName = [string]$releaseContext.releaseName
+$fixedReleaseName = [string]$releaseContext.fixedReleaseName
+$evergreenReleaseName = [string]$releaseContext.evergreenReleaseName
 
 Invoke-Native $expectedPython @(
     $releaseTools,
@@ -145,7 +239,7 @@ Invoke-Native $expectedPython @(
     '--app-root', $sourceSmokeRoot
 )
 $sourcePayload = Get-Content -LiteralPath $sourceSmoke -Raw -Encoding utf8 | ConvertFrom-Json
-if (-not $sourcePayload.ok -or $sourcePayload.frozen) {
+if (-not $sourcePayload.ok -or $sourcePayload.frozen -or $sourcePayload.runtimeMode -ne 'source') {
     throw 'Source startup smoke failed.'
 }
 
@@ -164,11 +258,6 @@ if (-not (Test-Path -LiteralPath (Join-Path $frozenDirectory 'GameShelf.exe') -P
     throw 'PyInstaller did not produce GameShelf.exe.'
 }
 
-$stagingRoot = Join-Path $buildRoot 'staging'
-New-Item -ItemType Directory -Path $stagingRoot | Out-Null
-$releaseDirectory = Join-Path $stagingRoot $releaseName
-Copy-Item -LiteralPath $frozenDirectory -Destination $releaseDirectory -Recurse
-
 $extractedDirectory = Join-Path $buildRoot 'webview2-extracted'
 $runtimeRoot = Get-NativeOutput $expectedPython @(
     $releaseTools,
@@ -178,68 +267,103 @@ $runtimeRoot = Get-NativeOutput $expectedPython @(
     '--destination', $extractedDirectory
 )
 $runtimeRoot = [IO.Path]::GetFullPath($runtimeRoot)
-Copy-Item -LiteralPath $runtimeRoot -Destination (Join-Path $releaseDirectory 'runtime') -Recurse
-Copy-Item -LiteralPath (Join-Path $repositoryRoot 'release\README.txt') -Destination (Join-Path $releaseDirectory 'README.txt')
-Copy-Item -LiteralPath (Join-Path $repositoryRoot 'LICENSE') -Destination (Join-Path $releaseDirectory 'LICENSE')
-Copy-Item -LiteralPath (Join-Path $repositoryRoot 'THIRD_PARTY_NOTICES.md') -Destination (Join-Path $releaseDirectory 'THIRD_PARTY_NOTICES.md')
-if (Test-Path -LiteralPath (Join-Path $releaseDirectory 'data')) {
-    throw 'The staged release directory must not contain data.'
+Assert-MicrosoftSignature `
+    -Path (Join-Path $runtimeRoot 'msedgewebview2.exe') `
+    -Label 'WebView2 Fixed Runtime executable'
+
+$stagingRoot = Join-Path $buildRoot 'staging'
+New-Item -ItemType Directory -Path $stagingRoot | Out-Null
+$fixedDirectory = Join-Path $stagingRoot $fixedReleaseName
+$evergreenDirectory = Join-Path $stagingRoot $evergreenReleaseName
+Copy-Item -LiteralPath $frozenDirectory -Destination $fixedDirectory -Recurse
+Copy-Item -LiteralPath $frozenDirectory -Destination $evergreenDirectory -Recurse
+Copy-Item -LiteralPath $runtimeRoot -Destination (Join-Path $fixedDirectory 'runtime') -Recurse
+$prerequisites = Join-Path $evergreenDirectory 'prerequisites'
+New-Item -ItemType Directory -Path $prerequisites | Out-Null
+Copy-Item `
+    -LiteralPath $bootstrapperPath `
+    -Destination (Join-Path $prerequisites 'MicrosoftEdgeWebview2Setup.exe')
+
+foreach ($release in @(
+    @{ Directory = $fixedDirectory; Readme = 'README.txt' },
+    @{ Directory = $evergreenDirectory; Readme = 'README-lite.txt' }
+)) {
+    Copy-Item `
+        -LiteralPath (Join-Path $repositoryRoot "release\$($release.Readme)") `
+        -Destination (Join-Path $release.Directory 'README.txt')
+    Copy-Item -LiteralPath (Join-Path $repositoryRoot 'LICENSE') -Destination (Join-Path $release.Directory 'LICENSE')
+    Copy-Item -LiteralPath (Join-Path $repositoryRoot 'THIRD_PARTY_NOTICES.md') -Destination (Join-Path $release.Directory 'THIRD_PARTY_NOTICES.md')
+    if (Test-Path -LiteralPath (Join-Path $release.Directory 'data')) {
+        throw 'A staged release directory must not contain data.'
+    }
+}
+if (Test-Path -LiteralPath (Join-Path $fixedDirectory 'prerequisites')) {
+    throw 'The fixed release must not contain prerequisites.'
+}
+if (Test-Path -LiteralPath (Join-Path $evergreenDirectory 'runtime')) {
+    throw 'The evergreen release must not contain a fixed runtime.'
 }
 
-Invoke-Native $expectedPython @(
-    $releaseTools,
-    'write-manifest',
-    '--repository-root', $repositoryRoot,
-    '--release-directory', $releaseDirectory
-)
-
-$smokeCopy = Join-Path $buildRoot 'smoke-copy'
-Copy-Item -LiteralPath $releaseDirectory -Destination $smokeCopy -Recurse
-$frozenSmoke = Join-Path $smokeCopy 'frozen-smoke.json'
-$smokeArguments = "--smoke-test --json-output `"$frozenSmoke`""
-$smokeProcess = Start-Process `
-    -FilePath (Join-Path $smokeCopy 'GameShelf.exe') `
-    -ArgumentList $smokeArguments `
-    -Wait `
-    -PassThru `
-    -WindowStyle Hidden
-if ($smokeProcess.ExitCode -ne 0) {
-    throw "Frozen startup smoke failed with exit code $($smokeProcess.ExitCode)."
+foreach ($release in @(
+    @{ Directory = $fixedDirectory; Mode = 'fixed' },
+    @{ Directory = $evergreenDirectory; Mode = 'evergreen' }
+)) {
+    Invoke-Native $expectedPython @(
+        $releaseTools,
+        'write-manifest',
+        '--repository-root', $repositoryRoot,
+        '--release-directory', $release.Directory,
+        '--runtime-mode', $release.Mode
+    )
 }
-$frozenPayload = Get-Content -LiteralPath $frozenSmoke -Raw -Encoding utf8 | ConvertFrom-Json
-if (
-    -not $frozenPayload.ok -or
-    -not $frozenPayload.frozen -or
-    $frozenPayload.appVersion -ne $releaseContext.version
-) {
-    throw 'Frozen startup smoke report is invalid.'
-}
-Remove-ControlledSmokeCopy -Path $smokeCopy -BuildRoot $buildRoot
 
-Invoke-Native $expectedPython @(
-    $releaseTools,
-    'verify-release',
-    '--repository-root', $repositoryRoot,
-    '--release-directory', $releaseDirectory
-)
-$archiveOutput = Join-Path $stagingRoot "$releaseName.zip"
-$checksumOutput = Join-Path $stagingRoot "$releaseName.zip.sha256"
-Invoke-Native $expectedPython @(
-    $releaseTools,
-    'build-archive',
-    '--repository-root', $repositoryRoot,
-    '--release-directory', $releaseDirectory,
-    '--archive', $archiveOutput,
-    '--checksum', $checksumOutput
-)
+Invoke-FrozenSmoke `
+    -ReleaseDirectory $fixedDirectory `
+    -RuntimeMode 'fixed' `
+    -BuildRoot $buildRoot `
+    -ExpectedVersion $releaseContext.version
+Invoke-FrozenSmoke `
+    -ReleaseDirectory $evergreenDirectory `
+    -RuntimeMode 'evergreen' `
+    -BuildRoot $buildRoot `
+    -ExpectedVersion $releaseContext.version
+
+$fixedArchive = Join-Path $stagingRoot "$fixedReleaseName.zip"
+$fixedChecksum = Join-Path $stagingRoot "$fixedReleaseName.zip.sha256"
+$evergreenArchive = Join-Path $stagingRoot "$evergreenReleaseName.zip"
+$evergreenChecksum = Join-Path $stagingRoot "$evergreenReleaseName.zip.sha256"
+foreach ($release in @(
+    @{ Directory = $fixedDirectory; Archive = $fixedArchive; Checksum = $fixedChecksum; Mode = 'fixed' },
+    @{ Directory = $evergreenDirectory; Archive = $evergreenArchive; Checksum = $evergreenChecksum; Mode = 'evergreen' }
+)) {
+    Invoke-Native $expectedPython @(
+        $releaseTools,
+        'verify-release',
+        '--repository-root', $repositoryRoot,
+        '--release-directory', $release.Directory,
+        '--runtime-mode', $release.Mode
+    )
+    Invoke-Native $expectedPython @(
+        $releaseTools,
+        'build-archive',
+        '--repository-root', $repositoryRoot,
+        '--release-directory', $release.Directory,
+        '--archive', $release.Archive,
+        '--checksum', $release.Checksum,
+        '--runtime-mode', $release.Mode
+    )
+}
+
 Invoke-Native $expectedPython @(
     $releaseTools,
     'publish',
     '--repository-root', $repositoryRoot,
-    '--release-directory', $releaseDirectory,
-    '--archive', $archiveOutput,
-    '--checksum', $checksumOutput
+    '--fixed-release-directory', $fixedDirectory,
+    '--fixed-archive', $fixedArchive,
+    '--fixed-checksum', $fixedChecksum,
+    '--evergreen-release-directory', $evergreenDirectory,
+    '--evergreen-archive', $evergreenArchive,
+    '--evergreen-checksum', $evergreenChecksum
 )
 
-$publishedDirectory = Join-Path $repositoryRoot "dist\$releaseName"
-Write-Host "GameShelf release candidate created: $publishedDirectory"
+Write-Host "GameShelf release candidates created: dist\$fixedReleaseName and dist\$evergreenReleaseName"

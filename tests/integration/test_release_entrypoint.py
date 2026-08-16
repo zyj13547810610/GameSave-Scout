@@ -20,7 +20,31 @@ def test_release_entrypoint_rejects_relative_archive_before_cleanup(
     build_marker.write_text("keep build", encoding="utf-8")
     dist_marker.write_text("keep dist", encoding="utf-8")
 
-    result = _run_entrypoint(repository, "relative-runtime.cab")
+    result = _run_entrypoint(
+        repository,
+        "relative-runtime.cab",
+        "relative-bootstrapper.exe",
+    )
+
+    assert result.returncode != 0
+    assert "absolute path" in f"{result.stdout}\n{result.stderr}"
+    assert build_marker.read_text(encoding="utf-8") == "keep build"
+    assert dist_marker.read_text(encoding="utf-8") == "keep dist"
+
+
+def test_release_entrypoint_rejects_relative_bootstrapper_before_cleanup(
+    tmp_path: Path,
+) -> None:
+    repository = _copy_entrypoint(tmp_path)
+    archive = repository / "runtime.cab"
+    archive.write_bytes(b"cab")
+    build_marker, dist_marker = _write_keep_markers(repository)
+
+    result = _run_entrypoint(
+        repository,
+        str(archive),
+        "relative-bootstrapper.exe",
+    )
 
     assert result.returncode != 0
     assert "absolute path" in f"{result.stdout}\n{result.stderr}"
@@ -33,8 +57,20 @@ def test_release_entrypoint_has_no_skip_or_download_bypass_parameters(
 ) -> None:
     repository = _copy_entrypoint(tmp_path)
 
-    for bypass in ("-SkipTests", "-SkipHash", "-Force", "-Download"):
-        result = _run_entrypoint(repository, "relative-runtime.cab", bypass)
+    for bypass in (
+        "-SkipTests",
+        "-SkipHash",
+        "-SkipLite",
+        "-SkipSignature",
+        "-Force",
+        "-Download",
+    ):
+        result = _run_entrypoint(
+            repository,
+            "relative-runtime.cab",
+            "relative-bootstrapper.exe",
+            bypass,
+        )
 
         assert result.returncode != 0
         assert "parameter" in f"{result.stdout}\n{result.stderr}".casefold()
@@ -46,6 +82,8 @@ def test_release_entrypoint_validates_environment_before_mutating_outputs(
     repository = _copy_entrypoint(tmp_path)
     archive = repository / "Microsoft.WebView2.FixedVersionRuntime.x64.cab"
     archive.write_bytes(b"not a real cab")
+    bootstrapper = repository / "MicrosoftEdgeWebview2Setup.exe"
+    bootstrapper.write_bytes(b"not a real bootstrapper")
     build_marker = repository / "build" / "release" / "keep.txt"
     dist_marker = repository / "dist" / "keep.txt"
     build_marker.parent.mkdir(parents=True)
@@ -53,7 +91,7 @@ def test_release_entrypoint_validates_environment_before_mutating_outputs(
     build_marker.write_text("keep build", encoding="utf-8")
     dist_marker.write_text("keep dist", encoding="utf-8")
 
-    result = _run_entrypoint(repository, str(archive))
+    result = _run_entrypoint(repository, str(archive), str(bootstrapper))
 
     assert result.returncode != 0
     assert build_marker.read_text(encoding="utf-8") == "keep build"
@@ -71,6 +109,7 @@ def _copy_entrypoint(tmp_path: Path) -> Path:
 def _run_entrypoint(
     repository: Path,
     archive: str,
+    bootstrapper: str,
     *extra: str,
 ) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
@@ -85,6 +124,8 @@ def _run_entrypoint(
             str(repository / "scripts" / "build_release.ps1"),
             "-WebView2Archive",
             archive,
+            "-WebView2Bootstrapper",
+            bootstrapper,
             *extra,
         ],
         capture_output=True,
@@ -93,3 +134,13 @@ def _run_entrypoint(
         check=False,
         shell=False,
     )
+
+
+def _write_keep_markers(repository: Path) -> tuple[Path, Path]:
+    build_marker = repository / "build" / "release" / "keep.txt"
+    dist_marker = repository / "dist" / "keep.txt"
+    build_marker.parent.mkdir(parents=True)
+    dist_marker.parent.mkdir()
+    build_marker.write_text("keep build", encoding="utf-8")
+    dist_marker.write_text("keep dist", encoding="utf-8")
+    return build_marker, dist_marker

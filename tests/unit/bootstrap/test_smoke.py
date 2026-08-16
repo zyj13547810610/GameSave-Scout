@@ -16,6 +16,7 @@ def _successful_report() -> SmokeReport:
         app_version="0.1.0",
         frozen=True,
         executable=Path(r"C:\GameShelf\GameShelf.exe"),
+        runtime_mode="fixed",
         resource_root=Path(r"C:\GameShelf\_internal\resources"),
         webview_runtime=Path(r"C:\GameShelf\runtime"),
         checks={"resources": True, "webviewRuntime": True},
@@ -32,11 +33,30 @@ def test_smoke_report_exposes_stable_json_contract() -> None:
         "appVersion": "0.1.0",
         "frozen": True,
         "executable": r"C:\GameShelf\GameShelf.exe",
+        "runtimeMode": "fixed",
         "resourceRoot": r"C:\GameShelf\_internal\resources",
         "webviewRuntime": r"C:\GameShelf\runtime",
         "checks": {"resources": True, "webviewRuntime": True},
         "error": None,
     }
+
+
+def test_smoke_report_exposes_evergreen_mode_without_fixed_runtime() -> None:
+    report = SmokeReport(
+        schema_version=1,
+        ok=True,
+        app_version="0.1.0",
+        frozen=True,
+        executable=Path(r"C:\GameShelf\GameShelf.exe"),
+        runtime_mode="evergreen",
+        resource_root=Path(r"C:\GameShelf\_internal\resources"),
+        webview_runtime=None,
+        checks={"webviewRuntime": True},
+        error=None,
+    )
+
+    assert report.as_dict()["runtimeMode"] == "evergreen"
+    assert report.as_dict()["webviewRuntime"] is None
 
 
 def test_write_smoke_report_writes_utf8_json_atomically(tmp_path: Path) -> None:

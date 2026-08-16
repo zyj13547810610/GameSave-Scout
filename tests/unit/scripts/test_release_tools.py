@@ -13,17 +13,21 @@ import pytest
 import scripts.release_tools as release_tools_module
 from scripts.release_tools import (
     ReleaseMetadata,
+    ReleaseMode,
     ReleaseToolError,
     ReleaseVersions,
+    StagedRelease,
     WebViewArchiveConfig,
+    WebViewBootstrapperConfig,
     build_release_manifest,
     create_release_zip,
     extract_webview2_cab,
     normalize_webview_runtime,
-    publish_release,
+    publish_releases,
     sha256_file,
     validate_managed_target,
     validate_webview_archive,
+    validate_webview_bootstrapper,
     verify_release_tree,
     verify_release_zip,
     verify_zip_sha256,
@@ -119,6 +123,73 @@ def test_validate_webview_archive_requires_absolute_matching_regular_file(
         validate_webview_archive(archive, replace(config, sha256="0" * 64))
 
 
+def test_bootstrapper_config_accepts_only_controlled_schema(tmp_path: Path) -> None:
+    config_file = tmp_path / "webview2-bootstrapper.json"
+    config_file.write_text(
+        json.dumps(_valid_bootstrapper_config()),
+        encoding="utf-8",
+    )
+
+    config = WebViewBootstrapperConfig.load(config_file)
+
+    assert config.file_name == "MicrosoftEdgeWebview2Setup.exe"
+    assert config.file_version == "1.3.205.0"
+
+    invalid = _valid_bootstrapper_config()
+    invalid["downloadUrl"] = "https://example.invalid/setup.exe"
+    config_file.write_text(json.dumps(invalid), encoding="utf-8")
+    with pytest.raises(ReleaseToolError, match="未知字段"):
+        WebViewBootstrapperConfig.load(config_file)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("formatVersion", 2, "formatVersion"),
+        ("fileName", "tools/setup.exe", "文件名"),
+        ("fileName", "renamed.exe", "文件名"),
+        ("fileVersion", "version", "版本"),
+        ("sha256", "ABC", "SHA-256"),
+        ("sourceUrl", "http://example.invalid/setup.exe", "HTTPS"),
+    ],
+)
+def test_bootstrapper_config_rejects_invalid_fields(
+    tmp_path: Path,
+    field: str,
+    value: object,
+    message: str,
+) -> None:
+    config_file = tmp_path / "webview2-bootstrapper.json"
+    payload = _valid_bootstrapper_config()
+    payload[field] = value
+    config_file.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ReleaseToolError, match=message):
+        WebViewBootstrapperConfig.load(config_file)
+
+
+def test_validate_bootstrapper_requires_absolute_matching_regular_file(
+    tmp_path: Path,
+) -> None:
+    payload = b"official"
+    config = _bootstrapper_config(sha256=hashlib.sha256(payload).hexdigest())
+    installer = tmp_path / config.file_name
+    installer.write_bytes(payload)
+
+    assert validate_webview_bootstrapper(installer, config) == installer
+    with pytest.raises(ReleaseToolError, match="绝对路径"):
+        validate_webview_bootstrapper(Path(config.file_name), config)
+    renamed = installer.with_name("renamed.exe")
+    renamed.write_bytes(payload)
+    with pytest.raises(ReleaseToolError, match="文件名"):
+        validate_webview_bootstrapper(renamed, config)
+    with pytest.raises(ReleaseToolError, match="SHA-256"):
+        validate_webview_bootstrapper(
+            installer,
+            replace(config, sha256="0" * 64),
+        )
+
+
 def test_sha256_file_hashes_large_files_in_binary_mode(tmp_path: Path) -> None:
     payload = b"GameShelf\x00" * 200_000
     archive = tmp_path / "large.cab"
@@ -131,16 +202,20 @@ def test_validate_managed_target_accepts_only_current_release_outputs(
     tmp_path: Path,
 ) -> None:
     versions = ReleaseVersions("0.1.0")
-    allowed = (
-        tmp_path / "build" / "release",
-        tmp_path / "dist" / "GameShelf-0.1.0-win-x64",
-        tmp_path / "dist" / "GameShelf-0.1.0-win-x64.zip",
-        tmp_path / "dist" / "GameShelf-0.1.0-win-x64.zip.sha256",
-    )
+    allowed = [tmp_path / "build" / "release"]
+    for mode in ReleaseMode:
+        release_name = versions.name_for(mode)
+        allowed.extend(
+            (
+                tmp_path / "dist" / release_name,
+                tmp_path / "dist" / f"{release_name}.zip",
+                tmp_path / "dist" / f"{release_name}.zip.sha256",
+            )
+        )
 
     assert tuple(
         validate_managed_target(tmp_path, target, versions) for target in allowed
-    ) == allowed
+    ) == tuple(allowed)
 
     for rejected in (
         tmp_path,
@@ -298,10 +373,11 @@ def test_release_manifest_records_environment_and_every_payload_file(
     release_root = _minimal_release_tree(tmp_path)
     metadata = _release_metadata()
 
-    manifest_file = write_release_manifest(release_root, metadata)
+    manifest_file = write_release_manifest(release_root, metadata, ReleaseMode.FIXED)
     manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
 
-    assert manifest["formatVersion"] == 1
+    assert manifest["formatVersion"] == 2
+    assert manifest["runtimeMode"] == "fixed"
     assert manifest["appVersion"] == "0.1.0"
     assert manifest["buildUtc"] == "2026-08-16T00:00:00Z"
     assert manifest["gitCommit"] == "a" * 40
@@ -319,6 +395,9 @@ def test_release_manifest_records_environment_and_every_payload_file(
     assert manifest["webview2Version"] == "139.0.3405.125"
     assert manifest["webview2ArchiveSha256"] == "d" * 64
     assert manifest["fixedRuntime"] is True
+    assert manifest["webview2BootstrapperFileVersion"] is None
+    assert manifest["webview2BootstrapperSha256"] is None
+    assert manifest["webview2BootstrapperSignatureValid"] is None
     assert manifest["signed"] is False
     paths = [entry["path"] for entry in manifest["files"]]
     assert paths == sorted(paths)
@@ -344,7 +423,55 @@ def test_release_manifest_records_environment_and_every_payload_file(
         "size": len(b"frozen exe"),
         "sha256": hashlib.sha256(b"frozen exe").hexdigest(),
     }
-    verify_release_tree(release_root, ReleaseVersions("0.1.0"))
+    verify_release_tree(release_root, ReleaseVersions("0.1.0"), ReleaseMode.FIXED)
+
+
+@pytest.mark.parametrize(
+    ("mode", "release_name", "required", "forbidden"),
+    [
+        (ReleaseMode.FIXED, "GameShelf-0.1.0-win-x64", "runtime", "prerequisites"),
+        (
+            ReleaseMode.EVERGREEN,
+            "GameShelf-0.1.0-win-x64-lite",
+            "prerequisites",
+            "runtime",
+        ),
+    ],
+)
+def test_release_layout_is_strictly_mode_specific(
+    mode: ReleaseMode,
+    release_name: str,
+    required: str,
+    forbidden: str,
+    tmp_path: Path,
+) -> None:
+    release_root = _minimal_release_tree(tmp_path, mode)
+    bootstrapper_config = _bootstrapper_config()
+
+    manifest = build_release_manifest(
+        release_root,
+        _release_metadata(),
+        mode,
+        bootstrapper_config=bootstrapper_config,
+    )
+
+    assert release_root.name == release_name
+    assert manifest["formatVersion"] == 2
+    assert manifest["runtimeMode"] == mode.value
+    assert (release_root / required).exists()
+    assert not (release_root / forbidden).exists()
+    if mode is ReleaseMode.FIXED:
+        assert manifest["fixedRuntime"] is True
+        assert manifest["webview2Version"] == "139.0.3405.125"
+        assert manifest["webview2ArchiveSha256"] == "d" * 64
+        assert manifest["webview2BootstrapperSha256"] is None
+    else:
+        assert manifest["fixedRuntime"] is False
+        assert manifest["webview2Version"] is None
+        assert manifest["webview2ArchiveSha256"] is None
+        assert manifest["webview2BootstrapperFileVersion"] == "1.3.205.0"
+        assert manifest["webview2BootstrapperSha256"] == bootstrapper_config.sha256
+        assert manifest["webview2BootstrapperSignatureValid"] is True
 
 
 def test_build_release_manifest_rejects_data_unexpected_files_and_links(
@@ -353,46 +480,72 @@ def test_build_release_manifest_rejects_data_unexpected_files_and_links(
     release_root = _minimal_release_tree(tmp_path)
     (release_root / "data").mkdir()
     with pytest.raises(ReleaseToolError, match="data"):
-        build_release_manifest(release_root, _release_metadata())
+        build_release_manifest(
+            release_root,
+            _release_metadata(),
+            ReleaseMode.FIXED,
+        )
 
     (release_root / "data").rmdir()
     (release_root / "unexpected.txt").write_text("unexpected", encoding="utf-8")
     with pytest.raises(ReleaseToolError, match="顶层|意外"):
-        build_release_manifest(release_root, _release_metadata())
+        build_release_manifest(
+            release_root,
+            _release_metadata(),
+            ReleaseMode.FIXED,
+        )
 
     (release_root / "unexpected.txt").unlink()
     outside = tmp_path / "outside"
     outside.mkdir()
     _create_directory_link(release_root / "runtime" / "linked", outside)
     with pytest.raises(ReleaseToolError, match="重解析|链接"):
-        build_release_manifest(release_root, _release_metadata())
+        build_release_manifest(
+            release_root,
+            _release_metadata(),
+            ReleaseMode.FIXED,
+        )
 
 
 def test_verify_release_tree_detects_payload_changes(tmp_path: Path) -> None:
     release_root = _minimal_release_tree(tmp_path)
-    write_release_manifest(release_root, _release_metadata())
+    write_release_manifest(release_root, _release_metadata(), ReleaseMode.FIXED)
     (release_root / "GameShelf.exe").write_bytes(b"tampered")
 
     with pytest.raises(ReleaseToolError, match="SHA-256|大小"):
-        verify_release_tree(release_root, ReleaseVersions("0.1.0"))
+        verify_release_tree(
+            release_root,
+            ReleaseVersions("0.1.0"),
+            ReleaseMode.FIXED,
+        )
 
 
-def test_release_zip_has_one_root_and_matches_manifest(tmp_path: Path) -> None:
-    release_root = _minimal_release_tree(tmp_path)
+@pytest.mark.parametrize("mode", tuple(ReleaseMode))
+def test_release_zip_has_mode_specific_single_root(
+    mode: ReleaseMode,
+    tmp_path: Path,
+) -> None:
+    release_root = _minimal_release_tree(tmp_path, mode)
     versions = ReleaseVersions("0.1.0")
-    write_release_manifest(release_root, _release_metadata())
-    archive = tmp_path / f"{versions.release_name}.zip"
-    checksum = tmp_path / f"{versions.release_name}.zip.sha256"
+    write_release_manifest(
+        release_root,
+        _release_metadata(),
+        mode,
+        bootstrapper_config=_bootstrapper_config(),
+    )
+    release_name = versions.name_for(mode)
+    archive = tmp_path / f"{release_name}.zip"
+    checksum = tmp_path / f"{release_name}.zip.sha256"
 
-    create_release_zip(release_root, archive, versions)
-    verify_release_zip(archive, versions)
+    create_release_zip(release_root, archive, versions, mode)
+    verify_release_zip(archive, versions, mode)
     write_zip_sha256(archive, checksum)
     verify_zip_sha256(archive, checksum)
 
     with zipfile.ZipFile(archive) as bundle:
         names = bundle.namelist()
     assert names == sorted(names)
-    assert all(name.startswith(f"{versions.release_name}/") for name in names)
+    assert all(name.startswith(f"{release_name}/") for name in names)
     assert not any("/data/" in f"/{name}/" for name in names)
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
     assert checksum.read_text(encoding="ascii") == f"{digest}  {archive.name}\n"
@@ -403,90 +556,58 @@ def test_verify_release_zip_rejects_extra_root_and_checksum_mismatch(
 ) -> None:
     release_root = _minimal_release_tree(tmp_path)
     versions = ReleaseVersions("0.1.0")
-    write_release_manifest(release_root, _release_metadata())
+    write_release_manifest(release_root, _release_metadata(), ReleaseMode.FIXED)
     archive = tmp_path / f"{versions.release_name}.zip"
     checksum = tmp_path / f"{versions.release_name}.zip.sha256"
-    create_release_zip(release_root, archive, versions)
+    create_release_zip(release_root, archive, versions, ReleaseMode.FIXED)
     write_zip_sha256(archive, checksum)
 
     with zipfile.ZipFile(archive, "a") as bundle:
         bundle.writestr("other-root/unexpected.txt", "unexpected")
 
     with pytest.raises(ReleaseToolError, match="根目录|归档"):
-        verify_release_zip(archive, versions)
+        verify_release_zip(archive, versions, ReleaseMode.FIXED)
     with pytest.raises(ReleaseToolError, match="SHA-256"):
         verify_zip_sha256(archive, checksum)
 
 
-def test_publish_release_replaces_only_current_version_outputs(tmp_path: Path) -> None:
+def test_publish_releases_replaces_both_modes_as_one_transaction(
+    tmp_path: Path,
+) -> None:
     versions = ReleaseVersions("0.1.0")
-    staged_directory, staged_zip, staged_checksum = _staged_release(tmp_path, versions)
-    dist = tmp_path / "dist"
-    final_directory = dist / versions.release_name
-    final_directory.mkdir(parents=True)
-    (final_directory / "old.txt").write_text("old directory", encoding="utf-8")
-    final_zip = dist / f"{versions.release_name}.zip"
-    final_checksum = dist / f"{versions.release_name}.zip.sha256"
-    final_zip.write_bytes(b"old zip")
-    final_checksum.write_text("old checksum", encoding="ascii")
-
-    published = publish_release(
-        tmp_path,
-        staged_directory,
-        staged_zip,
-        staged_checksum,
-        versions,
+    staged = tuple(
+        _staged_release(tmp_path, versions, mode) for mode in ReleaseMode
     )
 
-    assert published == (final_directory, final_zip, final_checksum)
-    verify_release_tree(final_directory, versions)
-    verify_release_zip(final_zip, versions)
-    verify_zip_sha256(final_zip, final_checksum)
-    assert not staged_directory.exists()
-    assert not staged_zip.exists()
-    assert not staged_checksum.exists()
-    assert not list(dist.glob(".*.backup-*"))
+    published = publish_releases(tmp_path, staged, versions)
+
+    assert len(published) == 6
+    for mode in ReleaseMode:
+        release_name = versions.name_for(mode)
+        final = tmp_path / "dist" / release_name
+        archive = tmp_path / "dist" / f"{release_name}.zip"
+        checksum = tmp_path / "dist" / f"{release_name}.zip.sha256"
+        verify_release_tree(final, versions, mode)
+        verify_release_zip(archive, versions, mode)
+        verify_zip_sha256(archive, checksum)
+    assert not list((tmp_path / "dist").glob(".*.backup-*"))
 
 
-def test_publish_release_rolls_back_all_outputs_when_second_move_fails(
+def test_publish_releases_rolls_back_all_six_outputs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     versions = ReleaseVersions("0.1.0")
-    staged_directory, staged_zip, staged_checksum = _staged_release(tmp_path, versions)
-    dist = tmp_path / "dist"
-    final_directory = dist / versions.release_name
-    final_directory.mkdir(parents=True)
-    old_marker = final_directory / "old.txt"
-    old_marker.write_text("old directory", encoding="utf-8")
-    final_zip = dist / f"{versions.release_name}.zip"
-    final_checksum = dist / f"{versions.release_name}.zip.sha256"
-    final_zip.write_bytes(b"old zip")
-    final_checksum.write_text("old checksum", encoding="ascii")
-    real_replace = os.replace
-
-    def fail_second_move(source: Path, destination: Path) -> None:
-        if Path(source) == staged_zip and Path(destination) == final_zip:
-            raise PermissionError("simulated publish failure")
-        real_replace(source, destination)
-
-    monkeypatch.setattr(release_tools_module.os, "replace", fail_second_move)
+    staged = tuple(
+        _staged_release(tmp_path, versions, mode) for mode in ReleaseMode
+    )
+    old_markers = _write_six_old_outputs(tmp_path, versions)
+    _fail_fourth_replace(monkeypatch)
 
     with pytest.raises(ReleaseToolError, match="simulated publish failure"):
-        publish_release(
-            tmp_path,
-            staged_directory,
-            staged_zip,
-            staged_checksum,
-            versions,
-        )
+        publish_releases(tmp_path, staged, versions)
 
-    assert old_marker.read_text(encoding="utf-8") == "old directory"
-    assert final_zip.read_bytes() == b"old zip"
-    assert final_checksum.read_text(encoding="ascii") == "old checksum"
-    assert staged_directory.exists()
-    assert staged_zip.exists()
-    assert staged_checksum.exists()
-    assert not list(dist.glob(".*.backup-*"))
+    assert all(path.read_bytes() == payload for path, payload in old_markers.items())
+    assert not list((tmp_path / "dist").glob(".*.backup-*"))
 
 
 def _write_versions(
@@ -521,6 +642,29 @@ def _valid_config() -> dict[str, object]:
         "sha256": "0" * 64,
         "sourceUrl": "https://developer.microsoft.com/microsoft-edge/webview2/",
     }
+
+
+def _valid_bootstrapper_config() -> dict[str, object]:
+    return {
+        "formatVersion": 1,
+        "fileName": "MicrosoftEdgeWebview2Setup.exe",
+        "fileVersion": "1.3.205.0",
+        "sha256": "0" * 64,
+        "sourceUrl": "https://developer.microsoft.com/microsoft-edge/webview2/",
+    }
+
+
+def _bootstrapper_config(
+    *,
+    sha256: str = hashlib.sha256(b"bootstrapper").hexdigest(),
+) -> WebViewBootstrapperConfig:
+    return WebViewBootstrapperConfig(
+        format_version=1,
+        file_name="MicrosoftEdgeWebview2Setup.exe",
+        file_version="1.3.205.0",
+        sha256=sha256,
+        source_url="https://developer.microsoft.com/microsoft-edge/webview2/",
+    )
 
 
 def _system_tool(name: str) -> Path:
@@ -595,8 +739,12 @@ def _create_directory_link(link: Path, target: Path) -> None:
             pytest.skip("当前 Windows 配置不允许创建目录链接或联接")
 
 
-def _minimal_release_tree(tmp_path: Path) -> Path:
-    root = tmp_path / "GameShelf-0.1.0-win-x64"
+def _minimal_release_tree(
+    tmp_path: Path,
+    mode: ReleaseMode = ReleaseMode.FIXED,
+) -> Path:
+    versions = ReleaseVersions("0.1.0")
+    root = tmp_path / versions.name_for(mode)
     (root / "_internal" / "resources" / "ui").mkdir(parents=True)
     (root / "_internal" / "resources" / "rules").mkdir()
     (root / "_internal" / "resources" / "manifests" / "ludusavi").mkdir(
@@ -605,7 +753,10 @@ def _minimal_release_tree(tmp_path: Path) -> Path:
     (root / "_internal" / "gameshelf" / "db" / "migrations").mkdir(
         parents=True
     )
-    (root / "runtime").mkdir()
+    if mode is ReleaseMode.FIXED:
+        (root / "runtime").mkdir()
+    else:
+        (root / "prerequisites").mkdir()
     (root / "GameShelf.exe").write_bytes(b"frozen exe")
     (root / "_internal" / "resources" / "ui" / "index.html").write_text(
         "<!doctype html>",
@@ -623,11 +774,18 @@ def _minimal_release_tree(tmp_path: Path) -> Path:
         "PRAGMA user_version = 1;\n",
         encoding="utf-8",
     )
-    (root / "runtime" / "msedgewebview2.exe").write_bytes(b"webview runtime")
-    (root / "runtime" / "LICENSE.txt").write_text(
-        "runtime license",
-        encoding="utf-8",
-    )
+    if mode is ReleaseMode.FIXED:
+        (root / "runtime" / "msedgewebview2.exe").write_bytes(
+            b"webview runtime"
+        )
+        (root / "runtime" / "LICENSE.txt").write_text(
+            "runtime license",
+            encoding="utf-8",
+        )
+    else:
+        (root / "prerequisites" / "MicrosoftEdgeWebview2Setup.exe").write_bytes(
+            b"bootstrapper"
+        )
     (root / "README.txt").write_text("readme", encoding="utf-8")
     (root / "LICENSE").write_text("MIT", encoding="utf-8")
     (root / "THIRD_PARTY_NOTICES.md").write_text("notices", encoding="utf-8")
@@ -657,12 +815,58 @@ def _release_metadata() -> ReleaseMetadata:
 def _staged_release(
     repository_root: Path,
     versions: ReleaseVersions,
-) -> tuple[Path, Path, Path]:
+    mode: ReleaseMode,
+) -> StagedRelease:
     staging = repository_root / "build" / "release" / "staging"
-    release_root = _minimal_release_tree(staging)
-    write_release_manifest(release_root, _release_metadata())
-    archive = staging / f"{versions.release_name}.zip"
-    checksum = staging / f"{versions.release_name}.zip.sha256"
-    create_release_zip(release_root, archive, versions)
+    release_root = _minimal_release_tree(staging, mode)
+    write_release_manifest(
+        release_root,
+        _release_metadata(),
+        mode,
+        bootstrapper_config=_bootstrapper_config(),
+    )
+    release_name = versions.name_for(mode)
+    archive = staging / f"{release_name}.zip"
+    checksum = staging / f"{release_name}.zip.sha256"
+    create_release_zip(release_root, archive, versions, mode)
     write_zip_sha256(archive, checksum)
-    return release_root, archive, checksum
+    return StagedRelease(mode, release_root, archive, checksum)
+
+
+def _write_six_old_outputs(
+    tmp_path: Path,
+    versions: ReleaseVersions,
+) -> dict[Path, bytes]:
+    dist = tmp_path / "dist"
+    markers: dict[Path, bytes] = {}
+    for index, mode in enumerate(ReleaseMode):
+        release_name = versions.name_for(mode)
+        directory = dist / release_name
+        directory.mkdir(parents=True)
+        marker = directory / "old-marker.bin"
+        marker_payload = f"old-directory-{index}".encode()
+        marker.write_bytes(marker_payload)
+        markers[marker] = marker_payload
+        archive = dist / f"{release_name}.zip"
+        archive_payload = f"old-archive-{index}".encode()
+        archive.write_bytes(archive_payload)
+        markers[archive] = archive_payload
+        checksum = dist / f"{release_name}.zip.sha256"
+        checksum_payload = f"old-checksum-{index}".encode()
+        checksum.write_bytes(checksum_payload)
+        markers[checksum] = checksum_payload
+    return markers
+
+
+def _fail_fourth_replace(monkeypatch: pytest.MonkeyPatch) -> None:
+    real_replace = os.replace
+    calls = 0
+
+    def fail(source: Path, destination: Path) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 4:
+            raise PermissionError("simulated publish failure")
+        real_replace(source, destination)
+
+    monkeypatch.setattr(release_tools_module.os, "replace", fail)

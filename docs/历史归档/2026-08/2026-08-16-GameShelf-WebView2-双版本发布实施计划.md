@@ -810,12 +810,12 @@ Copy-Item -LiteralPath $bootstrapperPath -Destination (
 
 **执行门槛：**
 
-官方 Evergreen Bootstrapper 当前不在本机 `D:/终点`。执行本任务前，用户必须从 Microsoft WebView2 官方下载页取得 `MicrosoftEdgeWebview2Setup.exe` 并明确其绝对路径；若文件仍缺失，停止本任务并请求用户提供，禁止用测试文件、第三方镜像或虚构哈希继续。
+官方 Evergreen Bootstrapper 和 Fixed Runtime CAB 已放入仓库根目录下被 `.gitignore` 排除的 `webview安装包`。执行本任务时必须使用该目录中的真实 Microsoft 文件；若文件缺失，停止本任务并请求用户补充，禁止用测试文件、第三方镜像或虚构哈希继续。
 
 - [ ] **步骤 1：核对真实文件、签名、版本和 SHA-256**
 
 ```powershell
-$bootstrapper = "D:/终点/MicrosoftEdgeWebview2Setup.exe"
+$bootstrapper = "D:/MyProgrammingSoftware/GameShelf/webview安装包/MicrosoftEdgeWebview2Setup.exe"
 Get-Item -LiteralPath $bootstrapper |
     Select-Object FullName, Length, @{Name="FileVersion";Expression={$_.VersionInfo.FileVersion}}
 Get-FileHash -LiteralPath $bootstrapper -Algorithm SHA256
@@ -848,8 +848,8 @@ $env:PATH = "$repo/.venv;$repo/.venv/Scripts;$env:PATH"
 
 ```powershell
 ./scripts/build_release.ps1 `
-  -WebView2Archive "D:/终点/Microsoft.WebView2.FixedVersionRuntime.151.0.4129.86.x64.cab" `
-  -WebView2Bootstrapper "D:/终点/MicrosoftEdgeWebview2Setup.exe"
+  -WebView2Archive "D:/MyProgrammingSoftware/GameShelf/webview安装包/Microsoft.WebView2.FixedVersionRuntime.151.0.4129.86.x64.cab" `
+  -WebView2Bootstrapper "D:/MyProgrammingSoftware/GameShelf/webview安装包/MicrosoftEdgeWebview2Setup.exe"
 ```
 
 预期：生成两组目录、ZIP、SHA-256，共六项；完整流程内部再次运行全部门禁，不使用跳过参数。

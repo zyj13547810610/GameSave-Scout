@@ -20,6 +20,7 @@ from collections.abc import Sequence
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path, PurePosixPath
 from typing import Any, cast
 from urllib.parse import urlparse
@@ -29,7 +30,7 @@ import yaml
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 _VERSION_PATTERN = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?")
-_CONFIG_KEYS = {
+_WEBVIEW_ARCHIVE_CONFIG_KEYS = {
     "formatVersion",
     "version",
     "architecture",
@@ -37,10 +38,24 @@ _CONFIG_KEYS = {
     "sha256",
     "sourceUrl",
 }
+_WEBVIEW_BOOTSTRAPPER_CONFIG_KEYS = {
+    "formatVersion",
+    "fileName",
+    "fileVersion",
+    "sha256",
+    "sourceUrl",
+}
 
 
 class ReleaseToolError(RuntimeError):
     """Raised when release input or a managed output boundary is invalid."""
+
+
+class ReleaseMode(StrEnum):
+    """Mutually exclusive WebView2 layouts produced by one build."""
+
+    FIXED = "fixed"
+    EVERGREEN = "evergreen"
 
 
 @dataclass(frozen=True)
@@ -64,7 +79,11 @@ class ReleaseVersions:
 
     @property
     def release_name(self) -> str:
-        return f"GameShelf-{self.version}-win-x64"
+        return self.name_for(ReleaseMode.FIXED)
+
+    def name_for(self, mode: ReleaseMode) -> str:
+        base = f"GameShelf-{self.version}-win-x64"
+        return base if mode is ReleaseMode.FIXED else f"{base}-lite"
 
 
 @dataclass(frozen=True)
@@ -87,6 +106,14 @@ class ReleaseMetadata:
 
 
 @dataclass(frozen=True)
+class StagedRelease:
+    mode: ReleaseMode
+    directory: Path
+    archive: Path
+    checksum: Path
+
+
+@dataclass(frozen=True)
 class WebViewArchiveConfig:
     format_version: int
     version: str
@@ -106,12 +133,12 @@ class WebViewArchiveConfig:
         ):
             raise ReleaseToolError("WebView2 受控配置必须是 JSON 对象。")
         raw = cast(dict[str, Any], loaded)
-        unknown = sorted(set(raw) - _CONFIG_KEYS)
+        unknown = sorted(set(raw) - _WEBVIEW_ARCHIVE_CONFIG_KEYS)
         if unknown:
             raise ReleaseToolError(
                 f"WebView2 受控配置包含未知字段：{', '.join(unknown)}"
             )
-        missing = sorted(_CONFIG_KEYS - set(raw))
+        missing = sorted(_WEBVIEW_ARCHIVE_CONFIG_KEYS - set(raw))
         if missing:
             raise ReleaseToolError(
                 f"WebView2 受控配置缺少字段：{', '.join(missing)}"
@@ -155,6 +182,72 @@ class WebViewArchiveConfig:
         )
 
 
+@dataclass(frozen=True)
+class WebViewBootstrapperConfig:
+    format_version: int
+    file_name: str
+    file_version: str
+    sha256: str
+    source_url: str
+
+    @classmethod
+    def load(cls, path: Path) -> WebViewBootstrapperConfig:
+        try:
+            loaded = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            raise ReleaseToolError(
+                f"无法读取 WebView2 Bootstrapper 受控配置：{error}"
+            ) from error
+        if not isinstance(loaded, dict) or not all(
+            isinstance(key, str) for key in loaded
+        ):
+            raise ReleaseToolError("WebView2 Bootstrapper 受控配置必须是 JSON 对象。")
+        raw = cast(dict[str, Any], loaded)
+        unknown = sorted(set(raw) - _WEBVIEW_BOOTSTRAPPER_CONFIG_KEYS)
+        if unknown:
+            raise ReleaseToolError(
+                "WebView2 Bootstrapper 受控配置包含未知字段："
+                f"{', '.join(unknown)}"
+            )
+        missing = sorted(_WEBVIEW_BOOTSTRAPPER_CONFIG_KEYS - set(raw))
+        if missing:
+            raise ReleaseToolError(
+                "WebView2 Bootstrapper 受控配置缺少字段："
+                f"{', '.join(missing)}"
+            )
+        format_version = raw["formatVersion"]
+        file_name = raw["fileName"]
+        file_version = raw["fileVersion"]
+        digest = raw["sha256"]
+        source_url = raw["sourceUrl"]
+        if format_version != 1 or isinstance(format_version, bool):
+            raise ReleaseToolError(
+                "WebView2 Bootstrapper 受控配置 formatVersion 必须为 1。"
+            )
+        if file_name != "MicrosoftEdgeWebview2Setup.exe":
+            raise ReleaseToolError("WebView2 Bootstrapper 文件名无效。")
+        if not isinstance(file_version, str) or re.fullmatch(
+            r"[0-9]+(?:\.[0-9]+){1,3}", file_version
+        ) is None:
+            raise ReleaseToolError("WebView2 Bootstrapper 文件版本无效。")
+        if not _valid_digest(digest):
+            raise ReleaseToolError(
+                "WebView2 Bootstrapper 受控配置中的 SHA-256 无效。"
+            )
+        if not isinstance(source_url, str):
+            raise ReleaseToolError("WebView2 Bootstrapper 来源 URL 无效。")
+        parsed_url = urlparse(source_url)
+        if parsed_url.scheme != "https" or not parsed_url.netloc:
+            raise ReleaseToolError("WebView2 Bootstrapper 来源 URL 必须使用 HTTPS。")
+        return cls(
+            format_version=format_version,
+            file_name=file_name,
+            file_version=file_version,
+            sha256=cast(str, digest),
+            source_url=source_url,
+        )
+
+
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -185,6 +278,30 @@ def validate_webview_archive(
     return archive
 
 
+def validate_webview_bootstrapper(
+    bootstrapper: Path,
+    config: WebViewBootstrapperConfig,
+) -> Path:
+    if not bootstrapper.is_absolute():
+        raise ReleaseToolError("WebView2 Bootstrapper 必须使用绝对路径。")
+    if _is_reparse_point(bootstrapper) or not bootstrapper.is_file():
+        raise ReleaseToolError(
+            "WebView2 Bootstrapper 必须是普通文件，不能是目录或链接。"
+        )
+    if bootstrapper.name != config.file_name:
+        raise ReleaseToolError(
+            "WebView2 Bootstrapper 文件名与受控配置不一致："
+            f"期望 {config.file_name}，实际 {bootstrapper.name}"
+        )
+    actual_digest = sha256_file(bootstrapper)
+    if actual_digest != config.sha256:
+        raise ReleaseToolError(
+            "WebView2 Bootstrapper 的 SHA-256 与受控配置不一致："
+            f"期望 {config.sha256}，实际 {actual_digest}"
+        )
+    return bootstrapper
+
+
 def validate_managed_target(
     repository_root: Path,
     target: Path,
@@ -196,12 +313,16 @@ def validate_managed_target(
     if ".." in target.parts:
         raise ReleaseToolError("受控发布目标不能包含父目录跳转。")
     candidate = Path(os.path.abspath(target))
-    allowed = (
-        root / "build" / "release",
-        root / "dist" / versions.release_name,
-        root / "dist" / f"{versions.release_name}.zip",
-        root / "dist" / f"{versions.release_name}.zip.sha256",
-    )
+    allowed = [root / "build" / "release"]
+    for mode in ReleaseMode:
+        release_name = versions.name_for(mode)
+        allowed.extend(
+            (
+                root / "dist" / release_name,
+                root / "dist" / f"{release_name}.zip",
+                root / "dist" / f"{release_name}.zip.sha256",
+            )
+        )
     if _path_key(candidate) not in {_path_key(path) for path in allowed}:
         raise ReleaseToolError(f"路径不是当前版本的受控发布目标：{candidate}")
     current = candidate
@@ -293,11 +414,28 @@ def normalize_webview_runtime(extracted_root: Path) -> Path:
 def build_release_manifest(
     release_root: Path,
     metadata: ReleaseMetadata,
+    mode: ReleaseMode,
+    *,
+    bootstrapper_config: WebViewBootstrapperConfig | None = None,
 ) -> dict[str, object]:
     """Build a complete payload manifest, excluding the manifest itself."""
 
     versions = ReleaseVersions(metadata.app_version)
-    _validate_release_layout(release_root, versions, require_manifest=False)
+    _validate_release_layout(
+        release_root,
+        versions,
+        mode,
+        require_manifest=False,
+    )
+    if mode is ReleaseMode.EVERGREEN:
+        if bootstrapper_config is None:
+            raise ReleaseToolError("轻量版发布清单缺少 Bootstrapper 受控配置。")
+        validate_webview_bootstrapper(
+            release_root
+            / "prerequisites"
+            / "MicrosoftEdgeWebview2Setup.exe",
+            bootstrapper_config,
+        )
     files = [
         {
             "path": relative,
@@ -307,7 +445,8 @@ def build_release_manifest(
         for relative, path in _release_payload_files(release_root)
     ]
     return {
-        "formatVersion": 1,
+        "formatVersion": 2,
+        "runtimeMode": mode.value,
         "appVersion": metadata.app_version,
         "buildUtc": metadata.build_utc,
         "gitCommit": metadata.git_commit,
@@ -322,9 +461,28 @@ def build_release_manifest(
         "engineRulesVersion": metadata.engine_rules_version,
         "ludusaviSha256": metadata.ludusavi_sha256,
         "ludusaviUpstreamCommit": metadata.ludusavi_upstream_commit,
-        "webview2Version": metadata.webview2_version,
-        "webview2ArchiveSha256": metadata.webview2_archive_sha256,
-        "fixedRuntime": True,
+        "webview2Version": (
+            metadata.webview2_version if mode is ReleaseMode.FIXED else None
+        ),
+        "webview2ArchiveSha256": (
+            metadata.webview2_archive_sha256
+            if mode is ReleaseMode.FIXED
+            else None
+        ),
+        "webview2BootstrapperFileVersion": (
+            bootstrapper_config.file_version
+            if mode is ReleaseMode.EVERGREEN and bootstrapper_config is not None
+            else None
+        ),
+        "webview2BootstrapperSha256": (
+            bootstrapper_config.sha256
+            if mode is ReleaseMode.EVERGREEN and bootstrapper_config is not None
+            else None
+        ),
+        "webview2BootstrapperSignatureValid": (
+            True if mode is ReleaseMode.EVERGREEN else None
+        ),
+        "fixedRuntime": mode is ReleaseMode.FIXED,
         "signed": False,
         "files": files,
     }
@@ -333,17 +491,34 @@ def build_release_manifest(
 def write_release_manifest(
     release_root: Path,
     metadata: ReleaseMetadata,
+    mode: ReleaseMode,
+    *,
+    bootstrapper_config: WebViewBootstrapperConfig | None = None,
 ) -> Path:
     destination = release_root / "release-manifest.json"
-    payload = build_release_manifest(release_root, metadata)
+    payload = build_release_manifest(
+        release_root,
+        metadata,
+        mode,
+        bootstrapper_config=bootstrapper_config,
+    )
     _write_json_atomic(destination, payload)
     return destination
 
 
-def verify_release_tree(release_root: Path, versions: ReleaseVersions) -> None:
+def verify_release_tree(
+    release_root: Path,
+    versions: ReleaseVersions,
+    mode: ReleaseMode,
+) -> None:
     """Verify layout and every payload hash against release-manifest.json."""
 
-    _validate_release_layout(release_root, versions, require_manifest=True)
+    _validate_release_layout(
+        release_root,
+        versions,
+        mode,
+        require_manifest=True,
+    )
     manifest_file = release_root / "release-manifest.json"
     try:
         loaded = json.loads(manifest_file.read_text(encoding="utf-8"))
@@ -352,14 +527,47 @@ def verify_release_tree(release_root: Path, versions: ReleaseVersions) -> None:
     if not isinstance(loaded, dict):
         raise ReleaseToolError("发布清单必须是 JSON 对象。")
     manifest = cast(dict[str, Any], loaded)
-    if manifest.get("formatVersion") != 1:
-        raise ReleaseToolError("发布清单 formatVersion 必须为 1。")
+    if manifest.get("formatVersion") != 2:
+        raise ReleaseToolError("发布清单 formatVersion 必须为 2。")
     if manifest.get("appVersion") != versions.version:
         raise ReleaseToolError("发布清单中的 GameShelf 版本不匹配。")
     if manifest.get("platform") != "windows-x64":
         raise ReleaseToolError("发布清单平台必须为 windows-x64。")
-    if manifest.get("fixedRuntime") is not True or manifest.get("signed") is not False:
-        raise ReleaseToolError("发布清单必须记录 fixedRuntime=true、signed=false。")
+    if manifest.get("runtimeMode") != mode.value:
+        raise ReleaseToolError("发布清单 runtimeMode 与发布模式不匹配。")
+    if manifest.get("signed") is not False:
+        raise ReleaseToolError("发布清单必须记录 signed=false。")
+    if manifest.get("fixedRuntime") is not (mode is ReleaseMode.FIXED):
+        raise ReleaseToolError("发布清单 fixedRuntime 与发布模式不匹配。")
+    if mode is ReleaseMode.FIXED:
+        if (
+            not isinstance(manifest.get("webview2Version"), str)
+            or not _valid_digest(manifest.get("webview2ArchiveSha256"))
+            or manifest.get("webview2BootstrapperFileVersion") is not None
+            or manifest.get("webview2BootstrapperSha256") is not None
+            or manifest.get("webview2BootstrapperSignatureValid") is not None
+        ):
+            raise ReleaseToolError("完整版发布清单中的 WebView2 字段无效。")
+    else:
+        bootstrapper_version = manifest.get("webview2BootstrapperFileVersion")
+        bootstrapper_digest = manifest.get("webview2BootstrapperSha256")
+        if (
+            manifest.get("webview2Version") is not None
+            or manifest.get("webview2ArchiveSha256") is not None
+            or not isinstance(bootstrapper_version, str)
+            or re.fullmatch(r"[0-9]+(?:\.[0-9]+){1,3}", bootstrapper_version)
+            is None
+            or not _valid_digest(bootstrapper_digest)
+            or manifest.get("webview2BootstrapperSignatureValid") is not True
+        ):
+            raise ReleaseToolError("轻量版发布清单中的 WebView2 字段无效。")
+        bootstrapper = (
+            release_root
+            / "prerequisites"
+            / "MicrosoftEdgeWebview2Setup.exe"
+        )
+        if sha256_file(bootstrapper) != bootstrapper_digest:
+            raise ReleaseToolError("轻量版 Bootstrapper SHA-256 与发布清单不一致。")
     raw_files = manifest.get("files")
     if not isinstance(raw_files, list):
         raise ReleaseToolError("发布清单 files 必须是数组。")
@@ -411,13 +619,15 @@ def create_release_zip(
     release_root: Path,
     archive: Path,
     versions: ReleaseVersions,
+    mode: ReleaseMode,
 ) -> Path:
     """Create a sorted ZIP containing one verified release root."""
 
-    verify_release_tree(release_root, versions)
+    verify_release_tree(release_root, versions, mode)
+    release_name = versions.name_for(mode)
     if not archive.is_absolute():
         raise ReleaseToolError("发布 ZIP 必须使用绝对路径。")
-    if archive.name != f"{versions.release_name}.zip":
+    if archive.name != f"{release_name}.zip":
         raise ReleaseToolError("发布 ZIP 文件名与当前版本不匹配。")
     if archive.exists() or archive.is_symlink():
         raise ReleaseToolError(f"发布 ZIP 目标必须尚不存在：{archive}")
@@ -444,7 +654,7 @@ def create_release_zip(
             for relative, path in files:
                 bundle.write(
                     path,
-                    arcname=f"{versions.release_name}/{relative}",
+                    arcname=f"{release_name}/{relative}",
                 )
     except Exception:
         with suppress(OSError):
@@ -453,12 +663,16 @@ def create_release_zip(
     return archive
 
 
-def verify_release_zip(archive: Path, versions: ReleaseVersions) -> None:
+def verify_release_zip(
+    archive: Path,
+    versions: ReleaseVersions,
+    mode: ReleaseMode,
+) -> None:
     """Reopen a release ZIP and verify its embedded manifest and payload bytes."""
 
     if not archive.is_absolute() or _is_reparse_point(archive) or not archive.is_file():
         raise ReleaseToolError("发布 ZIP 必须是绝对路径普通文件。")
-    expected_prefix = f"{versions.release_name}/"
+    expected_prefix = f"{versions.name_for(mode)}/"
     try:
         with zipfile.ZipFile(archive, "r") as bundle:
             names = bundle.namelist()
@@ -491,7 +705,12 @@ def verify_release_zip(archive: Path, versions: ReleaseVersions) -> None:
                 manifest = json.loads(bundle.read(manifest_name).decode("utf-8"))
             except (KeyError, UnicodeDecodeError, json.JSONDecodeError) as error:
                 raise ReleaseToolError(f"发布 ZIP 内清单无效：{error}") from error
-            if not isinstance(manifest, dict) or manifest.get("appVersion") != versions.version:
+            if (
+                not isinstance(manifest, dict)
+                or manifest.get("appVersion") != versions.version
+                or manifest.get("formatVersion") != 2
+                or manifest.get("runtimeMode") != mode.value
+            ):
                 raise ReleaseToolError("发布 ZIP 内清单版本无效。")
             raw_files = manifest.get("files")
             if not isinstance(raw_files, list):
@@ -553,14 +772,18 @@ def verify_zip_sha256(archive: Path, checksum_file: Path) -> None:
         raise ReleaseToolError("ZIP SHA-256 文件与归档实际 SHA-256 不一致。")
 
 
-def publish_release(
+def publish_releases(
     repository_root: Path,
-    staged_directory: Path,
-    staged_zip: Path,
-    staged_checksum: Path,
+    staged_releases: Sequence[StagedRelease],
     versions: ReleaseVersions,
-) -> tuple[Path, Path, Path]:
-    """Atomically replace only the three current-version dist outputs."""
+) -> tuple[Path, ...]:
+    """Atomically replace all six outputs for both runtime modes."""
+
+    if len(staged_releases) != len(ReleaseMode):
+        raise ReleaseToolError("发布事务必须恰好包含完整版和轻量版。")
+    by_mode = {staged.mode: staged for staged in staged_releases}
+    if set(by_mode) != set(ReleaseMode) or len(by_mode) != len(staged_releases):
+        raise ReleaseToolError("发布事务必须各包含一份 fixed 和 evergreen。")
 
     root = repository_root.resolve(strict=True)
     managed_root = validate_managed_target(
@@ -570,63 +793,60 @@ def publish_release(
     )
     if not managed_root.is_dir():
         raise ReleaseToolError("发布暂存根 build/release 不存在。")
-    staged = (staged_directory, staged_zip, staged_checksum)
-    expected_names = (
-        versions.release_name,
-        f"{versions.release_name}.zip",
-        f"{versions.release_name}.zip.sha256",
-    )
-    for source, expected_name in zip(staged, expected_names, strict=True):
-        if not source.is_absolute() or source.name != expected_name:
-            raise ReleaseToolError("暂存发布目标的绝对路径或文件名无效。")
-        _require_descendant(source, managed_root)
-        if _is_reparse_point(source):
-            raise ReleaseToolError(f"暂存发布目标不能是重解析点或链接：{source}")
-    verify_release_tree(staged_directory, versions)
-    verify_release_zip(staged_zip, versions)
-    verify_zip_sha256(staged_zip, staged_checksum)
 
-    final_directory = validate_managed_target(
-        root,
-        root / "dist" / versions.release_name,
-        versions,
-    )
-    final_zip = validate_managed_target(
-        root,
-        root / "dist" / f"{versions.release_name}.zip",
-        versions,
-    )
-    final_checksum = validate_managed_target(
-        root,
-        root / "dist" / f"{versions.release_name}.zip.sha256",
-        versions,
-    )
-    finals = (final_directory, final_zip, final_checksum)
-    for final in finals:
+    ordered = tuple(by_mode[mode] for mode in ReleaseMode)
+    staged_paths: list[Path] = []
+    final_paths: list[Path] = []
+    for staged in ordered:
+        release_name = versions.name_for(staged.mode)
+        sources = (staged.directory, staged.archive, staged.checksum)
+        expected_names = (
+            release_name,
+            f"{release_name}.zip",
+            f"{release_name}.zip.sha256",
+        )
+        for source, expected_name in zip(sources, expected_names, strict=True):
+            if not source.is_absolute() or source.name != expected_name:
+                raise ReleaseToolError("暂存发布目标的绝对路径或文件名无效。")
+            _require_descendant(source, managed_root)
+            if _is_reparse_point(source):
+                raise ReleaseToolError(
+                    f"暂存发布目标不能是重解析点或链接：{source}"
+                )
+        verify_release_tree(staged.directory, versions, staged.mode)
+        verify_release_zip(staged.archive, versions, staged.mode)
+        verify_zip_sha256(staged.archive, staged.checksum)
+        staged_paths.extend(sources)
+        for name in expected_names:
+            final_paths.append(
+                validate_managed_target(root, root / "dist" / name, versions)
+            )
+
+    for final in final_paths:
         if _is_reparse_point(final):
             raise ReleaseToolError(f"现有发布目标不能是重解析点或链接：{final}")
-    final_directory.parent.mkdir(parents=True, exist_ok=True)
+    dist_root = root / "dist"
+    dist_root.mkdir(parents=True, exist_ok=True)
     token = uuid4().hex
     backups: list[tuple[Path, Path]] = []
-    published: list[tuple[Path, Path]] = []
+    published: list[Path] = []
     try:
-        for final in finals:
+        for final in final_paths:
             if final.exists():
                 backup = final.with_name(f".{final.name}.backup-{token}")
                 if backup.exists() or backup.is_symlink():
                     raise ReleaseToolError(f"发布备份目标意外存在：{backup}")
                 os.replace(final, backup)
                 backups.append((final, backup))
-        for source, final in zip(staged, finals, strict=True):
+        for source, final in zip(staged_paths, final_paths, strict=True):
             os.replace(source, final)
-            published.append((source, final))
+            published.append(final)
     except (OSError, ReleaseToolError) as error:
         rollback_errors: list[str] = []
-        for source, final in reversed(published):
+        for final in reversed(published):
             try:
-                if final.exists():
-                    os.replace(final, source)
-            except OSError as rollback_error:
+                _remove_exact_published_target(final, dist_root, versions)
+            except (OSError, ReleaseToolError) as rollback_error:
                 rollback_errors.append(str(rollback_error))
         for final, backup in reversed(backups):
             try:
@@ -639,8 +859,8 @@ def publish_release(
             detail += f"；回滚错误：{' | '.join(rollback_errors)}"
         raise ReleaseToolError(detail) from error
     for _final, backup in backups:
-        _remove_exact_backup(backup, final_directory.parent)
-    return finals
+        _remove_exact_backup(backup, dist_root)
+    return tuple(final_paths)
 
 
 def prepare_build_root(
@@ -837,6 +1057,15 @@ def _controlled_webview_config(repository_root: Path) -> WebViewArchiveConfig:
     return WebViewArchiveConfig.load(config_path)
 
 
+def _controlled_bootstrapper_config(
+    repository_root: Path,
+) -> WebViewBootstrapperConfig:
+    config_path = repository_root / "release" / "webview2-bootstrapper.json"
+    if _is_reparse_point(config_path) or not config_path.is_file():
+        raise ReleaseToolError(f"缺少受控 WebView2 Bootstrapper 配置：{config_path}")
+    return WebViewBootstrapperConfig.load(config_path)
+
+
 def _windows_system_tool(name: str) -> Path:
     system_root = os.environ.get("SYSTEMROOT")
     if not system_root:
@@ -876,17 +1105,33 @@ def _remove_exact_backup(backup: Path, dist_root: Path) -> None:
         backup.unlink(missing_ok=True)
 
 
+def _remove_exact_published_target(
+    target: Path,
+    dist_root: Path,
+    versions: ReleaseVersions,
+) -> None:
+    validated = validate_managed_target(dist_root.parent, target, versions)
+    if validated.parent != dist_root or _is_reparse_point(validated):
+        raise ReleaseToolError(f"拒绝清理非受控或重解析点发布目标：{validated}")
+    if validated.is_dir():
+        shutil.rmtree(validated)
+    else:
+        validated.unlink(missing_ok=True)
+
+
 def _validate_release_layout(
     release_root: Path,
     versions: ReleaseVersions,
+    mode: ReleaseMode,
     *,
     require_manifest: bool,
 ) -> None:
     if not release_root.is_absolute() or not release_root.is_dir():
         raise ReleaseToolError("发布根目录必须是已存在的绝对路径目录。")
-    if release_root.name != versions.release_name:
+    expected_release_name = versions.name_for(mode)
+    if release_root.name != expected_release_name:
         raise ReleaseToolError(
-            f"发布根目录名称必须为当前版本：{versions.release_name}"
+            f"发布根目录名称必须为当前版本和模式：{expected_release_name}"
         )
     if _is_reparse_point(release_root):
         raise ReleaseToolError("发布根目录不能是重解析点或链接。")
@@ -894,11 +1139,11 @@ def _validate_release_layout(
     required = {
         "GameShelf.exe",
         "_internal",
-        "runtime",
         "README.txt",
         "LICENSE",
         "THIRD_PARTY_NOTICES.md",
     }
+    required.add("runtime" if mode is ReleaseMode.FIXED else "prerequisites")
     if require_manifest:
         required.add("release-manifest.json")
     missing = sorted(required - set(top_level))
@@ -912,16 +1157,21 @@ def _validate_release_layout(
         raise ReleaseToolError(f"发布目录包含意外顶层内容：{', '.join(unexpected)}")
     if not top_level["GameShelf.exe"].is_file():
         raise ReleaseToolError("GameShelf.exe 必须是普通文件。")
-    if not top_level["_internal"].is_dir() or not top_level["runtime"].is_dir():
-        raise ReleaseToolError("_internal 和 runtime 必须是目录。")
-    critical_files = (
+    mode_directory = "runtime" if mode is ReleaseMode.FIXED else "prerequisites"
+    if not top_level["_internal"].is_dir() or not top_level[mode_directory].is_dir():
+        raise ReleaseToolError(f"_internal 和 {mode_directory} 必须是目录。")
+    critical_files = [
         "_internal/resources/ui/index.html",
         "_internal/resources/rules/engines.yaml",
         "_internal/resources/manifests/ludusavi/manifest.yaml",
         "_internal/resources/manifests/ludusavi/manifest-meta.json",
         "_internal/resources/manifests/ludusavi/manifest-index.sqlite",
         "_internal/gameshelf/db/migrations/0001_initial.sql",
-        "runtime/msedgewebview2.exe",
+    ]
+    critical_files.append(
+        "runtime/msedgewebview2.exe"
+        if mode is ReleaseMode.FIXED
+        else "prerequisites/MicrosoftEdgeWebview2Setup.exe"
     )
     for relative in critical_files:
         if not release_root.joinpath(*relative.split("/")).is_file():
@@ -1019,7 +1269,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     subparsers = parser.add_subparsers(dest="command", required=True)
     verify = subparsers.add_parser("verify-context")
     verify.add_argument("--repository-root", type=Path, default=REPOSITORY_ROOT)
-    verify.add_argument("--webview-archive", type=Path)
+    verify.add_argument("--webview-archive", type=Path, required=True)
+    verify.add_argument("--webview-bootstrapper", type=Path, required=True)
     prepare = subparsers.add_parser("prepare-build-root")
     prepare.add_argument("--repository-root", type=Path, default=REPOSITORY_ROOT)
     extract = subparsers.add_parser("extract-runtime")
@@ -1029,35 +1280,63 @@ def main(argv: Sequence[str] | None = None) -> int:
     manifest = subparsers.add_parser("write-manifest")
     manifest.add_argument("--repository-root", type=Path, default=REPOSITORY_ROOT)
     manifest.add_argument("--release-directory", type=Path, required=True)
+    manifest.add_argument(
+        "--runtime-mode",
+        choices=tuple(mode.value for mode in ReleaseMode),
+        required=True,
+    )
     verify_release = subparsers.add_parser("verify-release")
     verify_release.add_argument(
         "--repository-root", type=Path, default=REPOSITORY_ROOT
     )
     verify_release.add_argument("--release-directory", type=Path, required=True)
+    verify_release.add_argument(
+        "--runtime-mode",
+        choices=tuple(mode.value for mode in ReleaseMode),
+        required=True,
+    )
     archive = subparsers.add_parser("build-archive")
     archive.add_argument("--repository-root", type=Path, default=REPOSITORY_ROOT)
     archive.add_argument("--release-directory", type=Path, required=True)
     archive.add_argument("--archive", type=Path, required=True)
     archive.add_argument("--checksum", type=Path, required=True)
+    archive.add_argument(
+        "--runtime-mode",
+        choices=tuple(mode.value for mode in ReleaseMode),
+        required=True,
+    )
     publish = subparsers.add_parser("publish")
     publish.add_argument("--repository-root", type=Path, default=REPOSITORY_ROOT)
-    publish.add_argument("--release-directory", type=Path, required=True)
-    publish.add_argument("--archive", type=Path, required=True)
-    publish.add_argument("--checksum", type=Path, required=True)
+    for mode in ReleaseMode:
+        prefix = f"--{mode.value}"
+        publish.add_argument(f"{prefix}-release-directory", type=Path, required=True)
+        publish.add_argument(f"{prefix}-archive", type=Path, required=True)
+        publish.add_argument(f"{prefix}-checksum", type=Path, required=True)
     arguments = parser.parse_args(argv)
     root = arguments.repository_root.resolve(strict=True)
     versions = ReleaseVersions.load(root)
     if arguments.command == "verify-context":
-        config: WebViewArchiveConfig | None = None
-        if arguments.webview_archive is not None:
-            config = _controlled_webview_config(root)
-            validate_webview_archive(arguments.webview_archive, config)
+        config = _controlled_webview_config(root)
+        bootstrapper_config = _controlled_bootstrapper_config(root)
+        validate_webview_archive(arguments.webview_archive, config)
+        validate_webview_bootstrapper(
+            arguments.webview_bootstrapper,
+            bootstrapper_config,
+        )
         print(
             json.dumps(
                 {
                     "version": versions.version,
-                    "releaseName": versions.release_name,
-                    "webview2Version": None if config is None else config.version,
+                    "fixedReleaseName": versions.name_for(ReleaseMode.FIXED),
+                    "evergreenReleaseName": versions.name_for(
+                        ReleaseMode.EVERGREEN
+                    ),
+                    "webview2Version": config.version,
+                    "webview2ArchiveSha256": config.sha256,
+                    "webview2BootstrapperFileVersion": (
+                        bootstrapper_config.file_version
+                    ),
+                    "webview2BootstrapperSha256": bootstrapper_config.sha256,
                 },
                 ensure_ascii=False,
             )
@@ -1086,11 +1365,28 @@ def main(argv: Sequence[str] | None = None) -> int:
         _require_descendant(arguments.release_directory, build_root)
         config = _controlled_webview_config(root)
         metadata = collect_release_metadata(root, config)
-        print(write_release_manifest(arguments.release_directory, metadata))
+        mode = ReleaseMode(arguments.runtime_mode)
+        manifest_bootstrapper_config = (
+            _controlled_bootstrapper_config(root)
+            if mode is ReleaseMode.EVERGREEN
+            else None
+        )
+        print(
+            write_release_manifest(
+                arguments.release_directory,
+                metadata,
+                mode,
+                bootstrapper_config=manifest_bootstrapper_config,
+            )
+        )
         return 0
     if arguments.command == "verify-release":
         _require_descendant(arguments.release_directory, build_root)
-        verify_release_tree(arguments.release_directory, versions)
+        verify_release_tree(
+            arguments.release_directory,
+            versions,
+            ReleaseMode(arguments.runtime_mode),
+        )
         print(arguments.release_directory)
         return 0
     if arguments.command == "build-archive":
@@ -1100,18 +1396,31 @@ def main(argv: Sequence[str] | None = None) -> int:
             arguments.checksum,
         ):
             _require_descendant(path, build_root)
-        create_release_zip(arguments.release_directory, arguments.archive, versions)
-        verify_release_zip(arguments.archive, versions)
+        mode = ReleaseMode(arguments.runtime_mode)
+        create_release_zip(
+            arguments.release_directory,
+            arguments.archive,
+            versions,
+            mode,
+        )
+        verify_release_zip(arguments.archive, versions, mode)
         write_zip_sha256(arguments.archive, arguments.checksum)
         verify_zip_sha256(arguments.archive, arguments.checksum)
         print(arguments.archive)
         return 0
     if arguments.command == "publish":
-        published = publish_release(
+        staged_releases = tuple(
+            StagedRelease(
+                mode=mode,
+                directory=getattr(arguments, f"{mode.value}_release_directory"),
+                archive=getattr(arguments, f"{mode.value}_archive"),
+                checksum=getattr(arguments, f"{mode.value}_checksum"),
+            )
+            for mode in ReleaseMode
+        )
+        published = publish_releases(
             root,
-            arguments.release_directory,
-            arguments.archive,
-            arguments.checksum,
+            staged_releases,
             versions,
         )
         print(json.dumps([str(path) for path in published], ensure_ascii=False))

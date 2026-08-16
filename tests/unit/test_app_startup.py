@@ -4,12 +4,19 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
+from typing import cast
 
 import pytest
 
 import gameshelf.app as app_module
 from gameshelf.app import main
+from gameshelf.bootstrap.application import Application
+from gameshelf.bootstrap.webview_bootstrapper import (
+    WebViewBootstrapperError,
+    WebViewInstallCancelled,
+)
+from gameshelf.bootstrap.webview_runtime import WebViewRuntime
 
 
 class RecordingReporter:
@@ -43,6 +50,22 @@ def test_json_smoke_writes_success_without_creating_desktop_window(
         return real_import(module_name, package)
 
     monkeypatch.setattr(app_module, "import_module", import_without_desktop_window)
+    allow_install_calls: list[bool] = []
+    real_ensure_available = WebViewRuntime.ensure_available
+
+    def record_ensure_available(
+        runtime: WebViewRuntime,
+        *,
+        allow_install: bool,
+    ) -> str | None:
+        allow_install_calls.append(allow_install)
+        return real_ensure_available(runtime, allow_install=allow_install)
+
+    monkeypatch.setattr(
+        WebViewRuntime,
+        "ensure_available",
+        record_ensure_available,
+    )
 
     exit_code = main(
         [
@@ -59,6 +82,7 @@ def test_json_smoke_writes_success_without_creating_desktop_window(
     assert exit_code == 0
     assert payload["ok"] is True
     assert payload["frozen"] is False
+    assert payload["runtimeMode"] == "source"
     assert payload["resourceRoot"].endswith("GameShelf\\resources")
     assert payload["webviewRuntime"] is None
     assert payload["checks"] == {
@@ -73,6 +97,7 @@ def test_json_smoke_writes_success_without_creating_desktop_window(
     }
     assert payload["error"] is None
     assert reporter.calls == []
+    assert allow_install_calls == [False]
 
 
 @pytest.mark.parametrize(
@@ -180,6 +205,154 @@ def test_normal_frozen_startup_failure_uses_reporter_once(
     assert logs_dir == app_root / "data" / "logs"
 
 
+def test_user_cancelled_webview_install_exits_without_error_log(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bundle_root = tmp_path / "_internal"
+    app_root = tmp_path / "GameShelf"
+    _create_required_resources(bundle_root / "resources")
+    _write_release_manifest(app_root, mode="evergreen")
+    reporter = RecordingReporter()
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "_MEIPASS", str(bundle_root), raising=False)
+    monkeypatch.setattr(app_module, "_validate_desktop_dependencies", lambda: None)
+    monkeypatch.setattr(
+        WebViewRuntime,
+        "ensure_available",
+        lambda _self, *, allow_install: (_ for _ in ()).throw(
+            WebViewInstallCancelled
+        ),
+    )
+
+    exit_code = main(["--app-root", str(app_root)], reporter=reporter)
+
+    assert exit_code == 0
+    assert reporter.calls == []
+    assert not (app_root / "data" / "logs" / "startup-error.log").exists()
+
+
+def test_evergreen_install_success_continues_in_same_process(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bundle_root = tmp_path / "_internal"
+    app_root = tmp_path / "GameShelf"
+    _create_required_resources(bundle_root / "resources")
+    _write_release_manifest(app_root, mode="evergreen")
+    reporter = RecordingReporter()
+    application = cast(Application, SimpleNamespace())
+    ensure_calls: list[bool] = []
+    build_calls: list[tuple[object, object]] = []
+    desktop_calls: list[tuple[object, object]] = []
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "_MEIPASS", str(bundle_root), raising=False)
+    monkeypatch.setattr(app_module, "_validate_desktop_dependencies", lambda: None)
+    monkeypatch.setattr(
+        WebViewRuntime,
+        "ensure_available",
+        lambda _self, *, allow_install: ensure_calls.append(allow_install)
+        or "151.0.4129.86",
+    )
+    monkeypatch.setattr(
+        app_module,
+        "build_application",
+        lambda paths, *, resources: build_calls.append((paths, resources))
+        or application,
+    )
+    monkeypatch.setattr(
+        app_module,
+        "_run_desktop",
+        lambda built_application, runtime: desktop_calls.append(
+            (built_application, runtime)
+        )
+        or 0,
+    )
+
+    exit_code = main(["--app-root", str(app_root)], reporter=reporter)
+
+    assert exit_code == 0
+    assert ensure_calls == [True]
+    assert len(build_calls) == 1
+    assert len(desktop_calls) == 1
+    assert desktop_calls[0][0] is application
+    assert reporter.calls == []
+
+
+def test_evergreen_install_failure_uses_existing_reporter_once(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bundle_root = tmp_path / "_internal"
+    app_root = tmp_path / "GameShelf"
+    _create_required_resources(bundle_root / "resources")
+    _write_release_manifest(app_root, mode="evergreen")
+    reporter = RecordingReporter()
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "_MEIPASS", str(bundle_root), raising=False)
+    monkeypatch.setattr(app_module, "_validate_desktop_dependencies", lambda: None)
+    monkeypatch.setattr(
+        WebViewRuntime,
+        "ensure_available",
+        lambda _self, *, allow_install: (_ for _ in ()).throw(
+            WebViewBootstrapperError("installer failed")
+        ),
+    )
+
+    exit_code = main(["--app-root", str(app_root)], reporter=reporter)
+
+    assert exit_code == 1
+    assert len(reporter.calls) == 1
+    assert "installer failed" in str(reporter.calls[0][0])
+
+
+def test_evergreen_smoke_records_detection_and_bootstrapper_checks(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bundle_root = tmp_path / "_internal"
+    app_root = tmp_path / "GameShelf"
+    output = tmp_path / "smoke.json"
+    _create_required_resources(bundle_root / "resources")
+    _write_release_manifest(app_root, mode="evergreen")
+    ensure_calls: list[bool] = []
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "_MEIPASS", str(bundle_root), raising=False)
+    monkeypatch.setattr(app_module, "_validate_desktop_dependencies", lambda: None)
+    monkeypatch.setattr(
+        WebViewRuntime,
+        "ensure_available",
+        lambda _self, *, allow_install: ensure_calls.append(allow_install)
+        or "151.0.4129.86",
+    )
+    monkeypatch.setattr(
+        app_module,
+        "build_application",
+        lambda _paths, *, resources: SimpleNamespace(
+            schema_version=1,
+            close=lambda: None,
+        ),
+    )
+
+    exit_code = main(
+        [
+            "--smoke-test",
+            "--json-output",
+            str(output),
+            "--app-root",
+            str(app_root),
+        ]
+    )
+
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert ensure_calls == [False]
+    assert payload["runtimeMode"] == "evergreen"
+    assert payload["webviewRuntime"] is None
+    assert payload["checks"]["evergreenRuntime"] is True
+    assert payload["checks"]["webviewBootstrapper"] is True
+
+
 def test_normal_source_startup_failure_is_raised(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -221,3 +394,32 @@ def test_python_module_entrypoint_runs_smoke_test(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     assert json.loads(output.read_text(encoding="utf-8"))["ok"] is True
+
+
+def _create_required_resources(resource_root: Path) -> None:
+    (resource_root / "ui").mkdir(parents=True)
+    (resource_root / "ui" / "index.html").write_text(
+        "<!doctype html>",
+        encoding="utf-8",
+    )
+    (resource_root / "rules").mkdir()
+    (resource_root / "rules" / "engines.yaml").write_text(
+        "version: test\nrules: []\n",
+        encoding="utf-8",
+    )
+    (resource_root / "manifests" / "ludusavi").mkdir(parents=True)
+
+
+def _write_release_manifest(root: Path, *, mode: str) -> None:
+    root.mkdir(parents=True)
+    (root / "release-manifest.json").write_text(
+        json.dumps(
+            {
+                "formatVersion": 2,
+                "runtimeMode": mode,
+                "fixedRuntime": mode == "fixed",
+                "webview2BootstrapperSha256": "a" * 64,
+            }
+        ),
+        encoding="utf-8",
+    )

@@ -7,6 +7,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from gameshelf.bootstrap.release_runtime import ReleaseRuntimeConfig, RuntimeMode
+from gameshelf.bootstrap.webview_bootstrapper import EvergreenRuntimeInstaller
 from gameshelf.bootstrap.webview_runtime import WebViewRuntime, WebViewRuntimeError
 
 
@@ -32,6 +34,7 @@ def test_frozen_runtime_uses_executable_adjacent_directory(tmp_path: Path) -> No
     runtime = WebViewRuntime.for_runtime(
         app_root,
         frozen=True,
+        release_config=ReleaseRuntimeConfig(RuntimeMode.FIXED),
         drive_type=lambda _path: 3,
         windows_build=22631,
         system_directory=tmp_path / "Windows" / "System32",
@@ -47,6 +50,7 @@ def test_frozen_runtime_rejects_missing_browser_executable(tmp_path: Path) -> No
     runtime = WebViewRuntime.for_runtime(
         tmp_path,
         frozen=True,
+        release_config=ReleaseRuntimeConfig(RuntimeMode.FIXED),
         drive_type=lambda _path: 3,
         windows_build=22631,
         system_directory=tmp_path / "Windows" / "System32",
@@ -60,6 +64,7 @@ def test_frozen_runtime_rejects_unc_and_non_fixed_drives(tmp_path: Path) -> None
     unc_runtime = WebViewRuntime.for_runtime(
         Path(r"\\server\share\GameShelf"),
         frozen=True,
+        release_config=ReleaseRuntimeConfig(RuntimeMode.FIXED),
         drive_type=lambda _path: 3,
         windows_build=22631,
         system_directory=tmp_path / "Windows" / "System32",
@@ -70,6 +75,7 @@ def test_frozen_runtime_rejects_unc_and_non_fixed_drives(tmp_path: Path) -> None
     removable_runtime = WebViewRuntime.for_runtime(
         local_runtime.parent,
         frozen=True,
+        release_config=ReleaseRuntimeConfig(RuntimeMode.FIXED),
         drive_type=lambda _path: 2,
         windows_build=22631,
         system_directory=tmp_path / "Windows" / "System32",
@@ -98,6 +104,7 @@ def test_windows_10_grants_runtime_permissions_once(tmp_path: Path) -> None:
     runtime = WebViewRuntime.for_runtime(
         runtime_dir.parent,
         frozen=True,
+        release_config=ReleaseRuntimeConfig(RuntimeMode.FIXED),
         drive_type=lambda _path: 3,
         windows_build=19045,
         runner=run,
@@ -136,6 +143,7 @@ def test_windows_11_does_not_change_runtime_permissions(tmp_path: Path) -> None:
     runtime = WebViewRuntime.for_runtime(
         runtime_dir.parent,
         frozen=True,
+        release_config=ReleaseRuntimeConfig(RuntimeMode.FIXED),
         drive_type=lambda _path: 3,
         windows_build=22631,
         runner=unexpected_run,
@@ -159,6 +167,7 @@ def test_windows_10_permission_failure_preserves_stderr(tmp_path: Path) -> None:
     runtime = WebViewRuntime.for_runtime(
         runtime_dir.parent,
         frozen=True,
+        release_config=ReleaseRuntimeConfig(RuntimeMode.FIXED),
         drive_type=lambda _path: 3,
         windows_build=19045,
         runner=deny,
@@ -177,6 +186,7 @@ def test_configure_sets_fixed_runtime_before_webview_creation(tmp_path: Path) ->
     runtime = WebViewRuntime.for_runtime(
         runtime_dir.parent,
         frozen=True,
+        release_config=ReleaseRuntimeConfig(RuntimeMode.FIXED),
         drive_type=lambda _path: 3,
         windows_build=22631,
         system_directory=tmp_path / "Windows" / "System32",
@@ -185,3 +195,51 @@ def test_configure_sets_fixed_runtime_before_webview_creation(tmp_path: Path) ->
     runtime.configure(webview)
 
     assert webview.settings["WEBVIEW2_RUNTIME_PATH"] == str(runtime_dir)
+
+
+def test_fixed_runtime_ensure_available_validates_bundled_path(
+    tmp_path: Path,
+) -> None:
+    runtime_dir = tmp_path / "GameShelf" / "runtime"
+    runtime_dir.mkdir(parents=True)
+    (runtime_dir / "msedgewebview2.exe").write_bytes(b"webview2")
+    runtime = WebViewRuntime.for_runtime(
+        runtime_dir.parent,
+        frozen=True,
+        release_config=ReleaseRuntimeConfig(RuntimeMode.FIXED),
+        drive_type=lambda _path: 3,
+        windows_build=22631,
+        system_directory=tmp_path / "Windows" / "System32",
+    )
+
+    assert runtime.ensure_available(allow_install=False) is None
+
+
+def test_evergreen_runtime_uses_system_and_never_sets_fixed_path(
+    tmp_path: Path,
+) -> None:
+    installer = EvergreenRuntimeInstaller(
+        detector=lambda: "151.0.4129.86",
+        prompt=lambda: pytest.fail("prompt must not run"),
+        runner=lambda _command: pytest.fail("installer must not run"),
+    )
+    config = ReleaseRuntimeConfig(
+        RuntimeMode.EVERGREEN,
+        tmp_path / "prerequisites" / "MicrosoftEdgeWebview2Setup.exe",
+        "a" * 64,
+    )
+    webview = SimpleNamespace(settings={"WEBVIEW2_RUNTIME_PATH": "stale"})
+    runtime = WebViewRuntime.for_runtime(
+        tmp_path,
+        frozen=True,
+        release_config=config,
+        evergreen_installer=installer,
+        drive_type=lambda _path: pytest.fail("drive type must not be inspected"),
+    )
+
+    assert runtime.ensure_available(allow_install=True) == "151.0.4129.86"
+    assert runtime.prepare_windows10_permissions() is False
+    runtime.configure(webview)
+
+    assert runtime.path is None
+    assert webview.settings["WEBVIEW2_RUNTIME_PATH"] is None

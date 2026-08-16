@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from gameshelf.platform.windows.startup_reporter import FrozenStartupReporter
+from gameshelf.platform.windows.startup_reporter import (
+    FrozenRuntimeInstallPrompt,
+    FrozenStartupReporter,
+)
 
 
 def test_reporter_writes_log_and_shows_one_native_error(tmp_path: Path) -> None:
@@ -38,3 +41,36 @@ def test_reporter_failure_does_not_raise_or_hide_startup_error(tmp_path: Path) -
     log_file = reporter.show(RuntimeError("original startup error"), blocked_logs)
 
     assert log_file is None
+
+
+def test_runtime_prompt_uses_yes_no_and_defaults_to_no() -> None:
+    calls: list[tuple[str, str, int]] = []
+    prompt = FrozenRuntimeInstallPrompt(
+        message_box=lambda message, title, flags: calls.append(
+            (message, title, flags)
+        )
+        or 6
+    )
+
+    assert prompt.confirm() is True
+    message, title, flags = calls[0]
+    assert "联网" in message
+    assert "Microsoft WebView2 Runtime" in message
+    assert title == "GameShelf 需要 WebView2"
+    assert flags & 0x00000004
+    assert flags & 0x00000100
+
+
+def test_runtime_prompt_returns_false_for_no() -> None:
+    prompt = FrozenRuntimeInstallPrompt(message_box=lambda _message, _title, _flags: 7)
+
+    assert prompt.confirm() is False
+
+
+def test_runtime_prompt_returns_false_when_native_dialog_fails() -> None:
+    def broken_message_box(_message: str, _title: str, _flags: int) -> int:
+        raise OSError("message box unavailable")
+
+    prompt = FrozenRuntimeInstallPrompt(message_box=broken_message_box)
+
+    assert prompt.confirm() is False

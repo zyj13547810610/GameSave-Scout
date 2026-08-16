@@ -19,6 +19,7 @@ class SmokeReport:
     app_version: str
     frozen: bool
     executable: Path
+    runtime_mode: str
     resource_root: Path | None
     webview_runtime: Path | None
     checks: dict[str, bool]
@@ -31,6 +32,7 @@ class SmokeReport:
             "appVersion": self.app_version,
             "frozen": self.frozen,
             "executable": str(self.executable),
+            "runtimeMode": self.runtime_mode,
             "resourceRoot": (
                 None if self.resource_root is None else str(self.resource_root)
             ),

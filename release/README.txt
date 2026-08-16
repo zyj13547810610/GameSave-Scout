@@ -1,5 +1,5 @@
-GameShelf 0.1.0 Windows x64 便携版
-================================
+GameShelf 0.1.0 Windows x64 完整离线便携版
+========================================
 
 运行方式
 --------
@@ -10,6 +10,8 @@ GameShelf 0.1.0 Windows x64 便携版
 
 本便携版不需要安装 Python、Node.js、Visual Studio 或系统 WebView2 Runtime。
 启动和本地管理功能可以离线使用。程序不支持从 UNC、网络共享或网络驱动器运行。
+如果希望减小下载和解压体积，可改用名称以 -lite 结尾的轻量联网版；轻量版使用
+Windows 中共享的 Evergreen WebView2 Runtime，不包含本目录的 Fixed Runtime。
 
 便携数据
 --------

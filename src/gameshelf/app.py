@@ -13,8 +13,10 @@ from typing import Any, Protocol
 from gameshelf import __version__
 from gameshelf.bootstrap.application import Application, build_application
 from gameshelf.bootstrap.paths import AppPaths
+from gameshelf.bootstrap.release_runtime import ReleaseRuntimeConfig, RuntimeMode
 from gameshelf.bootstrap.resources import ResourcePaths
 from gameshelf.bootstrap.smoke import SmokeReport, write_smoke_report
+from gameshelf.bootstrap.webview_bootstrapper import WebViewInstallCancelled
 from gameshelf.bootstrap.webview_runtime import WebViewRuntime
 from gameshelf.platform.windows.startup_reporter import FrozenStartupReporter
 
@@ -41,9 +43,11 @@ def main(
     is_frozen = bool(getattr(sys, "frozen", False))
     paths = AppPaths.from_root(args.app_root) if args.app_root else AppPaths.for_runtime()
     resources: ResourcePaths | None = None
+    release_config: ReleaseRuntimeConfig | None = None
     webview_runtime: WebViewRuntime | None = None
     application: Application | None = None
     checks: dict[str, bool] = {}
+    runtime_mode = RuntimeMode.SOURCE.value if not is_frozen else "unknown"
     try:
         resources = ResourcePaths.for_runtime()
         resource_status = resources.status()
@@ -65,9 +69,25 @@ def main(
         checks["desktopDependencies"] = False
         _validate_desktop_dependencies()
         checks["desktopDependencies"] = True
-        webview_runtime = WebViewRuntime.for_runtime(paths.app_root)
-        webview_runtime.validate()
+        release_config = ReleaseRuntimeConfig.for_runtime(paths.app_root)
+        runtime_mode = release_config.mode.value
+        webview_runtime = WebViewRuntime.for_runtime(
+            paths.app_root,
+            release_config=release_config,
+        )
+        if release_config.mode is RuntimeMode.EVERGREEN:
+            checks["evergreenRuntime"] = False
+            if args.smoke_test:
+                checks["webviewBootstrapper"] = False
+        checks["webviewRuntime"] = False
+        runtime_version = webview_runtime.ensure_available(
+            allow_install=not args.smoke_test
+        )
         checks["webviewRuntime"] = True
+        if release_config.mode is RuntimeMode.EVERGREEN:
+            checks["evergreenRuntime"] = runtime_version is not None
+            if args.smoke_test:
+                checks["webviewBootstrapper"] = True
         webview_runtime.prepare_windows10_permissions()
         checks["windows10Permissions"] = True
         application = build_application(paths, resources=resources)
@@ -81,6 +101,7 @@ def main(
                     _smoke_report(
                         ok=True,
                         frozen=is_frozen,
+                        runtime_mode=runtime_mode,
                         resources=resources,
                         webview_runtime=webview_runtime,
                         checks=checks,
@@ -91,6 +112,10 @@ def main(
                 print(f"GameShelf bootstrap OK (schema {schema_version})")
             return 0
         return _run_desktop(application, webview_runtime)
+    except WebViewInstallCancelled:
+        if application is not None:
+            application.close()
+        return 0
     except Exception as error:
         if application is not None:
             application.close()
@@ -99,6 +124,7 @@ def main(
                 _smoke_report(
                     ok=False,
                     frozen=is_frozen,
+                    runtime_mode=runtime_mode,
                     resources=resources,
                     webview_runtime=webview_runtime,
                     checks=checks,
@@ -118,6 +144,7 @@ def _smoke_report(
     *,
     ok: bool,
     frozen: bool,
+    runtime_mode: str,
     resources: ResourcePaths | None,
     webview_runtime: WebViewRuntime | None,
     checks: dict[str, bool],
@@ -129,6 +156,7 @@ def _smoke_report(
         app_version=__version__,
         frozen=frozen,
         executable=Path(sys.executable),
+        runtime_mode=runtime_mode,
         resource_root=None if resources is None else resources.root,
         webview_runtime=(
             None if webview_runtime is None else webview_runtime.path
