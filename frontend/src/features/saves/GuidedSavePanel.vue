@@ -134,6 +134,9 @@ function resetTerminal() {
     <div v-else-if="currentSession?.status === 'monitoring'" class="guided-session-state">
       <strong>正在监控《{{ currentSession.gameTitle }}》的文件变化</strong>
       <p>请在游戏中完成一次存档，然后回到这里继续。</p>
+      <p v-if="currentSession.processTrackingDegraded" class="warning-text" role="status">
+        无法可靠判断游戏是否仍在运行，监控将继续；请在完成存档后手动操作。
+      </p>
       <div class="compact-actions">
         <button data-test="guided-mark-saved" type="button" @click="store.markSaved(bridge)">我刚刚保存了</button>
         <button data-test="guided-stop-analyze" type="button" class="secondary" @click="store.stopAndAnalyze(bridge)">停止并分析</button>

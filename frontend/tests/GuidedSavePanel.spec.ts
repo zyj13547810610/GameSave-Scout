@@ -62,6 +62,23 @@ describe('GuidedSavePanel', () => {
     expect(wrapper.find('[data-test="guided-mark-saved"]').exists()).toBe(false)
   })
 
+  it('warns without stopping commands when process tracking degrades', async () => {
+    const store = useGuidedSaveStore()
+    store.session = fixtureGuidedSession({
+      status: 'monitoring',
+      processTrackingDegraded: true,
+    })
+    const wrapper = mount(GuidedSavePanel, {
+      props: { gameId: 'game-1', bridge: createMockBridge() },
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('无法可靠判断游戏是否仍在运行')
+    expect(wrapper.find('[data-test="guided-mark-saved"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="guided-stop-analyze"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="guided-cancel"]').exists()).toBe(true)
+  })
+
   it('keeps the entry visible but disabled while another game is active', async () => {
     const store = useGuidedSaveStore()
     store.session = fixtureGuidedSession({ gameId: 'other', gameTitle: 'Bob' })

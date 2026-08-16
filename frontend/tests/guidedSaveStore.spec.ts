@@ -86,6 +86,36 @@ describe('guidedSaveStore', () => {
     expect(vi.getTimerCount()).toBe(1)
   })
 
+  it('resynchronizes when a command loses the race with automatic completion', async () => {
+    const monitoring = fixtureSession()
+    const completed = fixtureSession({
+      status: 'completed',
+      finishedAt: '2026-08-15T00:01:00+00:00',
+    })
+    const discovery = fixtureDiscovery()
+    const bridge = createMockBridge({
+      async mark_guided_save_saved() {
+        return {
+          ok: false,
+          error: {
+            code: 'guided_session_not_active',
+            message: '引导式寻找会话不再活动。',
+          },
+        }
+      },
+      async guided_save_detection_status() { return ok(completed) },
+      async list_guided_save_discoveries() { return ok([discovery]) },
+    })
+    const store = useGuidedSaveStore()
+    store.session = monitoring
+
+    await store.markSaved(bridge)
+
+    expect(store.session?.status).toBe('completed')
+    expect(store.discoveries).toEqual([discovery])
+    expect(store.error).toBe('')
+  })
+
   it('loads the latest reviewable session only for the requested game', async () => {
     const completed = fixtureSession({ status: 'completed' })
     const latest = vi.fn(async () => ok(completed))

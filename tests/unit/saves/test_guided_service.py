@@ -4,6 +4,7 @@ import sqlite3
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from threading import Thread
 
 import pytest
 
@@ -257,6 +258,36 @@ def test_close_request_requires_explicit_resolution(guided_service: ServiceHarne
     assert guided_service.service.close_requested is False
     guided_service.service.cancel(session.id)
     assert guided_service.service.request_close() is True
+
+
+def test_cancel_and_exit_releases_lock_before_exit_callback(
+    guided_service: ServiceHarness,
+) -> None:
+    session = guided_service.start()
+    callback_observations: list[bool] = []
+    close_results: list[bool] = []
+    workers: list[Thread] = []
+
+    def exit_callback() -> None:
+        worker = Thread(
+            target=lambda: close_results.append(
+                guided_service.service.request_close()
+            )
+        )
+        workers.append(worker)
+        worker.start()
+        worker.join(0.1)
+        callback_observations.append(worker.is_alive())
+
+    guided_service.service.set_exit_callback(exit_callback)
+
+    guided_service.service.resolve_close("cancel_and_exit")
+    for worker in workers:
+        worker.join(1.0)
+
+    assert guided_service.repository.get_session(session.id).status == "cancelled"  # type: ignore[union-attr]
+    assert callback_observations == [False]
+    assert close_results == [True]
 
 
 def test_launch_failure_marks_session_failed_and_stops_watcher(

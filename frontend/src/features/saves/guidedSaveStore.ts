@@ -126,7 +126,13 @@ export const useGuidedSaveStore = defineStore('guided-save', {
     ) {
       this.error = ''
       const result = await pending
-      if (!result.ok) return this.fail(result.error.message)
+      if (!result.ok) {
+        if (result.error.code === 'guided_session_not_active' && this.session) {
+          await this.startPolling(bridge, this.session.id)
+          return
+        }
+        return this.fail(result.error.message)
+      }
       this.session = result.data
       if (activeStatuses.has(result.data.status)) {
         await this.startPolling(bridge, result.data.id)

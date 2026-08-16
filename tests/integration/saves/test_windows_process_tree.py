@@ -15,7 +15,7 @@ pytestmark = pytest.mark.skipif(os.name != "nt", reason="Windows process tree in
 def test_real_windows_tracker_waits_for_child_after_parent_exits() -> None:
     script = (
         "import subprocess,sys,time; "
-        "child=subprocess.Popen([sys.executable,'-c','import time; time.sleep(0.8)']); "
+        "child=subprocess.Popen([sys.executable,'-c','import time; time.sleep(5.5)']); "
         "print(child.pid, flush=True); time.sleep(0.3)"
     )
     parent = subprocess.Popen(
@@ -30,7 +30,7 @@ def test_real_windows_tracker_waits_for_child_after_parent_exits() -> None:
     try:
         assert parent.wait(timeout=3) == 0
         assert sink.exit_event.wait(0.1) is False
-        assert sink.exit_event.wait(3)
+        assert sink.exit_event.wait(7)
     finally:
         handle.stop()
         parent.stdout.close()

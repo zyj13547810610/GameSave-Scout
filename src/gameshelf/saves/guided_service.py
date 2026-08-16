@@ -312,6 +312,7 @@ class GuidedSaveSessionService:
             return False
 
     def resolve_close(self, resolution: CloseResolution) -> None:
+        exit_callback: Callable[[], None] | None = None
         with self._lock:
             runtime = self._active
             if resolution == "return":
@@ -319,17 +320,20 @@ class GuidedSaveSessionService:
                 return
             if runtime is None:
                 self._close_requested = False
-                self._exit_callback()
-                return
-            if resolution == "cancel_and_exit":
+                exit_callback = self._exit_callback
+            elif resolution == "cancel_and_exit":
                 self.cancel(runtime.session_id)
-                self._exit_callback()
-                return
-            if resolution == "analyze_and_exit":
+                exit_callback = self._exit_callback
+            elif resolution == "analyze_and_exit":
                 self._exit_after_analysis = True
                 self._begin_analysis(runtime.session_id)
                 return
-            raise GuidedSaveError("invalid_close_resolution", "未知的关闭处理方式。")
+            else:
+                raise GuidedSaveError(
+                    "invalid_close_resolution", "未知的关闭处理方式。"
+                )
+        if exit_callback is not None:
+            exit_callback()
 
     def close(self) -> None:
         with self._lock:

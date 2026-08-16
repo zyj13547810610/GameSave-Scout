@@ -8,11 +8,13 @@ from collections.abc import Callable, Sequence
 from ctypes import wintypes
 from dataclasses import dataclass, field
 from threading import Event, Lock, Thread
+from time import monotonic
 from typing import Any, Protocol, cast
 
 TH32CS_SNAPPROCESS = 0x00000002
 ERROR_NO_MORE_FILES = 18
 INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
+LAUNCH_GRACE_SECONDS = 5.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +36,7 @@ type ProcessSnapshotter = Callable[[], Sequence[ProcessRecord]]
 class _TrackingState:
     seen_pids: set[int] = field(default_factory=set)
     observed_any: bool = False
+    first_observed_at: float | None = None
     terminal: bool = False
 
 
@@ -66,11 +69,13 @@ class WindowsProcessTreeTracker:
         snapshotter: ProcessSnapshotter | None = None,
         *,
         poll_seconds: float = 1.0,
+        monotonic_clock: Callable[[], float] = monotonic,
     ) -> None:
         if poll_seconds < 0:
             raise ValueError("Process tree poll interval cannot be negative.")
         self._snapshotter = snapshotter or _ToolhelpSnapshotter()
         self._poll_seconds = poll_seconds
+        self._monotonic = monotonic_clock
         self._manual_states: dict[int, _TrackingState] = {}
         self._manual_lock = Lock()
 
@@ -122,10 +127,17 @@ class WindowsProcessTreeTracker:
         current = _current_tree(records, root_pid, state.seen_pids)
         if current:
             state.observed_any = True
+            if state.first_observed_at is None:
+                state.first_observed_at = self._monotonic()
             state.seen_pids.update(current)
             return
         state.terminal = True
-        if state.observed_any:
+        if (
+            state.first_observed_at is not None
+            and self._monotonic() - state.first_observed_at < LAUNCH_GRACE_SECONDS
+        ):
+            sink.on_tracking_degraded("tree_exited_during_launch_grace")
+        elif state.observed_any:
             sink.on_tree_exit()
         else:
             sink.on_tracking_degraded("root_missing_from_initial_snapshot")

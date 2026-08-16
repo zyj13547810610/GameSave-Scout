@@ -10,6 +10,7 @@ from gameshelf.platform.windows.process_tree import (
 
 
 def test_tracker_waits_until_seen_child_exits() -> None:
+    now = [100.0]
     snapshots = iter(
         [
             (ProcessRecord(10, 1), ProcessRecord(11, 10)),
@@ -18,10 +19,13 @@ def test_tracker_waits_until_seen_child_exits() -> None:
         ]
     )
     sink = RecordingProcessSink()
-    tracker = WindowsProcessTreeTracker(lambda: next(snapshots), poll_seconds=0)
+    tracker = WindowsProcessTreeTracker(
+        lambda: next(snapshots), poll_seconds=0, monotonic_clock=lambda: now[0]
+    )
 
     tracker.poll_once(10, sink)
     tracker.poll_once(10, sink)
+    now[0] = 105.0
     tracker.poll_once(10, sink)
 
     assert sink.exits == 1
@@ -29,6 +33,7 @@ def test_tracker_waits_until_seen_child_exits() -> None:
 
 
 def test_tracker_discovers_descendant_after_its_parent_has_exited() -> None:
+    now = [100.0]
     snapshots = iter(
         [
             (ProcessRecord(10, 1), ProcessRecord(11, 10)),
@@ -38,13 +43,34 @@ def test_tracker_discovers_descendant_after_its_parent_has_exited() -> None:
         ]
     )
     sink = RecordingProcessSink()
-    tracker = WindowsProcessTreeTracker(lambda: next(snapshots), poll_seconds=0)
+    tracker = WindowsProcessTreeTracker(
+        lambda: next(snapshots), poll_seconds=0, monotonic_clock=lambda: now[0]
+    )
 
-    for _ in range(4):
+    for _ in range(3):
         tracker.poll_once(10, sink)
+    now[0] = 106.0
+    tracker.poll_once(10, sink)
 
     assert sink.exits == 1
     assert sink.degraded == []
+
+
+def test_tracker_degrades_when_observed_tree_disappears_during_launch() -> None:
+    snapshots = iter(
+        [
+            (ProcessRecord(10, 1),),
+            (),
+        ]
+    )
+    sink = RecordingProcessSink()
+    tracker = WindowsProcessTreeTracker(lambda: next(snapshots), poll_seconds=0)
+
+    tracker.poll_once(10, sink)
+    tracker.poll_once(10, sink)
+
+    assert sink.exits == 0
+    assert sink.degraded == ["tree_exited_during_launch_grace"]
 
 
 def test_tracker_degrades_when_root_is_missing_from_first_successful_snapshot() -> None:
