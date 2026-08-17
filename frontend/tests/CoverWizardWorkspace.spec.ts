@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import CoverWizardWorkspace from '../src/features/covers/CoverWizardWorkspace.vue'
 import type { CoverCandidate, CoverWizardSettings } from '../src/api/contracts'
 import { createMockBridge, fixtureCoverWizard, fixtureGame, ok } from '../src/api/mockBridge'
+import '../src/features/library/library.css'
 
 const settings: CoverWizardSettings = {
   coverOnlineEnabled: false,
@@ -15,7 +16,7 @@ beforeEach(() => vi.restoreAllMocks())
 afterEach(() => document.documentElement.classList.remove('cover-wizard-open'))
 
 describe('CoverWizardWorkspace', () => {
-  it('locks the underlying page scroll and always clears the lock', async () => {
+  it('keeps fixed controls outside isolated queue and gallery scroll regions', async () => {
     const wrapper = mount(CoverWizardWorkspace, {
       props: {
         bridge: createMockBridge({ async start_cover_wizard() { return ok(snapshot()) } }),
@@ -26,9 +27,54 @@ describe('CoverWizardWorkspace', () => {
     })
     await flushPromises()
 
-    expect(document.documentElement.classList.contains('cover-wizard-open')).toBe(true)
+    const workspace = wrapper.get('[data-test="cover-wizard-workspace"]')
+    const queue = wrapper.get('[data-test="cover-queue-scroll"]')
+    const gallery = wrapper.get('[data-test="cover-gallery-scroll"]')
+    expect(getComputedStyle(workspace.element).overflowY).toBe('hidden')
+    expect(getComputedStyle(queue.element).overflowY).toBe('auto')
+    expect(getComputedStyle(gallery.element).overflowY).toBe('auto')
+    expect(wrapper.get('.cover-review-actions').element.parentElement).toBe(
+      wrapper.get('.cover-wizard-review').element,
+    )
+    expect(document.documentElement.classList.contains('cover-wizard-open')).toBe(false)
     wrapper.unmount()
     expect(document.documentElement.classList.contains('cover-wizard-open')).toBe(false)
+  })
+
+  it('returns the candidate gallery to the top after selecting another game', async () => {
+    const wizard = fixtureCoverWizard({
+      id: 'wizard-1',
+      currentGameId: 'game-1',
+      queue: [
+        { gameId: 'game-1', title: 'Alice', initialHasCover: false, status: 'ready', candidateCount: 1, error: null },
+        { gameId: 'game-2', title: 'Bob', initialHasCover: false, status: 'pending', candidateCount: 0, error: null },
+      ],
+    })
+    const bridge = createMockBridge({
+      async start_cover_wizard() { return ok(wizard) },
+      async list_cover_candidates() { return ok([]) },
+    })
+    const wrapper = mount(CoverWizardWorkspace, {
+      props: {
+        bridge,
+        games: [
+          fixtureGame({ id: 'game-1', title: 'Alice' }),
+          fixtureGame({ id: 'game-2', title: 'Bob' }),
+        ],
+        settings,
+      },
+      global: { plugins: [createPinia()] },
+    })
+    await flushPromises()
+    const gallery = wrapper.get('[data-test="cover-gallery-scroll"]').element
+    gallery.scrollTop = 200
+
+    await wrapper.findAll('.cover-queue-item')[1].trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('.cover-review-heading h2').text()).toBe('Bob')
+    expect(gallery.scrollTop).toBe(0)
+    wrapper.unmount()
   })
 
   it('renders queue and candidate gallery with accessible selection and actions', async () => {

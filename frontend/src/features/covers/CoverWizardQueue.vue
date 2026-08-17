@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { nextTick, onMounted, ref, watch } from 'vue'
 import type { CoverWizardQueueItem } from '../../api/contracts'
 
-defineProps<{
+const props = defineProps<{
   items: CoverWizardQueueItem[]
   selectedGameId: string | null
   includeExisting: boolean
@@ -14,6 +15,24 @@ defineEmits<{
 const statusLabels: Record<CoverWizardQueueItem['status'], string> = {
   pending: '待处理', ready: '已有候选', adopted: '已采用', skipped: '已跳过', failed: '失败',
 }
+
+const list = ref<HTMLElement | null>(null)
+
+async function revealSelected(gameId: string | null) {
+  if (!gameId) return
+  await nextTick()
+  const selected = Array.from(
+    list.value?.querySelectorAll<HTMLElement>('[data-game-id]') ?? [],
+  ).find((item) => item.dataset.gameId === gameId)
+  selected?.scrollIntoView?.({ block: 'nearest' })
+}
+
+onMounted(() => void revealSelected(props.selectedGameId))
+watch(
+  () => props.selectedGameId,
+  (gameId) => void revealSelected(gameId),
+  { flush: 'post' },
+)
 </script>
 
 <template>
@@ -36,10 +55,17 @@ const statusLabels: Record<CoverWizardQueueItem['status'], string> = {
         {{ item.title }} · {{ statusLabels[item.status] }}
       </option>
     </select>
-    <div class="cover-queue-list">
+    <div
+      ref="list"
+      class="cover-queue-list"
+      data-test="cover-queue-scroll"
+      tabindex="0"
+      aria-label="封面处理游戏队列"
+    >
       <button
         v-for="item in items"
         :key="item.gameId"
+        :data-game-id="item.gameId"
         type="button"
         class="cover-queue-item"
         :class="{ selected: selectedGameId === item.gameId }"

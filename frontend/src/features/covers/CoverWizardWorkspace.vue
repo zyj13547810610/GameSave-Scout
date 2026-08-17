@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { CoverUpload, CoverWizardSettings, Game, GameShelfBridge } from '../../api/contracts'
 import { readClipboardPng } from './coverClipboard'
 import CoverCandidateGallery from './CoverCandidateGallery.vue'
@@ -21,6 +21,8 @@ const localSettings = ref({ ...props.settings })
 const settingsError = ref('')
 const settingsBusy = ref(false)
 const opening = ref(true)
+type GalleryHandle = { scrollToTop: () => void }
+const gallery = ref<GalleryHandle | null>(null)
 
 const currentGame = computed(() => (
   props.games.find((game) => game.id === store.selectedGameId) ?? null
@@ -28,16 +30,23 @@ const currentGame = computed(() => (
 const currentTitle = computed(() => currentGame.value?.title ?? '当前游戏')
 
 onMounted(async () => {
-  document.documentElement.classList.add('cover-wizard-open')
   await store.open(props.bridge)
   opening.value = false
   await nextTick()
   root.value?.querySelector<HTMLElement>('[data-autofocus]')?.focus()
 })
 onBeforeUnmount(() => {
-  document.documentElement.classList.remove('cover-wizard-open')
   store.clearPolling()
 })
+
+watch(
+  () => store.selectedGameId,
+  async () => {
+    await nextTick()
+    gallery.value?.scrollToTop()
+  },
+  { flush: 'post' },
+)
 
 async function selectGame(gameId: string) {
   await store.selectGame(props.bridge, gameId)
@@ -224,6 +233,7 @@ function onKeydown(event: KeyboardEvent) {
           @files="addFiles"
         />
         <CoverCandidateGallery
+          ref="gallery"
           :candidates="store.candidates"
           :selected-id="store.selectedCandidateId"
           :game-title="currentTitle"
