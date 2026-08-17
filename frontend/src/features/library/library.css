@@ -147,7 +147,7 @@
 .cover-wizard-queue { display: grid; grid-template-rows: auto minmax(0, 1fr); padding: .8rem; }
 .cover-existing-toggle { display: flex; align-items: center; gap: .5rem; margin: 0 0 .75rem; }
 .cover-existing-toggle input { width: auto; }
-.cover-queue-list { display: grid; min-height: 0; gap: .4rem; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-gutter: stable; }
+.cover-queue-list { display: grid; min-height: 0; grid-auto-rows: max-content; gap: .4rem; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-gutter: stable; }
 .cover-queue-item { display: grid; gap: .2rem; width: 100%; min-height: 0; border-color: transparent; padding: .65rem; background: transparent; text-align: left; }
 .cover-queue-item.selected { border-color: #7257d8; background: #292038; }
 .cover-queue-item small { color: #918b9d; }
