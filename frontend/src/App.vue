@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { createPinia, getActivePinia, storeToRefs } from 'pinia'
-import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { bridgeKey, createBridge } from './api/bridge'
 import type { CoverWizardSettings, Game, RemovableGameStatus, ScanRoot } from './api/contracts'
 import CoverWizardWorkspace from './features/covers/CoverWizardWorkspace.vue'
@@ -45,7 +45,7 @@ const batchError = ref('')
 const batchNotice = ref('')
 const showCoverWizard = ref(false)
 const coverWizardEntry = ref<HTMLButtonElement | null>(null)
-const coverWizardScrollY = ref(0)
+const gameContentScroll = ref<HTMLElement | null>(null)
 const coverWizardSettings = ref<CoverWizardSettings>({
   coverOnlineEnabled: false,
   coverVndbCandidateLimit: 5,
@@ -63,6 +63,15 @@ const selectedBatchGames = computed(() => removableGames.value.filter((game) => 
 const selectedInstalledCount = computed(() => selectedBatchGames.value.filter((game) => game.status === 'installed').length)
 const selectedMissingCount = computed(() => selectedBatchGames.value.filter((game) => game.status === 'missing').length)
 const visibleRemovableGames = computed(() => filteredGames.value.filter(isRemovableGame))
+
+function resetGameContentScroll() {
+  if (gameContentScroll.value) gameContentScroll.value.scrollTop = 0
+}
+
+watch(
+  [() => store.query, () => store.statusFilter, () => store.engineFilter],
+  resetGameContentScroll,
+)
 
 applyUiScale(uiScale.value, document.documentElement)
 
@@ -193,7 +202,6 @@ onBeforeUnmount(() => guidedStore.clearPolling())
 function openCoverWizard() {
   exitBatchMode()
   selectedGameId.value = null
-  coverWizardScrollY.value = window.scrollY
   showCoverWizard.value = true
 }
 
@@ -202,7 +210,6 @@ async function closeCoverWizard() {
   const latest = await bridge.bootstrap()
   if (latest.ok) coverWizardSettings.value = latest.data.coverWizardSettings
   await nextTick()
-  window.scrollTo({ top: coverWizardScrollY.value })
   coverWizardEntry.value?.focus()
 }
 
@@ -234,45 +241,49 @@ function restoreGuidedSave(gameId: string) {
       <div class="library-layout" :inert="showCoverWizard" :aria-hidden="showCoverWizard ? 'true' : undefined">
         <ScanRootList :bridge="bridge" :roots="roots" :scan-tasks="scanTasks" :task-snapshots="taskSnapshots" @scan="scan" @cancel="(id) => store.cancelScan(bridge, id)" @toggle="(root, enabled) => store.updateRoot(bridge, root, enabled)" @edit="editingRoot = $event" @remove="(id) => store.removeRoot(bridge, id)" @remap="(id, path) => store.remapRoot(bridge, id, path)" />
         <section class="library-content">
-          <div class="content-heading">
-            <h2>我的游戏 <span>{{ games.length }}</span></h2>
-            <div class="compact-actions">
-              <button v-if="!batchMode && removableGames.length" data-test="enter-batch-mode" class="secondary" type="button" @click="enterBatchMode">批量管理</button>
-              <button ref="coverWizardEntry" data-test="enter-cover-wizard" class="secondary" type="button" @click="openCoverWizard">批量封面</button>
+          <div class="library-fixed-controls" data-test="library-fixed-controls">
+            <div class="content-heading">
+              <h2>我的游戏 <span>{{ games.length }}</span></h2>
+              <div class="compact-actions">
+                <button v-if="!batchMode && removableGames.length" data-test="enter-batch-mode" class="secondary" type="button" @click="enterBatchMode">批量管理</button>
+                <button ref="coverWizardEntry" data-test="enter-cover-wizard" class="secondary" type="button" @click="openCoverWizard">批量封面</button>
+              </div>
             </div>
-          </div>
-          <div v-if="batchNotice" data-test="batch-result" class="batch-result" role="status">{{ batchNotice }}</div>
-          <BatchManagementBar
-            v-if="batchMode"
-            :selected-count="selectedBatchGames.length"
-            :installed-count="selectedInstalledCount"
-            :missing-count="selectedMissingCount"
-            :busy="batchBusy"
-            :can-select-visible="visibleRemovableGames.length > 0"
-            @select-visible="selectVisibleGames"
-            @clear="clearBatchSelection"
-            @exit="exitBatchMode"
-            @remove="removeSelectedGames"
-          />
-          <p v-if="batchError" class="inline-error" role="alert">{{ batchError }}</p>
-          <MoveSuggestionPanel :suggestions="moveSuggestions" :games="games" @confirm="store.confirmMove(bridge, $event)" />
-          <div v-if="games.length === 0" class="empty-state compact"><h2 id="empty-title">还没有添加游戏目录</h2><p>添加一个或多个本地目录后，游戏会显示在这里。</p><button type="button" @click="showAddRoot = true">添加第一个目录</button></div>
-          <template v-else>
-            <LibraryToolbar v-model:query="store.query" v-model:status="store.statusFilter" v-model:engine="store.engineFilter" :engines="engines" />
-            <div v-if="filteredGames.length === 0" class="empty-state compact"><h2>没有符合筛选条件的游戏</h2><p>请调整搜索词或筛选条件。</p></div>
-            <GameGrid
-              v-else
-              :games="filteredGames"
-              :bridge="bridge"
-              :batch-mode="batchMode"
-              :selected-game-ids="selectedGameIds"
-              :selected-game-id="selectedGameId"
-              @update:selected-game-id="selectedGameId = $event"
-              @toggle-selection="toggleBatchGame"
-              @updated="store.updateGame"
-              @removed="gameRemoved"
+            <div v-if="batchNotice" data-test="batch-result" class="batch-result" role="status">{{ batchNotice }}</div>
+            <BatchManagementBar
+              v-if="batchMode"
+              :selected-count="selectedBatchGames.length"
+              :installed-count="selectedInstalledCount"
+              :missing-count="selectedMissingCount"
+              :busy="batchBusy"
+              :can-select-visible="visibleRemovableGames.length > 0"
+              @select-visible="selectVisibleGames"
+              @clear="clearBatchSelection"
+              @exit="exitBatchMode"
+              @remove="removeSelectedGames"
             />
-          </template>
+            <p v-if="batchError" class="inline-error" role="alert">{{ batchError }}</p>
+            <LibraryToolbar v-if="games.length" v-model:query="store.query" v-model:status="store.statusFilter" v-model:engine="store.engineFilter" :engines="engines" />
+          </div>
+          <div ref="gameContentScroll" class="library-scroll-region" data-test="library-scroll-region" tabindex="0" aria-label="游戏列表">
+            <MoveSuggestionPanel :suggestions="moveSuggestions" :games="games" @confirm="store.confirmMove(bridge, $event)" />
+            <div v-if="games.length === 0" class="empty-state compact"><h2 id="empty-title">还没有添加游戏目录</h2><p>添加一个或多个本地目录后，游戏会显示在这里。</p><button type="button" @click="showAddRoot = true">添加第一个目录</button></div>
+            <template v-else>
+              <div v-if="filteredGames.length === 0" class="empty-state compact"><h2>没有符合筛选条件的游戏</h2><p>请调整搜索词或筛选条件。</p></div>
+              <GameGrid
+                v-else
+                :games="filteredGames"
+                :bridge="bridge"
+                :batch-mode="batchMode"
+                :selected-game-ids="selectedGameIds"
+                :selected-game-id="selectedGameId"
+                @update:selected-game-id="selectedGameId = $event"
+                @toggle-selection="toggleBatchGame"
+                @updated="store.updateGame"
+                @removed="gameRemoved"
+              />
+            </template>
+          </div>
         </section>
       </div>
       <div v-if="showAddRoot" class="dialog-backdrop" @click.self="showAddRoot = false"><ScanRootDialog :bridge="bridge" @saved="rootSaved" @close="showAddRoot = false" /></div>

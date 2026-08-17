@@ -9,6 +9,7 @@ enableAutoUnmount(afterEach)
 
 afterEach(() => {
   document.documentElement.classList.remove('detail-open')
+  document.body.style.paddingRight = ''
   document.body.innerHTML = ''
 })
 
@@ -133,15 +134,18 @@ describe('GameDetailDrawer', () => {
     expect(wrapper.emitted('close')).toHaveLength(1)
   })
 
-  it('locks page scrolling and always cleans the lock', () => {
+  it('does not mutate page scrollbar compensation', () => {
+    document.body.style.paddingRight = '7px'
     const wrapper = mount(GameDetailDrawer, {
       props: { game: fixtureGame(), bridge: createMockBridge() },
       attachTo: document.body,
     })
 
-    expect(document.documentElement.classList.contains('detail-open')).toBe(true)
-    wrapper.unmount()
     expect(document.documentElement.classList.contains('detail-open')).toBe(false)
+    expect(document.body.style.paddingRight).toBe('7px')
+    wrapper.unmount()
+    expect(document.body.style.paddingRight).toBe('7px')
+    document.body.style.paddingRight = ''
   })
 
   it('closes on Escape from anywhere in the window', () => {

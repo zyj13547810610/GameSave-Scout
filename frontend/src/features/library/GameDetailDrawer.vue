@@ -13,7 +13,6 @@ const quickBusy = ref(false)
 const quickMessage = ref('')
 const removalBusy = ref(false)
 const removalError = ref('')
-let previousBodyPaddingRight = ''
 
 const statusLabels: Record<Game['status'], string> = {
   installed: '已安装',
@@ -98,19 +97,12 @@ async function removeGameRecord() {
 }
 
 onMounted(async () => {
-  const scrollbarWidth = Math.max(0, window.innerWidth - document.documentElement.clientWidth)
-  const currentPadding = Number.parseFloat(window.getComputedStyle(document.body).paddingRight) || 0
-  previousBodyPaddingRight = document.body.style.paddingRight
-  if (scrollbarWidth > 0) document.body.style.paddingRight = `${currentPadding + scrollbarWidth}px`
-  document.documentElement.classList.add('detail-open')
   window.addEventListener('keydown', onKeydown)
   await nextTick()
   drawer.value?.focus()
 })
 
 onBeforeUnmount(() => {
-  document.documentElement.classList.remove('detail-open')
-  document.body.style.paddingRight = previousBodyPaddingRight
   window.removeEventListener('keydown', onKeydown)
 })
 </script>

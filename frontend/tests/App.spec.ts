@@ -48,6 +48,29 @@ describe('App', () => {
     wrapper.unmount()
   })
 
+  it('keeps library controls outside the independently scrollable game content', async () => {
+    const bridge = createMockBridge({
+      async list_games() { return ok([fixtureGame()]) },
+    })
+    const wrapper = mount(App, {
+      attachTo: document.body,
+      global: {
+        plugins: [createPinia()],
+        provide: { [bridgeKey as symbol]: bridge },
+      },
+    })
+    await flushPromises()
+
+    const controls = wrapper.get('[data-test="library-fixed-controls"]')
+    const scrollRegion = wrapper.get('[data-test="library-scroll-region"]')
+    expect(controls.find('.content-heading').exists()).toBe(true)
+    expect(controls.find('.library-toolbar').exists()).toBe(true)
+    expect(scrollRegion.find('[data-test="game-grid"]').exists()).toBe(true)
+    expect(getComputedStyle(scrollRegion.element).overflowY).toBe('auto')
+    expect(getComputedStyle(wrapper.get('.app-shell').element).overflow).toBe('hidden')
+    wrapper.unmount()
+  })
+
   it('opens the in-app cover workspace while preserving library state', async () => {
     const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined)
     const bridge = createMockBridge({
@@ -73,7 +96,11 @@ describe('App', () => {
     await flushPromises()
     await wrapper.get('input[aria-label="搜索游戏"]').setValue('Alice')
     const layout = wrapper.get('.library-layout').element
+    const gameScroll = wrapper.get('[data-test="library-scroll-region"]').element
+    const rootScroll = wrapper.get('[data-test="root-scroll-region"]').element
     const entry = wrapper.get('[data-test="enter-cover-wizard"]')
+    gameScroll.scrollTop = 240
+    rootScroll.scrollTop = 120
 
     await entry.trigger('click')
     await flushPromises()
@@ -86,8 +113,31 @@ describe('App', () => {
     await flushPromises()
     expect(wrapper.find('[data-test="cover-wizard-workspace"]').exists()).toBe(false)
     expect((wrapper.get('input[aria-label="搜索游戏"]').element as HTMLInputElement).value).toBe('Alice')
+    expect(gameScroll.scrollTop).toBe(240)
+    expect(rootScroll.scrollTop).toBe(120)
     expect(document.activeElement).toBe(entry.element)
-    expect(scrollTo).toHaveBeenCalled()
+    expect(scrollTo).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('returns the game content to the top when filters change', async () => {
+    const bridge = createMockBridge({
+      async list_games() { return ok([fixtureGame()]) },
+    })
+    const wrapper = mount(App, {
+      global: {
+        plugins: [createPinia()],
+        provide: { [bridgeKey as symbol]: bridge },
+      },
+    })
+    await flushPromises()
+    const scrollRegion = wrapper.get('[data-test="library-scroll-region"]').element
+    scrollRegion.scrollTop = 240
+
+    await wrapper.get('input[aria-label="搜索游戏"]').setValue('Alice')
+    await flushPromises()
+
+    expect(scrollRegion.scrollTop).toBe(0)
     wrapper.unmount()
   })
 

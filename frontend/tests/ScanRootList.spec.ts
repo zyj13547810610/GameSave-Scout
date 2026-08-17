@@ -2,8 +2,27 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import { createMockBridge, fixtureRoot } from '../src/api/mockBridge'
 import ScanRootList from '../src/features/scan-roots/ScanRootList.vue'
+import '../src/styles/base.css'
 
 describe('ScanRootList', () => {
+  it('keeps the title outside one scroll region containing every root card', () => {
+    const wrapper = mount(ScanRootList, {
+      attachTo: document.body,
+      props: {
+        bridge: createMockBridge(),
+        roots: [fixtureRoot()],
+        scanTasks: {},
+        taskSnapshots: {},
+      },
+    })
+
+    const region = wrapper.get('[data-test="root-scroll-region"]')
+    expect(wrapper.get('.root-panel > h2').text()).toBe('游戏目录')
+    expect(region.find('.root-item').exists()).toBe(true)
+    expect(getComputedStyle(region.element).overflowY).toBe('auto')
+    wrapper.unmount()
+  })
+
   it('opens settings for the selected root', async () => {
     const root = fixtureRoot()
     const wrapper = mount(ScanRootList, {
