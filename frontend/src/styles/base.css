@@ -20,7 +20,9 @@ body {
 }
 
 html.detail-open,
-html.detail-open body {
+html.detail-open body,
+html.cover-wizard-open,
+html.cover-wizard-open body {
   overflow: hidden;
 }
 

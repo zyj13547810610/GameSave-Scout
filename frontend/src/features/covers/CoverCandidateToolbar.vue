@@ -1,12 +1,24 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { CoverWizardSettings, Game, TaskSnapshot } from '../../api/contracts'
 
-defineProps<{
+const props = defineProps<{
   game: Game | null
   settings: CoverWizardSettings
   sourceActive: boolean
   task: TaskSnapshot | null
 }>()
+
+const displayedCompleted = computed(() => {
+  const task = props.task
+  const total = task?.progress.total
+  if (!task || total === null || total === undefined) return 0
+  if (task.status === 'completed') return total
+  return Math.min(Math.max(task.progress.completed, 0), total)
+})
+
+const progressMax = computed(() => Math.max(props.task?.progress.total ?? 1, 1))
+
 defineEmits<{
   vndbCurrent: []
   vndbAll: []
@@ -37,9 +49,23 @@ defineEmits<{
       </label>
     </div>
     <p v-if="!settings.coverOnlineEnabled" class="cover-privacy-note">VNDB 默认关闭；开启后只发送游戏标题，不发送安装路径或本地文件。</p>
-    <p v-if="task" class="cover-task-progress" role="status">
-      {{ task.message || '正在收集候选' }}
-      <span v-if="task.progress.total !== null">{{ task.progress.completed }}/{{ task.progress.total }}</span>
-    </p>
+    <div
+      v-if="task"
+      data-test="cover-task-progress"
+      class="cover-task-panel"
+      :class="`status-${task.status}`"
+    >
+      <p class="cover-task-progress" role="status" aria-live="polite">
+        <span>{{ task.message || '正在收集候选…' }}</span>
+        <strong v-if="task.progress.total !== null">
+          {{ displayedCompleted }}/{{ task.progress.total }}
+        </strong>
+      </p>
+      <progress
+        aria-label="候选收集进度"
+        :max="progressMax"
+        :value="task.progress.total === null ? undefined : displayedCompleted"
+      />
+    </div>
   </section>
 </template>

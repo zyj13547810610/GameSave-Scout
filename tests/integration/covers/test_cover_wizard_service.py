@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from io import BytesIO
 from pathlib import Path
 from threading import Event, Thread
@@ -35,6 +35,24 @@ class _Progress:
         return None
 
 
+@dataclass
+class _RecordingProgress:
+    reports: list[tuple[int, int | None, str, object]] = field(default_factory=list)
+
+    def report(
+        self,
+        completed: int,
+        total: int | None,
+        message: str,
+        *,
+        details: object = None,
+    ) -> None:
+        self.reports.append((completed, total, message, details))
+
+    def raise_if_cancelled(self) -> None:
+        return None
+
+
 class _LocalDiscovery:
     def __init__(self) -> None:
         self.shallow: dict[str, LocalDiscoverySummary] = {}
@@ -55,9 +73,15 @@ class _Vndb:
         self.failure: Exception | None = None
 
     def search(self, title, limit, root, game_id, context):
-        del title, limit, root, context
+        del title, limit, root
         if self.failure is not None:
             raise self.failure
+        context.report(
+            1,
+            5,
+            "正在获取 VNDB 封面：内部候选",
+            details={"gameId": game_id, "vndbId": "v-test"},
+        )
         return self.candidates.get(game_id, ())
 
 
@@ -312,6 +336,28 @@ def test_vndb_cancellation_propagates_instead_of_becoming_game_failure(
         )
 
     assert service.snapshot(session.id).source_operation_active is False
+
+
+def test_vndb_batch_progress_stays_game_based(harness: _Harness) -> None:
+    service = harness.service()
+    session = service.start()
+    progress = _RecordingProgress()
+
+    service.collect_vndb(
+        session.id,
+        [harness.alice_id, harness.save_only_id],
+        5,
+        progress,
+    )
+
+    assert {total for _, total, _, _ in progress.reports} == {2}
+    completed_values = [completed for completed, _, _, _ in progress.reports]
+    assert completed_values == sorted(completed_values)
+    assert progress.reports[-1][:2] == (2, 2)
+    assert any(
+        "正在搜索 1/2：Alice" in message
+        for _, _, message, _ in progress.reports
+    )
 
 
 def test_busy_close_and_stale_cleanup_are_bounded(

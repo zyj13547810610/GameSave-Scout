@@ -28,12 +28,16 @@ const currentGame = computed(() => (
 const currentTitle = computed(() => currentGame.value?.title ?? '当前游戏')
 
 onMounted(async () => {
+  document.documentElement.classList.add('cover-wizard-open')
   await store.open(props.bridge)
   opening.value = false
   await nextTick()
   root.value?.querySelector<HTMLElement>('[data-autofocus]')?.focus()
 })
-onBeforeUnmount(() => store.clearPolling())
+onBeforeUnmount(() => {
+  document.documentElement.classList.remove('cover-wizard-open')
+  store.clearPolling()
+})
 
 async function selectGame(gameId: string) {
   await store.selectGame(props.bridge, gameId)

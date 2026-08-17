@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { GameShelfBridge } from '../src/api/contracts'
 import { createMockBridge, fixtureGame, ok } from '../src/api/mockBridge'
 import GameDetailDrawer from '../src/features/library/GameDetailDrawer.vue'
+import '../src/features/library/library.css'
 
 enableAutoUnmount(afterEach)
 
@@ -22,6 +23,26 @@ describe('GameDetailDrawer', () => {
     })
 
     expect(wrapper.get('[data-test="detail-cover"]').attributes('src')).toBe('/cover/original')
+  })
+
+  it('keeps every cover aspect ratio inside the bounded overview frame', () => {
+    const wrapper = mount(GameDetailDrawer, {
+      props: {
+        game: fixtureGame({ coverOriginalUrl: '/cover/portrait' }),
+        bridge: createMockBridge(),
+      },
+      attachTo: document.body,
+    })
+
+    const frameStyle = getComputedStyle(wrapper.get('.detail-cover-frame').element)
+    const imageStyle = getComputedStyle(wrapper.get('[data-test="detail-cover"]').element)
+
+    expect(frameStyle.overflow).toBe('hidden')
+    expect(imageStyle.width).toBe('auto')
+    expect(imageStyle.height).toBe('auto')
+    expect(imageStyle.maxWidth).toBe('100%')
+    expect(imageStyle.maxHeight).toBe('100%')
+    expect(frameStyle.maxHeight).toBe('22.5rem')
   })
 
   it('orders detail sections for common tasks and restores their default state', () => {

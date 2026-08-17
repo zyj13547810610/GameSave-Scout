@@ -1,6 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import CoverWizardWorkspace from '../src/features/covers/CoverWizardWorkspace.vue'
 import type { CoverCandidate, CoverWizardSettings } from '../src/api/contracts'
 import { createMockBridge, fixtureCoverWizard, fixtureGame, ok } from '../src/api/mockBridge'
@@ -12,8 +12,25 @@ const settings: CoverWizardSettings = {
 }
 
 beforeEach(() => vi.restoreAllMocks())
+afterEach(() => document.documentElement.classList.remove('cover-wizard-open'))
 
 describe('CoverWizardWorkspace', () => {
+  it('locks the underlying page scroll and always clears the lock', async () => {
+    const wrapper = mount(CoverWizardWorkspace, {
+      props: {
+        bridge: createMockBridge({ async start_cover_wizard() { return ok(snapshot()) } }),
+        games: [fixtureGame()],
+        settings,
+      },
+      global: { plugins: [createPinia()] },
+    })
+    await flushPromises()
+
+    expect(document.documentElement.classList.contains('cover-wizard-open')).toBe(true)
+    wrapper.unmount()
+    expect(document.documentElement.classList.contains('cover-wizard-open')).toBe(false)
+  })
+
   it('renders queue and candidate gallery with accessible selection and actions', async () => {
     const game = fixtureGame({ id: 'game-1', title: 'Alice' })
     const cover = candidate()

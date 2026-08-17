@@ -19,6 +19,7 @@ from gameshelf.covers.candidate_images import stage_candidate_bytes
 from gameshelf.covers.candidates import (
     CoverCandidate,
     CoverProgress,
+    CoverProgressDetail,
     CoverWizardQueueItem,
     CoverWizardQueueStatus,
     CoverWizardSnapshot,
@@ -91,6 +92,41 @@ class _Vndb(Protocol):
         game_id: str,
         context: CoverProgress,
     ) -> tuple[CoverCandidate, ...]: ...
+
+
+@dataclass(frozen=True)
+class _VndbBatchProgress:
+    parent: CoverProgress
+    completed_games: int
+    total_games: int
+    current_index: int
+    game_id: str
+    game_title: str
+
+    def report(
+        self,
+        completed: int,
+        total: int | None,
+        message: str,
+        *,
+        details: Mapping[str, CoverProgressDetail] | None = None,
+    ) -> None:
+        del completed, total
+        merged: dict[str, CoverProgressDetail] = dict(details or {})
+        merged["gameId"] = self.game_id
+        merged["currentIndex"] = self.current_index
+        self.parent.report(
+            self.completed_games,
+            self.total_games,
+            (
+                f"正在搜索 {self.current_index}/{self.total_games}："
+                f"{self.game_title} · {message}"
+            ),
+            details=merged,
+        )
+
+    def raise_if_cancelled(self) -> None:
+        self.parent.raise_if_cancelled()
 
 
 @dataclass
@@ -286,18 +322,34 @@ class CoverWizardService:
     ) -> CoverWizardSnapshot:
         session = self._begin_source(session_id)
         try:
+            total_games = len(game_ids)
             for index, game_id in enumerate(game_ids, start=1):
                 context.raise_if_cancelled()
                 game = self._require_game(game_id)
                 with self._lock:
                     self._require_item(session, game_id)
+                batch_progress = _VndbBatchProgress(
+                    context,
+                    index - 1,
+                    total_games,
+                    index,
+                    game.id,
+                    game.title,
+                )
+                batch_progress.report(0, None, "正在查询 VNDB")
                 try:
                     candidates = self._vndb.search(
-                        game.title, limit, session.root, game_id, context
+                        game.title, limit, session.root, game_id, batch_progress
                     )
                 except VndbError as error:
                     with self._lock:
                         self._mark_failed_if_active(session_id, game_id, str(error))
+                    context.report(
+                        index,
+                        total_games,
+                        f"{game.title} 的 VNDB 搜索失败，继续下一个",
+                        details={"gameId": game_id},
+                    )
                     continue
                 with self._lock:
                     self._merge(
@@ -305,7 +357,7 @@ class CoverWizardService:
                     )
                 context.report(
                     index,
-                    len(game_ids),
+                    total_games,
                     f"已完成 {game.title} 的 VNDB 搜索",
                     details={"gameId": game_id},
                 )

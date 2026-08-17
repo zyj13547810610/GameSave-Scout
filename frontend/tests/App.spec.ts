@@ -13,6 +13,23 @@ beforeEach(() => {
 })
 
 describe('App', () => {
+  it('keeps the batch entry heading separated from the filters below', async () => {
+    const bridge = createMockBridge({
+      async list_games() { return ok([fixtureGame()]) },
+    })
+    const wrapper = mount(App, {
+      attachTo: document.body,
+      global: {
+        plugins: [createPinia()],
+        provide: { [bridgeKey as symbol]: bridge },
+      },
+    })
+    await flushPromises()
+
+    expect(getComputedStyle(wrapper.get('.content-heading').element).marginBottom).toBe('1rem')
+    wrapper.unmount()
+  })
+
   it('opens the in-app cover workspace while preserving library state', async () => {
     const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined)
     const bridge = createMockBridge({
