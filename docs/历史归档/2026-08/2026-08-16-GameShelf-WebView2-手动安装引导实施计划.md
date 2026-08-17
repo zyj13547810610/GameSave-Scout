@@ -1,5 +1,7 @@
 # GameShelf WebView2 手动安装引导实施计划
 
+> 实施状态：已完成。轻量版已改为验证 Bootstrapper 后打开安装目录并正常退出，双版本产物重建、Windows Sandbox 手动安装闭环和关键故障路径均已验证。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. 本计划在当前会话内顺序执行，不使用子代理或额外 worktree。
 
 **Goal:** 将轻量联网版从“GameShelf 静默运行并同步等待 WebView2 Bootstrapper”改为“验证安装器后打开其所在文件夹并正常退出，由用户手动安装并重新启动 GameShelf”。
@@ -51,7 +53,7 @@
 - Consumes: `ReleaseRuntimeConfig.bootstrapper_path`、`ReleaseRuntimeConfig.bootstrapper_sha256`、`detect_evergreen_version()`、`FrozenRuntimeInstallPrompt.confirm()`。
 - Produces: `EvergreenRuntimeGuide.ensure_available(config: ReleaseRuntimeConfig, *, allow_manual_guide: bool) -> str`；`WebViewManualInstallRequired` 表示 Explorer 已成功打开；`WebViewInstallCancelled` 表示用户拒绝；`_open_bootstrapper_location(path: Path) -> None` 只打开 Explorer。
 
-- [ ] **Step 1: 写成功打开安装位置和验证顺序的失败测试**
+- [x] **Step 1: 写成功打开安装位置和验证顺序的失败测试**
 
 在 `tests/unit/bootstrap/test_webview_bootstrapper.py` 用下面的行为替换旧的“安装并重检成功”测试：
 
@@ -90,7 +92,7 @@ def test_invalid_bootstrapper_is_rejected_before_prompt(tmp_path: Path) -> None:
         guide.ensure_available(config, allow_manual_guide=True)
 ```
 
-- [ ] **Step 2: 运行新增测试并确认接口缺失**
+- [x] **Step 2: 运行新增测试并确认接口缺失**
 
 Run:
 
@@ -101,7 +103,7 @@ Run:
 
 Expected: FAIL，错误指向 `EvergreenRuntimeGuide`、`WebViewManualInstallRequired` 或 `allow_manual_guide` 尚不存在。
 
-- [ ] **Step 3: 定义手动引导并删除安装器状态机**
+- [x] **Step 3: 定义手动引导并删除安装器状态机**
 
 在 `src/gameshelf/bootstrap/webview_bootstrapper.py` 删除 `time`、`Sequence`、`CompletedProcess`、`CommandRunner`、`Clock`、`Sleeper`、`_require_success()`、`_run_bootstrapper()`、`_wait_for_runtime()` 和 `timeout_seconds`，保留检测、文件验证和 SHA-256。引入 `stat`，并让 `_validate_bootstrapper()` 在 `path.is_file()` 之外调用 `_is_reparse_point(path)`，拒绝符号链接、目录联接和其他重解析点。实现：
 
@@ -160,7 +162,7 @@ class EvergreenRuntimeGuide:
 
 `_is_reparse_point()` 使用 `path.lstat()` 读取 `st_file_attributes` 并检查 `stat.FILE_ATTRIBUTE_REPARSE_POINT`；`lstat()` 失败必须转成包含目标路径的 `WebViewBootstrapperError`。新增测试时通过 monkeypatch 令 `_is_reparse_point()` 返回 `True`，断言提示框与 Explorer 均不调用，避免依赖测试机是否允许创建 Windows 符号链接。
 
-- [ ] **Step 4: 用 Windows Shell 打开 Explorer**
+- [x] **Step 4: 用 Windows Shell 打开 Explorer**
 
 在同一文件引入 `ctypes`、`Path`、`Any` 并增加：
 
@@ -204,7 +206,7 @@ def _shell_execute_explorer(explorer: Path, selected_file: Path) -> int:
 
 `lpFile` 必须是受系统目录约束的 `explorer.exe`，Bootstrapper 只能出现在 `/select` 参数中。
 
-- [ ] **Step 5: 写 Explorer 成功和失败测试**
+- [x] **Step 5: 写 Explorer 成功和失败测试**
 
 ```python
 def test_location_opener_selects_bootstrapper_with_system_explorer(
@@ -253,7 +255,7 @@ def test_location_opener_reports_shell_failure(
 
 保留并改写已有 Evergreen 已安装、smoke 禁止交互、用户取消、安装器缺失、哈希错误和检测组件异常测试。删除安装器退出码、安装后轮询超时和 `subprocess.run` 参数测试。
 
-- [ ] **Step 6: 运行 Task 1 测试与静态检查**
+- [x] **Step 6: 运行 Task 1 测试与静态检查**
 
 Run:
 
@@ -280,7 +282,7 @@ Expected: 全部命令退出码为 `0`；生产代码不再运行安装器。只
 - Consumes: Task 1 的 `EvergreenRuntimeGuide`、`WebViewManualInstallRequired`、`WebViewInstallCancelled`。
 - Produces: `WebViewRuntime.ensure_available(*, allow_manual_guide: bool) -> str | None`；`main()` 对两种正常中止返回 `0`，真实 `WebViewBootstrapperError` 继续进入冻结错误报告器。
 
-- [ ] **Step 1: 写 Explorer 已打开后不构建应用的失败测试**
+- [x] **Step 1: 写 Explorer 已打开后不构建应用的失败测试**
 
 在 `tests/unit/test_app_startup.py` 用下面测试替换旧的“安装成功同进程继续”测试：
 
@@ -319,7 +321,7 @@ def test_manual_install_location_opened_exits_without_building_application(
 
 同步把用户取消测试改为 `allow_manual_guide`，保留真实 `WebViewBootstrapperError` 进入报告器的测试。
 
-- [ ] **Step 2: 写 WebViewRuntime 委托标志的失败测试**
+- [x] **Step 2: 写 WebViewRuntime 委托标志的失败测试**
 
 使用记录桩锁定 `allow_manual_guide=True` 会原样传给引导组件：
 
@@ -352,7 +354,7 @@ assert runtime.ensure_available(allow_manual_guide=True) == "151.0.4129.86"
 assert guide.calls == [True]
 ```
 
-- [ ] **Step 3: 运行新接口测试并确认旧命名失败**
+- [x] **Step 3: 运行新接口测试并确认旧命名失败**
 
 Run:
 
@@ -365,7 +367,7 @@ Run:
 
 Expected: FAIL，旧 `allow_install`、`evergreen_installer` 或旧异常导入导致测试失败。
 
-- [ ] **Step 4: 一致重命名 WebViewRuntime 委托**
+- [x] **Step 4: 一致重命名 WebViewRuntime 委托**
 
 在 `src/gameshelf/bootstrap/webview_runtime.py` 使用：
 
@@ -393,7 +395,7 @@ def ensure_available(self, *, allow_manual_guide: bool) -> str | None:
 
 两个 `cls(...)` 构造分支都传 `_evergreen_guide=guide`。不得保留 `allow_install` 或 `_evergreen_installer` 兼容别名。
 
-- [ ] **Step 5: 让 app.py 正常结束手动引导**
+- [x] **Step 5: 让 app.py 正常结束手动引导**
 
 ```python
 from gameshelf.bootstrap.webview_bootstrapper import (
@@ -413,7 +415,7 @@ except (WebViewInstallCancelled, WebViewManualInstallRequired):
 
 该 `except` 必须位于通用 `Exception` 之前。同步把所有测试桩和 smoke 记录从 `allow_install` 改为 `allow_manual_guide`；smoke 仍断言收到 `[False]`。
 
-- [ ] **Step 6: 运行 Task 2 测试与静态检查**
+- [x] **Step 6: 运行 Task 2 测试与静态检查**
 
 Run:
 
@@ -442,7 +444,7 @@ Expected: 全部命令退出码为 `0`；正常引导和取消均没有错误报
 - Consumes: `FrozenRuntimeInstallPrompt.confirm() -> bool` 和 Windows Yes/No、warning、default-No 标志。
 - Produces: 明确告知“打开安装位置—手动双击—安装后重新启动”的中文提示与 README；不改变 `FrozenStartupReporter.show()`。
 
-- [ ] **Step 1: 写新提示文案的失败测试**
+- [x] **Step 1: 写新提示文案的失败测试**
 
 ```python
 def test_runtime_prompt_explains_manual_install_and_restart() -> None:
@@ -471,7 +473,7 @@ Run:
 
 Expected: FAIL，旧文案缺少打开文件夹、手动双击和重新启动动作。
 
-- [ ] **Step 2: 更新确认框文案**
+- [x] **Step 2: 更新确认框文案**
 
 保持消息框 flags 不变，把 docstring 改为询问是否打开已验证安装器位置，并使用：
 
@@ -489,7 +491,7 @@ result = self.message_box(
 
 返回非 `IDYES` 或消息框异常仍等价于取消。
 
-- [ ] **Step 3: 重写轻量版 README Runtime 段落**
+- [x] **Step 3: 重写轻量版 README Runtime 段落**
 
 `release/README-lite.txt` 必须包含：
 
@@ -504,7 +506,7 @@ GameShelf 不会静默运行或等待安装器，也不会自动重新启动自�
 
 “取消与安装失败”说明：取消不写错误堆栈；微软安装器断网或失败由安装器自身提示；重新启动后 Runtime 仍缺失会再次引导；安装器缺失、哈希错误或无法打开目录才写 `data\logs\startup-error.log`。
 
-- [ ] **Step 4: 验证生产文件没有旧行为文字或命令**
+- [x] **Step 4: 验证生产文件没有旧行为文字或命令**
 
 Run:
 
@@ -519,7 +521,7 @@ Select-String -LiteralPath `
 
 Expected: 无输出。固定文档中的 `/silent /install` 只能出现在“不得执行”的当前规则或历史记录中。
 
-- [ ] **Step 5: 运行全部质量门**
+- [x] **Step 5: 运行全部质量门**
 
 Run:
 
@@ -552,7 +554,7 @@ Expected: 全部命令退出码为 `0`；前端仍为 25 个文件、86 项测�
 - Consumes: Tasks 1–3 的源码、测试、README 和两个受控输入。
 - Produces: 六个一致的新候选产物、完整性/签名/体积证据，以及全新 Sandbox 的手动安装闭环结果。
 
-- [ ] **Step 1: 正式重建两版六个产物**
+- [x] **Step 1: 正式重建两版六个产物**
 
 Run:
 
@@ -573,7 +575,7 @@ dist\GameShelf-0.1.0-win-x64-lite.zip
 dist\GameShelf-0.1.0-win-x64-lite.zip.sha256
 ```
 
-- [ ] **Step 2: 独立复核目录、ZIP、校验文件和签名**
+- [x] **Step 2: 独立复核目录、ZIP、校验文件和签名**
 
 Run:
 
@@ -594,7 +596,7 @@ Get-AuthenticodeSignature -LiteralPath `
 
 Expected: 输出 `DUAL-RELEASE-INTEGRITY=OK`；两份 Microsoft 文件均为 `Valid` 且签名者包含 `Microsoft Corporation`；记录两份新 ZIP 的实际 SHA-256，不复用旧候选哈希。正式目录没有 `data`，完整版只有 `runtime`，轻量版只有 `prerequisites`。
 
-- [ ] **Step 3: 在全新 Windows Sandbox 验证只打开目录并退出**
+- [x] **Step 3: 在全新 Windows Sandbox 验证只打开目录并退出**
 
 1. 关闭存在残留安装器进程的旧 Sandbox，启动全新 Sandbox。
 2. 完整解压新的轻量版 ZIP 并双击 `GameShelf.exe`。
@@ -605,7 +607,7 @@ Expected: 输出 `DUAL-RELEASE-INTEGRITY=OK`；两份 Microsoft 文件均为 `Va
 
 Expected: GameShelf 不再等待外部安装器。
 
-- [ ] **Step 4: 完成手动安装和重新启动闭环**
+- [x] **Step 4: 完成手动安装和重新启动闭环**
 
 1. 用户在 Explorer 中双击已选中的 `MicrosoftEdgeWebview2Setup.exe`。
 2. 微软安装器联网完成安装；GameShelf 不参与安装进度或错误处理。
@@ -614,7 +616,7 @@ Expected: GameShelf 不再等待外部安装器。
 
 Expected: 第二次启动检测到系统 Evergreen 后直接进入主窗口。
 
-- [ ] **Step 5: 验证取消、完整性错误和完整版离线启动**
+- [x] **Step 5: 验证取消、完整性错误和完整版离线启动**
 
 - 轻量版选择“否”：GameShelf 退出，Explorer 不打开，不写日志。
 - 在 Sandbox 测试副本中改名 Bootstrapper：不显示普通引导，显示缺失文件错误并写日志。
@@ -623,7 +625,7 @@ Expected: 第二次启动检测到系统 Evergreen 后直接进入主窗口。
 
 不得修改正式 `dist` 目录，只操作 Sandbox 内副本。
 
-- [ ] **Step 6: 用新证据更新两份固定中文文档**
+- [x] **Step 6: 用新证据更新两份固定中文文档**
 
 只有 Steps 1–5 全部通过后：
 
@@ -632,7 +634,7 @@ Expected: 第二次启动检测到系统 Evergreen 后直接进入主窗口。
 - 两份变更记录新增“删除静默执行/等待，采用 Explorer 手动安装和用户重启”的事实。
 - 旧候选记录继续作为历史事实保留，不能用新结果覆盖旧哈希。
 
-- [ ] **Step 7: 最终回归、文档自审和 Git 边界检查**
+- [x] **Step 7: 最终回归、文档自审和 Git 边界检查**
 
 Run:
 
