@@ -172,7 +172,7 @@ describe('CoverWizardWorkspace', () => {
       global: { plugins: [createPinia()] },
     })
     await flushPromises()
-    await wrapper.get('.cover-wizard-settings summary').trigger('click')
+    await wrapper.get('[data-test="cover-settings-trigger"]').trigger('click')
     const online = wrapper.get('.cover-wizard-settings input[type="checkbox"]')
     await online.setValue(true)
     await wrapper.get('.cover-wizard-settings form').trigger('submit')
@@ -180,6 +180,30 @@ describe('CoverWizardWorkspace', () => {
 
     expect((online.element as HTMLInputElement).checked).toBe(true)
     expect(wrapper.text()).toContain('设置未保存：磁盘只读')
+    wrapper.unmount()
+  })
+
+  it('closes settings with Escape before allowing the workspace to exit', async () => {
+    const wrapper = mount(CoverWizardWorkspace, {
+      attachTo: document.body,
+      props: {
+        bridge: createMockBridge({ async start_cover_wizard() { return ok(snapshot()) } }),
+        games: [fixtureGame()],
+        settings,
+      },
+      global: { plugins: [createPinia()] },
+    })
+    await flushPromises()
+    await wrapper.get('[data-test="cover-settings-trigger"]').trigger('click')
+    await wrapper.get('.cover-wizard-settings form').trigger('keydown', { key: 'Escape' })
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="cover-settings-popover"]').exists()).toBe(false)
+    expect(wrapper.emitted('close')).toBeUndefined()
+
+    await wrapper.get('[data-test="cover-wizard-workspace"]').trigger('keydown', { key: 'Escape' })
+    await flushPromises()
+    expect(wrapper.emitted('close')).toHaveLength(1)
     wrapper.unmount()
   })
 })
