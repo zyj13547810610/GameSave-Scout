@@ -37,6 +37,7 @@ class _Wizard:
     state: CoverWizardSnapshot
     candidate: CoverCandidate
     game: Game
+    shallow_summary: LocalDiscoverySummary | None = None
     added_payload: bytes | None = None
     failure: Exception | None = None
 
@@ -81,6 +82,8 @@ class _Wizard:
     def collect_shallow(self, session_id, game_id, limit, context):
         del limit, context
         assert (session_id, game_id) == (self.state.id, self.game.id)
+        if self.shallow_summary is not None:
+            return self.shallow_summary
         return LocalDiscoverySummary((self.candidate,), 1, 0, False, ())
 
     def collect_directory(self, session_id, directory, context):
@@ -253,9 +256,34 @@ def test_source_tasks_return_json_safe_counts(tmp_path: Path) -> None:
         )
         task = tasks.wait(result["data"]["taskId"], timeout=5)
         assert task.status == "completed"
+        assert task.progress == {"completed": 1, "total": 1}
+        assert task.message == "浅层扫描完成，找到 1 张候选封面。"
         assert task.result == {
             "sessionId": "wizard-1",
             "completedCount": 1,
+            "failedCount": 0,
+        }
+    finally:
+        tasks.close()
+
+
+def test_empty_shallow_scan_reports_completed_without_candidates(
+    tmp_path: Path,
+) -> None:
+    api, tasks, wizard = _api(tmp_path)
+    wizard.shallow_summary = LocalDiscoverySummary((), 0, 0, False, ())
+    try:
+        result = api.start_cover_shallow_scan(
+            {"sessionId": "wizard-1", "gameId": "game-1", "limit": 10}
+        )
+        task = tasks.wait(result["data"]["taskId"], timeout=5)
+
+        assert task.status == "completed"
+        assert task.progress == {"completed": 1, "total": 1}
+        assert task.message == "浅层扫描完成，未找到候选封面。"
+        assert task.result == {
+            "sessionId": "wizard-1",
+            "completedCount": 0,
             "failedCount": 0,
         }
     finally:

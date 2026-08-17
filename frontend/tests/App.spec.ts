@@ -13,6 +13,24 @@ beforeEach(() => {
 })
 
 describe('App', () => {
+  it('places batch management to the left of batch covers', async () => {
+    const bridge = createMockBridge({
+      async list_games() { return ok([fixtureGame()]) },
+    })
+    const wrapper = mount(App, {
+      global: {
+        plugins: [createPinia()],
+        provide: { [bridgeKey as symbol]: bridge },
+      },
+    })
+    await flushPromises()
+
+    expect(wrapper.findAll('.compact-actions button').map((item) => item.text())).toEqual([
+      '批量管理',
+      '批量封面',
+    ])
+  })
+
   it('keeps the batch entry heading separated from the filters below', async () => {
     const bridge = createMockBridge({
       async list_games() { return ok([fixtureGame()]) },

@@ -363,9 +363,16 @@ class BridgeApi:
                 summary = wizard.collect_shallow(
                     session_id, game_id, limit, context
                 )
+                candidate_count = len(summary.candidates)
+                message = (
+                    "浅层扫描完成，未找到候选封面。"
+                    if candidate_count == 0
+                    else f"浅层扫描完成，找到 {candidate_count} 张候选封面。"
+                )
+                context.report(1, 1, message)
                 return {
                     "sessionId": session_id,
-                    "completedCount": len(summary.candidates),
+                    "completedCount": candidate_count,
                     "failedCount": summary.skipped,
                 }
 
