@@ -9,7 +9,14 @@ describe('desktop bridge', () => {
 
     expect(result).toEqual({
       ok: true,
-      data: { appName: 'GameShelf', schemaVersion: 1, portable: true, uiScale: 1 },
+      data: {
+        appName: 'GameShelf', schemaVersion: 1, portable: true, uiScale: 1,
+        coverWizardSettings: {
+          coverOnlineEnabled: false,
+          coverVndbCandidateLimit: 5,
+          coverLocalScanCandidateLimit: 10,
+        },
+      },
     })
   })
 })

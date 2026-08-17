@@ -1,4 +1,4 @@
-import type { ApiResult, Game, GameShelfBridge, GuidedSaveSession, ScanRoot } from './contracts'
+import type { ApiResult, CoverWizardSnapshot, Game, GameShelfBridge, GuidedSaveSession, ScanRoot } from './contracts'
 
 export function ok<T>(data: T): ApiResult<T> {
   return { ok: true, data }
@@ -52,8 +52,42 @@ export function fixtureGame(overrides: Partial<Game> = {}): Game {
 
 export function createMockBridge(overrides: Partial<GameShelfBridge> = {}): GameShelfBridge {
   const bridge: GameShelfBridge = {
-    async bootstrap() { return ok({ appName: 'GameShelf', schemaVersion: 1, portable: true, uiScale: 1 }) },
+    async bootstrap() {
+      return ok({
+        appName: 'GameShelf', schemaVersion: 1, portable: true, uiScale: 1,
+        coverWizardSettings: {
+          coverOnlineEnabled: false,
+          coverVndbCandidateLimit: 5,
+          coverLocalScanCandidateLimit: 10,
+        },
+      })
+    },
     async set_ui_scale(input) { return ok({ uiScale: input.uiScale }) },
+    async set_cover_wizard_settings(input) { return ok(input) },
+    async start_cover_wizard(input) {
+      return ok(fixtureCoverWizard({ includeExisting: input.includeExisting ?? false }))
+    },
+    async cover_wizard_snapshot() { return ok(fixtureCoverWizard()) },
+    async set_cover_wizard_include_existing(input) {
+      return ok(fixtureCoverWizard({ includeExisting: input.includeExisting }))
+    },
+    async list_cover_candidates() { return ok([]) },
+    async add_cover_candidate_bytes(input) {
+      return ok({
+        id: 'candidate-1', gameId: input.gameId, source: input.source,
+        sourceLabel: input.source === 'drop' ? '拖放' : '剪贴板',
+        displayName: input.fileName, width: 600, height: 900,
+        matchKind: 'manual', score: 100, evidence: [], previewUrl: null, vndbId: null,
+      })
+    },
+    async start_cover_vndb_search() { return ok({ taskId: 'cover-task-1' }) },
+    async start_cover_shallow_scan() { return ok({ taskId: 'cover-task-1' }) },
+    async start_cover_directory_import() { return ok({ taskId: 'cover-task-1' }) },
+    async adopt_cover_candidate() {
+      return ok({ game: fixtureGame({ coverRevision: 1 }), snapshot: fixtureCoverWizard() })
+    },
+    async skip_cover_wizard_game() { return ok(fixtureCoverWizard()) },
+    async close_cover_wizard() { return ok({ closed: true }) },
     async list_roots() { return ok([]) },
     async add_root(input) { return ok(fixtureRoot({ displayPath: input.displayPath, scanMode: input.scanMode, maxDepth: input.maxDepth, exclusions: input.exclusions })) },
     async update_root(input) { return ok(fixtureRoot({ ...input, id: input.rootId })) },
@@ -149,6 +183,19 @@ export function createMockBridge(overrides: Partial<GameShelfBridge> = {}): Game
     async cancel_task() { return ok({ cancelled: false }) },
   }
   return Object.assign(bridge, overrides)
+}
+
+export function fixtureCoverWizard(
+  overrides: Partial<CoverWizardSnapshot> = {},
+): CoverWizardSnapshot {
+  return {
+    id: 'cover-wizard-1',
+    queue: [],
+    currentGameId: null,
+    includeExisting: false,
+    sourceOperationActive: false,
+    ...overrides,
+  }
 }
 
 export function fixtureGuidedSession(

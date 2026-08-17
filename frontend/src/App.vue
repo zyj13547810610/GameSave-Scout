@@ -2,7 +2,8 @@
 import { createPinia, getActivePinia, storeToRefs } from 'pinia'
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { bridgeKey, createBridge } from './api/bridge'
-import type { Game, RemovableGameStatus, ScanRoot } from './api/contracts'
+import type { CoverWizardSettings, Game, RemovableGameStatus, ScanRoot } from './api/contracts'
+import CoverWizardWorkspace from './features/covers/CoverWizardWorkspace.vue'
 import BatchManagementBar from './features/library/BatchManagementBar.vue'
 import GameGrid from './features/library/GameGrid.vue'
 import LibraryToolbar from './features/library/LibraryToolbar.vue'
@@ -42,6 +43,14 @@ const batchMode = ref(false)
 const batchBusy = ref(false)
 const batchError = ref('')
 const batchNotice = ref('')
+const showCoverWizard = ref(false)
+const coverWizardEntry = ref<HTMLButtonElement | null>(null)
+const coverWizardScrollY = ref(0)
+const coverWizardSettings = ref<CoverWizardSettings>({
+  coverOnlineEnabled: false,
+  coverVndbCandidateLimit: 5,
+  coverLocalScanCandidateLimit: 10,
+})
 const selectedGameIds = ref<Set<string>>(new Set())
 const filteredGames = computed(() => filterGames(games.value, {
   query: store.query,
@@ -153,6 +162,7 @@ async function bootstrap() {
     return
   }
   uiScale.value = result.data.uiScale
+  coverWizardSettings.value = result.data.coverWizardSettings
   applyUiScale(uiScale.value, document.documentElement)
   await store.load(bridge)
   await guidedStore.refreshActive(bridge)
@@ -180,6 +190,22 @@ async function scan(rootId: string) {
 onMounted(bootstrap)
 onBeforeUnmount(() => guidedStore.clearPolling())
 
+function openCoverWizard() {
+  exitBatchMode()
+  selectedGameId.value = null
+  coverWizardScrollY.value = window.scrollY
+  showCoverWizard.value = true
+}
+
+async function closeCoverWizard() {
+  showCoverWizard.value = false
+  const latest = await bridge.bootstrap()
+  if (latest.ok) coverWizardSettings.value = latest.data.coverWizardSettings
+  await nextTick()
+  window.scrollTo({ top: coverWizardScrollY.value })
+  coverWizardEntry.value?.focus()
+}
+
 function restoreGuidedSave(gameId: string) {
   batchMode.value = false
   selectedGameId.value = gameId
@@ -205,12 +231,15 @@ function restoreGuidedSave(gameId: string) {
 
     <template v-else>
       <div v-if="error" class="error-banner" role="alert"><span>{{ error }}</span><button type="button" @click="store.dismissError">关闭</button></div>
-      <div class="library-layout">
+      <div class="library-layout" :inert="showCoverWizard" :aria-hidden="showCoverWizard ? 'true' : undefined">
         <ScanRootList :bridge="bridge" :roots="roots" :scan-tasks="scanTasks" :task-snapshots="taskSnapshots" @scan="scan" @cancel="(id) => store.cancelScan(bridge, id)" @toggle="(root, enabled) => store.updateRoot(bridge, root, enabled)" @edit="editingRoot = $event" @remove="(id) => store.removeRoot(bridge, id)" @remap="(id, path) => store.remapRoot(bridge, id, path)" />
         <section class="library-content">
           <div class="content-heading">
             <h2>我的游戏 <span>{{ games.length }}</span></h2>
-            <button v-if="!batchMode && removableGames.length" data-test="enter-batch-mode" class="secondary" type="button" @click="enterBatchMode">批量管理</button>
+            <div class="compact-actions">
+              <button ref="coverWizardEntry" data-test="enter-cover-wizard" class="secondary" type="button" @click="openCoverWizard">批量封面</button>
+              <button v-if="!batchMode && removableGames.length" data-test="enter-batch-mode" class="secondary" type="button" @click="enterBatchMode">批量管理</button>
+            </div>
           </div>
           <div v-if="batchNotice" data-test="batch-result" class="batch-result" role="status">{{ batchNotice }}</div>
           <BatchManagementBar
@@ -249,6 +278,14 @@ function restoreGuidedSave(gameId: string) {
       <div v-if="showAddRoot" class="dialog-backdrop" @click.self="showAddRoot = false"><ScanRootDialog :bridge="bridge" @saved="rootSaved" @close="showAddRoot = false" /></div>
       <div v-if="editingRoot" class="dialog-backdrop" @click.self="editingRoot = null"><ScanRootDialog :bridge="bridge" :root="editingRoot" @saved="rootSaved" @close="editingRoot = null" /></div>
       <GuidedSaveCloseDialog :bridge="bridge" />
+      <CoverWizardWorkspace
+        v-if="showCoverWizard"
+        :bridge="bridge"
+        :games="games"
+        :settings="coverWizardSettings"
+        @updated="store.updateGame"
+        @close="closeCoverWizard"
+      />
     </template>
   </main>
 </template>

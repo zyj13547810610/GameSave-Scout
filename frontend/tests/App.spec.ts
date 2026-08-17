@@ -13,6 +13,49 @@ beforeEach(() => {
 })
 
 describe('App', () => {
+  it('opens the in-app cover workspace while preserving library state', async () => {
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined)
+    const bridge = createMockBridge({
+      async list_games() { return ok([fixtureGame()]) },
+      async start_cover_wizard() {
+        return ok({
+          id: 'wizard-1',
+          queue: [{
+            gameId: 'game-1', title: 'Alice', initialHasCover: false,
+            status: 'pending', candidateCount: 0, error: null,
+          }],
+          currentGameId: 'game-1', includeExisting: false, sourceOperationActive: false,
+        })
+      },
+    })
+    const wrapper = mount(App, {
+      attachTo: document.body,
+      global: {
+        plugins: [createPinia()],
+        provide: { [bridgeKey as symbol]: bridge },
+      },
+    })
+    await flushPromises()
+    await wrapper.get('input[aria-label="搜索游戏"]').setValue('Alice')
+    const layout = wrapper.get('.library-layout').element
+    const entry = wrapper.get('[data-test="enter-cover-wizard"]')
+
+    await entry.trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-test="cover-wizard-workspace"]')).toBeTruthy()
+    expect(document.body.contains(layout)).toBe(true)
+    expect(layout.getAttribute('inert')).not.toBeNull()
+    expect(layout.getAttribute('aria-hidden')).toBe('true')
+
+    await wrapper.get('[data-test="cover-wizard-workspace"] [data-autofocus]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-test="cover-wizard-workspace"]').exists()).toBe(false)
+    expect((wrapper.get('input[aria-label="搜索游戏"]').element as HTMLInputElement).value).toBe('Alice')
+    expect(document.activeElement).toBe(entry.element)
+    expect(scrollTo).toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
   it('connects before rendering the empty-library message', async () => {
     const wrapper = mount(App, { global: { plugins: [createPinia()] } })
     expect(wrapper.get('h1').text()).toBe('GameShelf')
@@ -28,7 +71,14 @@ describe('App', () => {
     const setUiScale = vi.fn(async (input: { uiScale: UiScaleValue }) => ok({ uiScale: input.uiScale }))
     const bridge = createMockBridge({
       async bootstrap() {
-        return ok({ appName: 'GameShelf', schemaVersion: 1, portable: true, uiScale: 1.2 })
+        return ok({
+          appName: 'GameShelf', schemaVersion: 1, portable: true, uiScale: 1.2,
+          coverWizardSettings: {
+            coverOnlineEnabled: false,
+            coverVndbCandidateLimit: 5,
+            coverLocalScanCandidateLimit: 10,
+          },
+        })
       },
       set_ui_scale: setUiScale,
     })

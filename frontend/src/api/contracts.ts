@@ -6,11 +6,63 @@ export type ApiResult<T> =
 
 export type UiScaleValue = 0.8 | 0.9 | 1 | 1.1 | 1.2
 
+export type CoverWizardSettings = {
+  coverOnlineEnabled: boolean
+  coverVndbCandidateLimit: number
+  coverLocalScanCandidateLimit: number
+}
+
+export type CoverCandidateSource =
+  | 'vndb'
+  | 'clipboard'
+  | 'drop'
+  | 'shallow_scan'
+  | 'cover_directory'
+
+export type CoverWizardQueueItem = {
+  gameId: string
+  title: string
+  initialHasCover: boolean
+  status: 'pending' | 'ready' | 'adopted' | 'skipped' | 'failed'
+  candidateCount: number
+  error: string | null
+}
+
+export type CoverWizardSnapshot = {
+  id: string
+  queue: CoverWizardQueueItem[]
+  currentGameId: string | null
+  includeExisting: boolean
+  sourceOperationActive: boolean
+}
+
+export type CoverCandidate = {
+  id: string
+  gameId: string
+  source: CoverCandidateSource
+  sourceLabel: string
+  displayName: string
+  width: number
+  height: number
+  matchKind: 'exact' | 'normalized' | 'fuzzy' | 'manual'
+  score: number
+  evidence: string[]
+  previewUrl: string | null
+  vndbId: string | null
+}
+
+export type CoverUpload = {
+  fileName: string
+  contentType: string
+  dataBase64: string
+}
+
 export type BootstrapState = {
   appName: 'GameShelf'
   schemaVersion: number
   portable: true
   uiScale: UiScaleValue
+  coverWizardSettings: CoverWizardSettings
   assetSessionToken?: string
 }
 
@@ -271,6 +323,45 @@ export type ScanResult = {
 export interface GameShelfBridge {
   bootstrap(): Promise<ApiResult<BootstrapState>>
   set_ui_scale(input: { uiScale: UiScaleValue }): Promise<ApiResult<{ uiScale: UiScaleValue }>>
+  set_cover_wizard_settings(input: CoverWizardSettings): Promise<ApiResult<CoverWizardSettings>>
+  start_cover_wizard(input: { includeExisting?: boolean }): Promise<ApiResult<CoverWizardSnapshot>>
+  cover_wizard_snapshot(input: { sessionId: string }): Promise<ApiResult<CoverWizardSnapshot>>
+  set_cover_wizard_include_existing(input: {
+    sessionId: string
+    includeExisting: boolean
+  }): Promise<ApiResult<CoverWizardSnapshot>>
+  list_cover_candidates(input: {
+    sessionId: string
+    gameId: string
+  }): Promise<ApiResult<CoverCandidate[]>>
+  add_cover_candidate_bytes(input: CoverUpload & {
+    sessionId: string
+    gameId: string
+    source: 'clipboard' | 'drop'
+  }): Promise<ApiResult<CoverCandidate>>
+  start_cover_vndb_search(input: {
+    sessionId: string
+    gameIds: string[]
+    limit: number
+  }): Promise<ApiResult<{ taskId: string }>>
+  start_cover_shallow_scan(input: {
+    sessionId: string
+    gameId: string
+    limit: number
+  }): Promise<ApiResult<{ taskId: string }>>
+  start_cover_directory_import(input: {
+    sessionId: string
+    selectedPath: string
+  }): Promise<ApiResult<{ taskId: string }>>
+  adopt_cover_candidate(input: {
+    sessionId: string
+    candidateId: string
+  }): Promise<ApiResult<{ game: Game; snapshot: CoverWizardSnapshot }>>
+  skip_cover_wizard_game(input: {
+    sessionId: string
+    gameId: string
+  }): Promise<ApiResult<CoverWizardSnapshot>>
+  close_cover_wizard(input: { sessionId: string }): Promise<ApiResult<{ closed: boolean }>>
   list_roots(): Promise<ApiResult<ScanRoot[]>>
   add_root(input: RootInput): Promise<ApiResult<ScanRoot>>
   update_root(input: RootInput & { rootId: string; enabled: boolean }): Promise<ApiResult<ScanRoot>>
