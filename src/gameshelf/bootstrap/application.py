@@ -16,7 +16,10 @@ from gameshelf.bootstrap.paths import AppPaths
 from gameshelf.bootstrap.resources import ResourcePaths
 from gameshelf.bridge.api import BridgeApi
 from gameshelf.bridge.tasks import TaskRegistry
+from gameshelf.covers.local_discovery import LocalCoverDiscovery
 from gameshelf.covers.service import CoverService
+from gameshelf.covers.vndb import VndbClient
+from gameshelf.covers.wizard_service import CoverWizardService
 from gameshelf.db.connection import ConnectionFactory
 from gameshelf.db.migrator import Migrator
 from gameshelf.db.writer import DbWriter
@@ -68,6 +71,7 @@ class Application:
     asset_server: AssetServer
     asset_address: AssetServerAddress
     guided_saves: GuidedSaveSessionService
+    cover_wizard: CoverWizardService
     _close_lock: Lock = field(default_factory=Lock, repr=False)
     _closed: bool = field(default=False, init=False, repr=False)
 
@@ -78,6 +82,7 @@ class Application:
             self._closed = True
         self.guided_saves.close()
         self.tasks.close()
+        self.cover_wizard.close_all()
         self.asset_server.stop()
         self.writer.close()
         for handler in tuple(self.logger.handlers):
@@ -111,6 +116,13 @@ def build_application(
     shell = WindowsShell()
     launcher = GameLauncher(repository, writer, WindowsProcessLauncher(), shell)
     covers = CoverService(paths, repository, writer)
+    cover_wizard = CoverWizardService(
+        paths,
+        library,
+        covers,
+        LocalCoverDiscovery(),
+        VndbClient(),
+    )
     known_folders = WindowsKnownFolderProvider().load()
     resolver = PathTemplateResolver(known_folders)
     save_repository = SaveLocationRepository(database)
@@ -199,6 +211,8 @@ def build_application(
         resource_paths.ui_dir,
         cover_lookup,
         managed_cover_roots=(paths.covers_original_dir, paths.covers_thumbs_dir),
+        candidate_lookup=cover_wizard.preview_path,
+        candidate_root=paths.temp_dir / "cover-wizard",
     )
     asset_address = asset_server.start()
     api = BridgeApi(
@@ -210,6 +224,7 @@ def build_application(
         scanner=scanner,
         launcher=launcher,
         covers=covers,
+        cover_wizard=cover_wizard,
         engine_detection=engine_detection,
         save_locations=save_locations,
         static_discovery=static_discovery,
@@ -234,6 +249,7 @@ def build_application(
         asset_server=asset_server,
         asset_address=asset_address,
         guided_saves=guided_saves,
+        cover_wizard=cover_wizard,
     )
 
 

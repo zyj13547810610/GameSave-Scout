@@ -14,6 +14,7 @@ from urllib.parse import unquote, urlsplit
 
 type CoverVariant = str
 type CoverLookup = Callable[[str, CoverVariant], Path | None]
+type CandidateLookup = Callable[[str, str], Path | None]
 
 _CSP = (
     "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
@@ -39,11 +40,17 @@ class AssetServer:
         cover_lookup: CoverLookup,
         *,
         managed_cover_roots: tuple[Path, ...] = (),
+        candidate_lookup: CandidateLookup | None = None,
+        candidate_root: Path | None = None,
     ) -> None:
         self._ui_root = ui_root.resolve(strict=False)
         self._cover_lookup = cover_lookup
         self._cover_roots = tuple(
             root.resolve(strict=False) for root in managed_cover_roots
+        )
+        self._candidate_lookup = candidate_lookup
+        self._candidate_root = (
+            candidate_root.resolve(strict=False) if candidate_root is not None else None
         )
         self._lock = Lock()
         self._server: _LoopbackServer | None = None
@@ -136,6 +143,9 @@ class AssetServer:
                 if parts[2] == "cover" and len(parts) == 5:
                     self._serve_cover(parts[3], parts[4], send_body=send_body)
                     return
+                if parts[2] == "candidate" and len(parts) == 5:
+                    self._serve_candidate(parts[3], parts[4], send_body=send_body)
+                    return
                 self.send_error(HTTPStatus.NOT_FOUND)
 
             def _serve_ui(self, relative_parts: list[str], *, send_body: bool) -> None:
@@ -160,6 +170,18 @@ class AssetServer:
                     "private, max-age=31536000, immutable",
                     send_body=send_body,
                 )
+
+            def _serve_candidate(
+                self, session_id: str, candidate_id: str, *, send_body: bool
+            ) -> None:
+                if not _safe_identifier(session_id) or not _safe_identifier(candidate_id):
+                    self.send_error(HTTPStatus.NOT_FOUND)
+                    return
+                candidate = owner._safe_candidate_path(session_id, candidate_id)
+                if candidate is None:
+                    self.send_error(HTTPStatus.NOT_FOUND)
+                    return
+                self._send_file(candidate, "no-store", send_body=send_body)
 
             def _send_file(self, path: Path, cache: str, *, send_body: bool) -> None:
                 try:
@@ -204,6 +226,23 @@ class AssetServer:
                 continue
             return resolved
         return None
+
+    def _safe_candidate_path(
+        self, session_id: str, candidate_id: str
+    ) -> Path | None:
+        if self._candidate_lookup is None or self._candidate_root is None:
+            return None
+        candidate = self._candidate_lookup(session_id, candidate_id)
+        if candidate is None:
+            return None
+        resolved = candidate.resolve(strict=False)
+        if resolved.suffix.casefold() != ".webp" or not resolved.is_file():
+            return None
+        try:
+            resolved.relative_to(self._candidate_root)
+        except ValueError:
+            return None
+        return resolved
 
 
 def _safe_identifier(value: str) -> bool:

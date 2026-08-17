@@ -8,12 +8,29 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
-from gameshelf.bootstrap.config import ConfigService, InvalidUiScaleError
+from gameshelf.bootstrap.config import (
+    AppConfig,
+    ConfigService,
+    InvalidCoverWizardSettingsError,
+    InvalidUiScaleError,
+)
 from gameshelf.bootstrap.paths import AppPaths
 from gameshelf.bridge.contracts import ApiResult, JSONValue, failure, success
 from gameshelf.bridge.tasks import TaskContext, TaskRegistry, TaskSnapshot
+from gameshelf.covers.candidates import (
+    CoverCandidate,
+    CoverWizardSnapshot,
+)
 from gameshelf.covers.image_pipeline import MAX_SOURCE_BYTES, InvalidCoverImage
 from gameshelf.covers.service import CoverService
+from gameshelf.covers.wizard_service import (
+    ActiveCoverWizardError,
+    CandidateSourceChangedError,
+    CoverCandidateNotFoundError,
+    CoverWizardBusyError,
+    CoverWizardNotFoundError,
+    CoverWizardService,
+)
 from gameshelf.engines.service import EngineDetectionService
 from gameshelf.library.launcher import (
     GameLauncher,
@@ -89,6 +106,7 @@ class BridgeApi:
         scanner: ScanService | None = None,
         launcher: GameLauncher | None = None,
         covers: CoverService | None = None,
+        cover_wizard: CoverWizardService | None = None,
         engine_detection: EngineDetectionService | None = None,
         save_locations: SaveLocationService | None = None,
         static_discovery: StaticSaveDiscovery | None = None,
@@ -109,6 +127,7 @@ class BridgeApi:
         self._scanner = scanner
         self._launcher = launcher
         self._covers = covers
+        self._cover_wizard = cover_wizard
         self._engine_detection = engine_detection
         self._save_locations = save_locations
         self._static_discovery = static_discovery
@@ -135,6 +154,10 @@ class BridgeApi:
         }
         if self._asset_session_token is not None:
             state["assetSessionToken"] = self._asset_session_token
+        if self._config is not None:
+            state["coverWizardSettings"] = _cover_wizard_settings_dto(
+                self._config.current
+            )
         return success(state)
 
     def set_ui_scale(self, request: object) -> ApiResult:
@@ -151,6 +174,296 @@ class BridgeApi:
                 "config_save_failed",
                 "缩放设置保存失败，下次启动可能恢复默认值。",
             )
+
+    def set_cover_wizard_settings(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(
+                payload,
+                {
+                    "coverOnlineEnabled",
+                    "coverVndbCandidateLimit",
+                    "coverLocalScanCandidateLimit",
+                },
+            )
+            config = self._require_config().set_cover_wizard_settings(
+                online_enabled=_boolean(payload, "coverOnlineEnabled"),
+                vndb_candidate_limit=_integer(payload, "coverVndbCandidateLimit"),
+                local_scan_candidate_limit=_integer(
+                    payload, "coverLocalScanCandidateLimit"
+                ),
+            )
+            return success(_cover_wizard_settings_dto(config))
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except InvalidCoverWizardSettingsError as error:
+            return failure("invalid_cover_wizard_settings", str(error))
+        except OSError:
+            return failure(
+                "config_save_failed",
+                "封面向导设置保存失败，下次启动可能恢复为原设置。",
+            )
+
+    def start_cover_wizard(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(payload, {"includeExisting"})
+            snapshot = self._require_cover_wizard().start(
+                _optional_boolean(payload, "includeExisting", default=False)
+            )
+            return success(_cover_wizard_snapshot_dto(snapshot))
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except ActiveCoverWizardError as error:
+            return failure("cover_wizard_active", str(error))
+
+    def cover_wizard_snapshot(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(payload, {"sessionId"})
+            snapshot = self._require_cover_wizard().snapshot(
+                _string(payload, "sessionId")
+            )
+            return success(_cover_wizard_snapshot_dto(snapshot))
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except CoverWizardNotFoundError as error:
+            return failure("cover_wizard_not_found", str(error))
+
+    def set_cover_wizard_include_existing(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(payload, {"sessionId", "includeExisting"})
+            snapshot = self._require_cover_wizard().set_include_existing(
+                _string(payload, "sessionId"),
+                _boolean(payload, "includeExisting"),
+            )
+            return success(_cover_wizard_snapshot_dto(snapshot))
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except CoverWizardNotFoundError as error:
+            return failure("cover_wizard_not_found", str(error))
+
+    def list_cover_candidates(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(payload, {"sessionId", "gameId"})
+            session_id = _string(payload, "sessionId")
+            candidates = self._require_cover_wizard().list_candidates(
+                session_id, _string(payload, "gameId")
+            )
+            return success(
+                [
+                    self._cover_candidate_dto(session_id, candidate)
+                    for candidate in candidates
+                ]
+            )
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except CoverWizardNotFoundError as error:
+            return failure("cover_wizard_not_found", str(error))
+        except CoverCandidateNotFoundError as error:
+            return failure("cover_candidate_not_found", str(error))
+
+    def add_cover_candidate_bytes(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(
+                payload,
+                {"sessionId", "gameId", "source", "fileName", "contentType", "dataBase64"},
+            )
+            source = _string(payload, "source")
+            if source not in {"clipboard", "drop"}:
+                raise InvalidRequest("source must be 'clipboard' or 'drop'.")
+            file_name = _string(payload, "fileName")
+            if len(file_name) > 255 or "\x00" in file_name:
+                raise InvalidRequest("fileName is too long or unsafe.")
+            _string(payload, "contentType")
+            encoded = _string(payload, "dataBase64")
+            if len(encoded) > (MAX_SOURCE_BYTES * 4 // 3) + 8:
+                raise InvalidRequest("dataBase64 exceeds the cover size limit.")
+            try:
+                decoded = base64.b64decode(encoded, validate=True)
+            except (ValueError, binascii.Error) as error:
+                raise InvalidRequest("dataBase64 is not valid base64.") from error
+            candidate = self._require_cover_wizard().add_candidate_bytes(
+                _string(payload, "sessionId"),
+                _string(payload, "gameId"),
+                file_name=file_name,
+                payload=decoded,
+                source=cast(Any, source),
+            )
+            session_id = _string(payload, "sessionId")
+            return success(self._cover_candidate_dto(session_id, candidate))
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except InvalidCoverImage as error:
+            return failure("invalid_cover", str(error))
+        except CoverWizardNotFoundError as error:
+            return failure("cover_wizard_not_found", str(error))
+        except CoverWizardBusyError as error:
+            return failure("cover_wizard_busy", str(error))
+        except CoverCandidateNotFoundError as error:
+            return failure("cover_candidate_not_found", str(error))
+
+    def start_cover_vndb_search(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(payload, {"sessionId", "gameIds", "limit"})
+            if not self._require_config().current.cover_online_enabled:
+                return failure("cover_online_disabled", "请先在封面向导设置中开启 VNDB。")
+            session_id = _string(payload, "sessionId")
+            game_ids = _clean_string_list(payload, "gameIds")
+            if not game_ids or len(game_ids) > 500:
+                raise InvalidRequest("gameIds must contain between 1 and 500 items.")
+            limit = _integer(payload, "limit")
+            if limit not in range(1, 21):
+                raise InvalidRequest("limit must be between 1 and 20.")
+            wizard = self._require_cover_wizard()
+
+            def operation(context: TaskContext) -> dict[str, JSONValue]:
+                if not self._require_config().current.cover_online_enabled:
+                    raise RuntimeError("VNDB 已关闭。")
+                snapshot = wizard.collect_vndb(
+                    session_id, game_ids, limit, context
+                )
+                failed = sum(
+                    item.status == "failed"
+                    for item in snapshot.queue
+                    if item.game_id in game_ids
+                )
+                return {
+                    "sessionId": session_id,
+                    "completedCount": len(game_ids) - failed,
+                    "failedCount": failed,
+                }
+
+            return success(
+                {"taskId": self._tasks.submit("cover_vndb_search", operation)}
+            )
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except CoverWizardNotFoundError as error:
+            return failure("cover_wizard_not_found", str(error))
+        except CoverWizardBusyError as error:
+            return failure("cover_wizard_busy", str(error))
+
+    def start_cover_shallow_scan(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(payload, {"sessionId", "gameId", "limit"})
+            session_id = _string(payload, "sessionId")
+            game_id = _string(payload, "gameId")
+            limit = _integer(payload, "limit")
+            if limit not in range(1, 101):
+                raise InvalidRequest("limit must be between 1 and 100.")
+            wizard = self._require_cover_wizard()
+
+            def operation(context: TaskContext) -> dict[str, JSONValue]:
+                summary = wizard.collect_shallow(
+                    session_id, game_id, limit, context
+                )
+                return {
+                    "sessionId": session_id,
+                    "completedCount": len(summary.candidates),
+                    "failedCount": summary.skipped,
+                }
+
+            return success(
+                {"taskId": self._tasks.submit("cover_shallow_scan", operation)}
+            )
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except CoverWizardNotFoundError as error:
+            return failure("cover_wizard_not_found", str(error))
+        except CoverWizardBusyError as error:
+            return failure("cover_wizard_busy", str(error))
+
+    def start_cover_directory_import(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(payload, {"sessionId", "selectedPath"})
+            session_id = _string(payload, "sessionId")
+            directory = Path(_string(payload, "selectedPath"))
+            wizard = self._require_cover_wizard()
+
+            def operation(context: TaskContext) -> dict[str, JSONValue]:
+                summaries = wizard.collect_directory(
+                    session_id, directory, context
+                )
+                return {
+                    "sessionId": session_id,
+                    "completedCount": sum(
+                        len(summary.candidates) for summary in summaries.values()
+                    ),
+                    "failedCount": sum(
+                        summary.skipped for summary in summaries.values()
+                    ),
+                }
+
+            return success(
+                {"taskId": self._tasks.submit("cover_directory_import", operation)}
+            )
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except CoverWizardNotFoundError as error:
+            return failure("cover_wizard_not_found", str(error))
+        except CoverWizardBusyError as error:
+            return failure("cover_wizard_busy", str(error))
+
+    def adopt_cover_candidate(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(payload, {"sessionId", "candidateId"})
+            session_id = _string(payload, "sessionId")
+            wizard = self._require_cover_wizard()
+            game = wizard.adopt(session_id, _string(payload, "candidateId"))
+            return success(
+                {
+                    "game": self._game_dto(game),
+                    "snapshot": _cover_wizard_snapshot_dto(
+                        wizard.snapshot(session_id)
+                    ),
+                }
+            )
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except CoverWizardNotFoundError as error:
+            return failure("cover_wizard_not_found", str(error))
+        except CoverCandidateNotFoundError as error:
+            return failure("cover_candidate_not_found", str(error))
+        except CandidateSourceChangedError as error:
+            return failure("cover_candidate_changed", str(error))
+        except InvalidCoverImage as error:
+            return failure("invalid_cover", str(error))
+
+    def skip_cover_wizard_game(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(payload, {"sessionId", "gameId"})
+            snapshot = self._require_cover_wizard().skip(
+                _string(payload, "sessionId"), _string(payload, "gameId")
+            )
+            return success(_cover_wizard_snapshot_dto(snapshot))
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except CoverWizardNotFoundError as error:
+            return failure("cover_wizard_not_found", str(error))
+        except CoverCandidateNotFoundError as error:
+            return failure("cover_candidate_not_found", str(error))
+
+    def close_cover_wizard(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(payload, {"sessionId"})
+            self._require_cover_wizard().close(_string(payload, "sessionId"))
+            return success({"closed": True})
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except CoverWizardNotFoundError as error:
+            return failure("cover_wizard_not_found", str(error))
+        except CoverWizardBusyError as error:
+            return failure("cover_wizard_busy", str(error))
 
     def list_roots(self) -> ApiResult:
         library = self._require_library()
@@ -981,6 +1294,37 @@ class BridgeApi:
             raise RuntimeError("Cover services are not configured.")
         return self._covers
 
+    def _require_cover_wizard(self) -> CoverWizardService:
+        if self._cover_wizard is None:
+            raise RuntimeError("Cover wizard services are not configured.")
+        return self._cover_wizard
+
+    def _cover_candidate_dto(
+        self, session_id: str, candidate: CoverCandidate
+    ) -> dict[str, JSONValue]:
+        preview_url = (
+            None
+            if self._asset_session_token is None
+            else (
+                f"/session/{self._asset_session_token}/candidate/"
+                f"{session_id}/{candidate.id}"
+            )
+        )
+        return {
+            "id": candidate.id,
+            "gameId": candidate.game_id,
+            "source": candidate.source,
+            "sourceLabel": candidate.source_label,
+            "displayName": candidate.display_name,
+            "width": candidate.width,
+            "height": candidate.height,
+            "matchKind": candidate.match_kind,
+            "score": candidate.score,
+            "evidence": list(candidate.evidence),
+            "previewUrl": preview_url,
+            "vndbId": candidate.vndb_id,
+        }
+
     def _require_config(self) -> ConfigService:
         if self._config is None:
             raise RuntimeError("Portable configuration is not configured.")
@@ -1144,6 +1488,36 @@ class BridgeApi:
             "result": cast(JSONValue, snapshot.result),
             "error": cast(JSONValue, snapshot.error),
         }
+
+
+def _cover_wizard_settings_dto(config: AppConfig) -> dict[str, JSONValue]:
+    return {
+        "coverOnlineEnabled": config.cover_online_enabled,
+        "coverVndbCandidateLimit": config.cover_vndb_candidate_limit,
+        "coverLocalScanCandidateLimit": config.cover_local_scan_candidate_limit,
+    }
+
+
+def _cover_wizard_snapshot_dto(
+    snapshot: CoverWizardSnapshot,
+) -> dict[str, JSONValue]:
+    return {
+        "id": snapshot.id,
+        "queue": [
+            {
+                "gameId": item.game_id,
+                "title": item.title,
+                "initialHasCover": item.initial_has_cover,
+                "status": item.status,
+                "candidateCount": item.candidate_count,
+                "error": item.error,
+            }
+            for item in snapshot.queue
+        ],
+        "currentGameId": snapshot.current_game_id,
+        "includeExisting": snapshot.include_existing,
+        "sourceOperationActive": snapshot.source_operation_active,
+    }
 
 
 def _root_dto(root: ScanRoot) -> dict[str, JSONValue]:

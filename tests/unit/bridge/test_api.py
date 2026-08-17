@@ -16,6 +16,11 @@ def test_bootstrap_returns_json_safe_success(tmp_path: Path) -> None:
                 "schemaVersion": 1,
                 "portable": True,
                 "uiScale": 1.0,
+                "coverWizardSettings": {
+                    "coverOnlineEnabled": False,
+                    "coverVndbCandidateLimit": 5,
+                    "coverLocalScanCandidateLimit": 10,
+                },
             },
         }
     finally:
@@ -93,6 +98,49 @@ def test_set_ui_scale_reports_an_atomic_save_failure(
 
         assert result["ok"] is False
         assert result["error"]["code"] == "config_save_failed"
+    finally:
+        tasks.close()
+
+
+def test_set_cover_wizard_settings_persists_valid_values(tmp_path: Path) -> None:
+    api, tasks, config = _api(tmp_path)
+    try:
+        result = api.set_cover_wizard_settings(
+            {
+                "coverOnlineEnabled": True,
+                "coverVndbCandidateLimit": 8,
+                "coverLocalScanCandidateLimit": 25,
+            }
+        )
+
+        assert result == {
+            "ok": True,
+            "data": {
+                "coverOnlineEnabled": True,
+                "coverVndbCandidateLimit": 8,
+                "coverLocalScanCandidateLimit": 25,
+            },
+        }
+        assert config.current.ui_scale == 1.0
+        assert config.current.cover_online_enabled is True
+    finally:
+        tasks.close()
+
+
+def test_set_cover_wizard_settings_rejects_out_of_range_values(tmp_path: Path) -> None:
+    api, tasks, config = _api(tmp_path)
+    try:
+        result = api.set_cover_wizard_settings(
+            {
+                "coverOnlineEnabled": False,
+                "coverVndbCandidateLimit": 21,
+                "coverLocalScanCandidateLimit": 10,
+            }
+        )
+
+        assert result["ok"] is False
+        assert result["error"]["code"] == "invalid_cover_wizard_settings"
+        assert config.current.cover_vndb_candidate_limit == 5
     finally:
         tasks.close()
 

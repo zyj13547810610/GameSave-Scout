@@ -13,6 +13,8 @@ from uuid import uuid4
 
 logger = logging.getLogger(__name__)
 UI_SCALE_OPTIONS = frozenset({0.8, 0.9, 1.0, 1.1, 1.2})
+COVER_VNDB_LIMIT_RANGE = range(1, 21)
+COVER_LOCAL_LIMIT_RANGE = range(1, 101)
 
 
 class InvalidConfigError(ValueError):
@@ -23,13 +25,20 @@ class InvalidUiScaleError(ValueError):
     """Raised when a requested UI scale is outside the supported options."""
 
 
+class InvalidCoverWizardSettingsError(ValueError):
+    """Raised when cover wizard settings are outside the supported limits."""
+
+
 @dataclass(frozen=True)
 class AppConfig:
-    version: int = 2
+    version: int = 3
     language: str = "zh-CN"
     startup_quick_scan: bool = True
     orphan_scan_exclusions: tuple[str, ...] = ()
     ui_scale: float = 1.0
+    cover_online_enabled: bool = False
+    cover_vndb_candidate_limit: int = 5
+    cover_local_scan_candidate_limit: int = 10
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -38,6 +47,9 @@ class AppConfig:
             "startupQuickScan": self.startup_quick_scan,
             "orphanScanExclusions": list(self.orphan_scan_exclusions),
             "uiScale": self.ui_scale,
+            "coverOnlineEnabled": self.cover_online_enabled,
+            "coverVndbCandidateLimit": self.cover_vndb_candidate_limit,
+            "coverLocalScanCandidateLimit": self.cover_local_scan_candidate_limit,
         }
 
 
@@ -50,6 +62,9 @@ class JsonConfigStore:
         "startupQuickScan",
         "orphanScanExclusions",
         "uiScale",
+        "coverOnlineEnabled",
+        "coverVndbCandidateLimit",
+        "coverLocalScanCandidateLimit",
     }
 
     def __init__(self, path: Path) -> None:
@@ -99,8 +114,11 @@ class JsonConfigStore:
         startup_quick_scan = raw.get("startupQuickScan", True)
         exclusions = raw.get("orphanScanExclusions", [])
         ui_scale = raw.get("uiScale", 1.0)
+        cover_online_enabled = raw.get("coverOnlineEnabled", False)
+        cover_vndb_candidate_limit = raw.get("coverVndbCandidateLimit", 5)
+        cover_local_scan_candidate_limit = raw.get("coverLocalScanCandidateLimit", 10)
 
-        if type(version) is not int or version not in {1, 2}:
+        if type(version) is not int or version not in {1, 2, 3}:
             raise InvalidConfigError("配置文件无效：不支持的版本。")
         if not isinstance(language, str) or not language:
             raise InvalidConfigError("配置文件无效：语言必须是非空字符串。")
@@ -115,14 +133,48 @@ class JsonConfigStore:
         normalized_ui_scale = float(ui_scale) if valid_ui_scale else 1.0
         if not valid_ui_scale:
             logger.warning("配置中的 uiScale 无效，已在本次运行中回退到 100%。")
+        valid_online_enabled = isinstance(cover_online_enabled, bool)
+        normalized_online_enabled = (
+            cover_online_enabled if valid_online_enabled else False
+        )
+        if not valid_online_enabled:
+            logger.warning("配置中的 coverOnlineEnabled 无效，已回退为关闭。")
+
+        valid_vndb_limit = (
+            type(cover_vndb_candidate_limit) is int
+            and cover_vndb_candidate_limit in COVER_VNDB_LIMIT_RANGE
+        )
+        normalized_vndb_limit = cover_vndb_candidate_limit if valid_vndb_limit else 5
+        if not valid_vndb_limit:
+            logger.warning("配置中的 coverVndbCandidateLimit 无效，已回退为 5。")
+
+        valid_local_limit = (
+            type(cover_local_scan_candidate_limit) is int
+            and cover_local_scan_candidate_limit in COVER_LOCAL_LIMIT_RANGE
+        )
+        normalized_local_limit = (
+            cover_local_scan_candidate_limit if valid_local_limit else 10
+        )
+        if not valid_local_limit:
+            logger.warning("配置中的 coverLocalScanCandidateLimit 无效，已回退为 10。")
+
         config = AppConfig(
-            version=2,
+            version=3,
             language=language,
             startup_quick_scan=startup_quick_scan,
             orphan_scan_exclusions=tuple(exclusions),
             ui_scale=normalized_ui_scale,
+            cover_online_enabled=normalized_online_enabled,
+            cover_vndb_candidate_limit=normalized_vndb_limit,
+            cover_local_scan_candidate_limit=normalized_local_limit,
         )
-        needs_save = version != 2 or raw.get("uiScale") != normalized_ui_scale
+        needs_save = (
+            version != 3
+            or raw.get("uiScale") != normalized_ui_scale
+            or raw.get("coverOnlineEnabled") != normalized_online_enabled
+            or raw.get("coverVndbCandidateLimit") != normalized_vndb_limit
+            or raw.get("coverLocalScanCandidateLimit") != normalized_local_limit
+        )
         return config, needs_save
 
     def _save_normalized(self, config: AppConfig) -> None:
@@ -154,6 +206,36 @@ class ConfigService:
             raise InvalidUiScaleError("界面缩放必须是 80%、90%、100%、110% 或 120%。")
         with self._lock:
             updated = replace(self._current, ui_scale=float(value))
+            self._store.save(updated)
+            self._current = updated
+            return updated
+
+    def set_cover_wizard_settings(
+        self,
+        *,
+        online_enabled: object,
+        vndb_candidate_limit: object,
+        local_scan_candidate_limit: object,
+    ) -> AppConfig:
+        if not isinstance(online_enabled, bool):
+            raise InvalidCoverWizardSettingsError("封面在线搜索开关必须是布尔值。")
+        if (
+            type(vndb_candidate_limit) is not int
+            or vndb_candidate_limit not in COVER_VNDB_LIMIT_RANGE
+        ):
+            raise InvalidCoverWizardSettingsError("封面 VNDB 候选数量必须为 1 到 20。")
+        if (
+            type(local_scan_candidate_limit) is not int
+            or local_scan_candidate_limit not in COVER_LOCAL_LIMIT_RANGE
+        ):
+            raise InvalidCoverWizardSettingsError("封面本地扫描数量必须为 1 到 100。")
+        with self._lock:
+            updated = replace(
+                self._current,
+                cover_online_enabled=online_enabled,
+                cover_vndb_candidate_limit=vndb_candidate_limit,
+                cover_local_scan_candidate_limit=local_scan_candidate_limit,
+            )
             self._store.save(updated)
             self._current = updated
             return updated

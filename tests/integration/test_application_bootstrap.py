@@ -164,6 +164,9 @@ def test_application_closes_guided_session_before_shared_writer(
     application = build_application(AppPaths.from_root(tmp_path / "便携应用"))
     order: list[str] = []
     original_guided_close = application.guided_saves.close
+    original_tasks_close = application.tasks.close
+    original_wizard_close = application.cover_wizard.close_all
+    original_assets_stop = application.asset_server.stop
     original_writer_close = application.writer.close
 
     def close_guided() -> None:
@@ -174,10 +177,25 @@ def test_application_closes_guided_session_before_shared_writer(
         order.append("writer")
         original_writer_close(timeout)
 
+    def close_tasks() -> None:
+        order.append("tasks")
+        original_tasks_close()
+
+    def close_wizard() -> None:
+        order.append("wizard")
+        original_wizard_close()
+
+    def stop_assets() -> None:
+        order.append("assets")
+        original_assets_stop()
+
     monkeypatch.setattr(application.guided_saves, "close", close_guided)
+    monkeypatch.setattr(application.tasks, "close", close_tasks)
+    monkeypatch.setattr(application.cover_wizard, "close_all", close_wizard)
+    monkeypatch.setattr(application.asset_server, "stop", stop_assets)
     monkeypatch.setattr(application.writer, "close", close_writer)
 
     application.close()
     application.close()
 
-    assert order == ["guided", "writer"]
+    assert order == ["guided", "tasks", "wizard", "assets", "writer"]
