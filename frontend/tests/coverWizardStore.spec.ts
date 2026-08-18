@@ -104,7 +104,7 @@ function snapshot(currentGameId: string | null): CoverWizardSnapshot {
     currentGameId,
     queue: currentGameId
       ? [{
-          gameId: currentGameId, title: currentGameId, initialHasCover: false,
+          gameId: currentGameId, title: currentGameId, version: null, initialHasCover: false,
           status: 'ready', candidateCount: 1, error: null,
         }]
       : [],

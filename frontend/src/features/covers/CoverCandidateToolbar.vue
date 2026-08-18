@@ -48,7 +48,7 @@ defineEmits<{
         >
       </label>
     </div>
-    <p v-if="!settings.coverOnlineEnabled" class="cover-privacy-note">VNDB 默认关闭；开启后只发送游戏标题，不发送安装路径或本地文件。</p>
+    <p v-if="!settings.coverOnlineEnabled" class="cover-privacy-note">VNDB 默认关闭；开启后只发送游戏标题，不发送版本号、安装路径或本地文件。</p>
     <div
       v-if="task"
       data-test="cover-task-progress"

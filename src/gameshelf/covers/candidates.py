@@ -85,6 +85,7 @@ class CoverWizardQueueItem:
     game_id: str
     title: str
     initial_has_cover: bool
+    version: str | None = None
     status: CoverWizardQueueStatus = "pending"
     candidate_count: int = 0
     error: str | None = None

@@ -12,12 +12,13 @@ describe('CoverWizardQueue', () => {
           {
             gameId: 'game-1',
             title: 'A very long game title that wraps onto multiple lines in the queue',
+            version: 'v1.0.8',
             initialHasCover: false,
             status: 'pending',
             candidateCount: 0,
             error: null,
           },
-          { gameId: 'game-2', title: 'Bob', initialHasCover: false, status: 'pending', candidateCount: 0, error: null },
+          { gameId: 'game-2', title: 'Bob', version: null, initialHasCover: false, status: 'pending', candidateCount: 0, error: null },
         ],
         selectedGameId: 'game-1',
         includeExisting: false,
@@ -27,6 +28,9 @@ describe('CoverWizardQueue', () => {
     const queueList = wrapper.get('[data-test="cover-queue-scroll"]')
 
     expect(getComputedStyle(queueList.element).gridAutoRows).toBe('max-content')
+    expect(wrapper.get('.cover-queue-item-title').text()).not.toContain('v1.0.8')
+    expect(wrapper.get('.cover-queue-version').text()).toBe('v1.0.8')
+    expect(wrapper.get('.cover-queue-select option').text()).toContain('v1.0.8')
     wrapper.unmount()
   })
 
@@ -45,8 +49,8 @@ describe('CoverWizardQueue', () => {
       const wrapper = mount(CoverWizardQueue, {
         props: {
           items: [
-            { gameId: 'game-1', title: 'Alice', initialHasCover: false, status: 'ready', candidateCount: 1, error: null },
-            { gameId: 'game-2', title: 'Bob', initialHasCover: false, status: 'pending', candidateCount: 0, error: null },
+            { gameId: 'game-1', title: 'Alice', version: null, initialHasCover: false, status: 'ready', candidateCount: 1, error: null },
+            { gameId: 'game-2', title: 'Bob', version: null, initialHasCover: false, status: 'pending', candidateCount: 0, error: null },
           ],
           selectedGameId: 'game-1',
           includeExisting: false,

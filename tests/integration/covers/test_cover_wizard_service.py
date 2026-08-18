@@ -71,9 +71,11 @@ class _Vndb:
     def __init__(self) -> None:
         self.candidates: dict[str, tuple[CoverCandidate, ...]] = {}
         self.failure: Exception | None = None
+        self.queries: list[str] = []
 
     def search(self, title, limit, root, game_id, context):
-        del title, limit, root
+        del limit, root
+        self.queries.append(title)
         if self.failure is not None:
             raise self.failure
         context.report(
@@ -358,6 +360,43 @@ def test_vndb_batch_progress_stays_game_based(harness: _Harness) -> None:
         "正在搜索 1/2：Alice" in message
         for _, _, message, _ in progress.reports
     )
+
+
+def test_vndb_current_search_uses_pure_title_and_keeps_version_in_local_ui(
+    harness: _Harness,
+) -> None:
+    harness.library.set_game_metadata(harness.alice_id, "Alice", "v1.0.8")
+    service = harness.service()
+    session = service.start()
+    progress = _RecordingProgress()
+
+    service.collect_vndb(session.id, [harness.alice_id], 5, progress)
+
+    alice = next(item for item in session.queue if item.game_id == harness.alice_id)
+    assert harness.vndb.queries == ["Alice"]
+    assert alice.title == "Alice"
+    assert alice.version == "v1.0.8"
+    assert any(
+        "Alice v1.0.8" in message for _, _, message, _ in progress.reports
+    )
+
+
+def test_vndb_batch_search_never_appends_versions_to_queries(
+    harness: _Harness,
+) -> None:
+    harness.library.set_game_metadata(harness.alice_id, "Alice", "v1.0.8")
+    harness.library.set_game_metadata(harness.save_only_id, "Archive", "Build 2048")
+    service = harness.service()
+    session = service.start()
+
+    service.collect_vndb(
+        session.id,
+        [harness.alice_id, harness.save_only_id],
+        5,
+        _Progress(),
+    )
+
+    assert harness.vndb.queries == ["Alice", "Archive"]
 
 
 def test_busy_close_and_stale_cleanup_are_bounded(

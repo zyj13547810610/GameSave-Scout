@@ -22,6 +22,7 @@ export type CoverCandidateSource =
 export type CoverWizardQueueItem = {
   gameId: string
   title: string
+  version: string | null
   initialHasCover: boolean
   status: 'pending' | 'ready' | 'adopted' | 'skipped' | 'failed'
   candidateCount: number

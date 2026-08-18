@@ -174,6 +174,7 @@ class CoverWizardService:
                     game_id=game.id,
                     title=game.title,
                     initial_has_cover=game.cover_thumb_relpath is not None,
+                    version=game.version,
                 )
                 for game in self._library.list_games()
             ]
@@ -334,7 +335,7 @@ class CoverWizardService:
                     total_games,
                     index,
                     game.id,
-                    game.title,
+                    _game_display_name(game),
                 )
                 batch_progress.report(0, None, "正在查询 VNDB")
                 try:
@@ -347,7 +348,7 @@ class CoverWizardService:
                     context.report(
                         index,
                         total_games,
-                        f"{game.title} 的 VNDB 搜索失败，继续下一个",
+                        f"{_game_display_name(game)} 的 VNDB 搜索失败，继续下一个",
                         details={"gameId": game_id},
                     )
                     continue
@@ -358,7 +359,7 @@ class CoverWizardService:
                 context.report(
                     index,
                     total_games,
-                    f"已完成 {game.title} 的 VNDB 搜索",
+                    f"已完成 {_game_display_name(game)} 的 VNDB 搜索",
                     details={"gameId": game_id},
                 )
             with self._lock:
@@ -557,6 +558,12 @@ class CoverWizardService:
                     shutil.rmtree(path)
             except OSError:
                 continue
+
+
+def _game_display_name(game: Game) -> str:
+    if game.version:
+        return f"{game.title} {game.version}"
+    return game.title
 
 
 def _verify_candidate_source(candidate: CoverCandidate) -> None:

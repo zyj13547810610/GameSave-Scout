@@ -138,7 +138,16 @@ def _api(tmp_path: Path, *, online: bool = False):
     )
     state = CoverWizardSnapshot(
         id="wizard-1",
-        queue=(CoverWizardQueueItem(game.id, game.title, False, "ready", 1),),
+        queue=(
+            CoverWizardQueueItem(
+                game_id=game.id,
+                title=game.title,
+                initial_has_cover=False,
+                version=game.version,
+                status="ready",
+                candidate_count=1,
+            ),
+        ),
         current_game_id=game.id,
         include_existing=False,
         source_operation_active=False,
@@ -171,6 +180,7 @@ def test_snapshot_and_candidate_dtos_hide_backend_paths(tmp_path: Path) -> None:
                 {
                     "gameId": "game-1",
                     "title": "Alice",
+                    "version": "v1.0.8",
                     "initialHasCover": False,
                     "status": "ready",
                     "candidateCount": 1,
@@ -339,4 +349,5 @@ def _game() -> Game:
         cover_revision=0,
         last_launched_at=None,
         missing_since=None,
+        version="v1.0.8",
     )

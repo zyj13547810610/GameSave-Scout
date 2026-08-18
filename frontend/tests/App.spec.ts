@@ -79,7 +79,7 @@ describe('App', () => {
         return ok({
           id: 'wizard-1',
           queue: [{
-            gameId: 'game-1', title: 'Alice', initialHasCover: false,
+            gameId: 'game-1', title: 'Alice', version: null, initialHasCover: false,
             status: 'pending', candidateCount: 0, error: null,
           }],
           currentGameId: 'game-1', includeExisting: false, sourceOperationActive: false,

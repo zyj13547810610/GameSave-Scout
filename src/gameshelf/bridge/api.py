@@ -1523,6 +1523,7 @@ def _cover_wizard_snapshot_dto(
             {
                 "gameId": item.game_id,
                 "title": item.title,
+                "version": item.version,
                 "initialHasCover": item.initial_has_cover,
                 "status": item.status,
                 "candidateCount": item.candidate_count,

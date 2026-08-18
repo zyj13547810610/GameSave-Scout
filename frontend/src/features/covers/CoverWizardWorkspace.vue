@@ -28,6 +28,7 @@ const currentGame = computed(() => (
   props.games.find((game) => game.id === store.selectedGameId) ?? null
 ))
 const currentTitle = computed(() => currentGame.value?.title ?? '当前游戏')
+const currentVersion = computed(() => currentGame.value?.version ?? null)
 
 onMounted(async () => {
   await store.open(props.bridge)
@@ -211,7 +212,10 @@ function onKeydown(event: KeyboardEvent) {
         <div class="cover-review-heading">
           <div>
             <p>当前游戏</p>
-            <h2>{{ currentTitle }}</h2>
+            <div class="cover-review-title-row">
+              <h2>{{ currentTitle }}</h2>
+              <span v-if="currentVersion" class="cover-review-version">{{ currentVersion }}</span>
+            </div>
           </div>
           <CoverWizardSettingsPanel
             :settings="localSettings"

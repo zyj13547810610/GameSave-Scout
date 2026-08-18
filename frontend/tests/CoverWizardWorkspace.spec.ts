@@ -46,8 +46,8 @@ describe('CoverWizardWorkspace', () => {
       id: 'wizard-1',
       currentGameId: 'game-1',
       queue: [
-        { gameId: 'game-1', title: 'Alice', initialHasCover: false, status: 'ready', candidateCount: 1, error: null },
-        { gameId: 'game-2', title: 'Bob', initialHasCover: false, status: 'pending', candidateCount: 0, error: null },
+        { gameId: 'game-1', title: 'Alice', version: null, initialHasCover: false, status: 'ready', candidateCount: 1, error: null },
+        { gameId: 'game-2', title: 'Bob', version: null, initialHasCover: false, status: 'pending', candidateCount: 0, error: null },
       ],
     })
     const bridge = createMockBridge({
@@ -109,6 +109,39 @@ describe('CoverWizardWorkspace', () => {
     wrapper.unmount()
   })
 
+  it('shows the current game version as a separate local-only badge', async () => {
+    const game = fixtureGame({ id: 'game-1', title: 'Alice', version: 'v1.0.8' })
+    const wrapper = mount(CoverWizardWorkspace, {
+      props: {
+        bridge: createMockBridge({
+          async start_cover_wizard() {
+            return ok(fixtureCoverWizard({
+              id: 'wizard-1',
+              currentGameId: game.id,
+              queue: [{
+                gameId: game.id,
+                title: game.title,
+                version: game.version,
+                initialHasCover: false,
+                status: 'pending',
+                candidateCount: 0,
+                error: null,
+              }],
+            }))
+          },
+        }),
+        games: [game],
+        settings,
+      },
+      global: { plugins: [createPinia()] },
+    })
+    await flushPromises()
+
+    expect(wrapper.get('.cover-review-heading h2').text()).toBe('Alice')
+    expect(wrapper.get('.cover-review-version').text()).toBe('v1.0.8')
+    wrapper.unmount()
+  })
+
   it('disables online and unavailable local sources and shows privacy text', async () => {
     const saveOnly = fixtureGame({ id: 'game-1', status: 'save_only', installPath: null })
     const wrapper = mount(CoverWizardWorkspace, {
@@ -125,7 +158,7 @@ describe('CoverWizardWorkspace', () => {
     expect(buttons[0].attributes('disabled')).toBeDefined()
     expect(buttons[1].attributes('disabled')).toBeDefined()
     expect(buttons[2].attributes('disabled')).toBeDefined()
-    expect(wrapper.text()).toContain('只发送游戏标题')
+    expect(wrapper.text()).toContain('只发送游戏标题，不发送版本号、安装路径或本地文件')
     wrapper.unmount()
   })
 
@@ -214,6 +247,7 @@ function snapshot() {
     currentGameId: 'game-1',
     queue: [{
       gameId: 'game-1', title: 'Alice', initialHasCover: false,
+      version: null,
       status: 'ready', candidateCount: 1, error: null,
     }],
   })

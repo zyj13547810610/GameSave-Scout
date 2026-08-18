@@ -52,7 +52,7 @@ watch(
       @change="$emit('select', ($event.target as HTMLSelectElement).value)"
     >
       <option v-for="item in items" :key="item.gameId" :value="item.gameId">
-        {{ item.title }} · {{ statusLabels[item.status] }}
+        {{ item.title }}<template v-if="item.version"> · {{ item.version }}</template> · {{ statusLabels[item.status] }}
       </option>
     </select>
     <div
@@ -72,7 +72,8 @@ watch(
         :aria-current="selectedGameId === item.gameId ? 'true' : undefined"
         @click="$emit('select', item.gameId)"
       >
-        <span>{{ item.title }}</span>
+        <span class="cover-queue-item-title">{{ item.title }}</span>
+        <small v-if="item.version" class="cover-queue-version">{{ item.version }}</small>
         <small :class="`status-${item.status}`">
           {{ statusLabels[item.status] }}<template v-if="item.candidateCount"> · {{ item.candidateCount }}</template>
         </small>
