@@ -99,9 +99,9 @@ function scanResult(snapshot: TaskSnapshot): ScanResult | null {
             已检查 {{ numberDetail(taskSnapshots[root.id], 'directoriesScanned') }} 个目录 ·
             发现 {{ numberDetail(taskSnapshots[root.id], 'discovered') }} 个游戏 ·
             不可访问 {{ numberDetail(taskSnapshots[root.id], 'inaccessibleDirectories') }} 个 ·
-            警告 {{ numberDetail(taskSnapshots[root.id], 'warnings') }} 项 ·
-            {{ numberDetail(taskSnapshots[root.id], 'elapsedSeconds') }} 秒
+            警告 {{ numberDetail(taskSnapshots[root.id], 'warnings') }} 项
           </small>
+          <small data-test="scan-elapsed">已用时 {{ numberDetail(taskSnapshots[root.id], 'elapsedSeconds') }} 秒</small>
         </section>
         <section v-else-if="taskSnapshots[root.id]" data-test="scan-summary" :class="['scan-summary', taskSnapshots[root.id].status]" aria-live="polite">
           <template v-if="scanResult(taskSnapshots[root.id])">

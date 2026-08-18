@@ -158,6 +158,7 @@ describe('ScanRootList', () => {
             details: {
               stage: 'analyzing', currentPath: 'Alice', checked: 3,
               cacheHits: 2, reanalyzed: 0, fullAnalyses: 1, warnings: 0,
+              elapsedSeconds: 6.3,
             },
             result: null, error: null,
           },
@@ -166,6 +167,7 @@ describe('ScanRootList', () => {
     })
 
     expect(wrapper.get('[data-test="scan-progress"]').text()).toContain('正在分析游戏 3/13')
+    expect(wrapper.get('[data-test="scan-progress"]').text()).toContain('已用时 6.3 秒')
     expect(wrapper.find('[data-test="determinate-progress"]').exists()).toBe(true)
     expect(wrapper.find('[data-test="indeterminate-progress"]').exists()).toBe(false)
   })
