@@ -55,6 +55,16 @@ CREATE UNIQUE INDEX games_root_relative_unique
   ON games(scan_root_id, relative_dir)
   WHERE scan_root_id IS NOT NULL AND relative_dir IS NOT NULL;
 
+CREATE TABLE game_analysis_cache (
+  game_id TEXT PRIMARY KEY REFERENCES games(id) ON DELETE CASCADE,
+  executable_relpath TEXT NOT NULL,
+  file_size INTEGER NOT NULL CHECK (file_size >= 0),
+  modified_time_ns INTEGER NOT NULL CHECK (modified_time_ns >= 0),
+  ranker_rules_version TEXT NOT NULL,
+  engine_rules_version TEXT NOT NULL,
+  analyzed_at TEXT NOT NULL
+);
+
 CREATE TABLE save_locations (
   id TEXT PRIMARY KEY,
   game_id TEXT NOT NULL REFERENCES games(id) ON DELETE CASCADE,

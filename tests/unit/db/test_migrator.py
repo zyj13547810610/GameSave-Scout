@@ -34,12 +34,52 @@ def test_migrator_creates_v2_schema_with_version_fields_and_wal(tmp_path: Path) 
         game_columns = {
             row[1] for row in connection.execute("PRAGMA table_info(games)")
         }
+        cache_columns = {
+            row[1]
+            for row in connection.execute("PRAGMA table_info(game_analysis_cache)")
+        }
 
     assert version == user_version == 2
     assert tables >= V1_TABLES
     assert {"version", "detected_version", "version_is_manual"} <= game_columns
+    assert cache_columns == {
+        "game_id",
+        "executable_relpath",
+        "file_size",
+        "modified_time_ns",
+        "ranker_rules_version",
+        "engine_rules_version",
+        "analyzed_at",
+    }
     assert foreign_keys == 1
     assert journal_mode == "wal"
+
+
+def test_new_database_cascades_game_analysis_cache_with_its_game(
+    tmp_path: Path,
+) -> None:
+    factory = ConnectionFactory(tmp_path / "library.db")
+    Migrator(factory, tmp_path / "backups").migrate()
+
+    with factory.connect() as connection:
+        connection.execute(
+            "INSERT INTO games(id, title, status, added_at, updated_at) "
+            "VALUES ('game-1', 'Game', 'save_only', 'now', 'now')"
+        )
+        connection.execute(
+            """
+            INSERT INTO game_analysis_cache(
+                game_id, executable_relpath, file_size, modified_time_ns,
+                ranker_rules_version, engine_rules_version, analyzed_at
+            ) VALUES ('game-1', 'Game.exe', 10, 20, 'ranker-1', 'engine-1', 'now')
+            """
+        )
+        connection.execute("DELETE FROM games WHERE id = 'game-1'")
+        remaining = connection.execute(
+            "SELECT COUNT(*) FROM game_analysis_cache"
+        ).fetchone()[0]
+
+    assert remaining == 0
 
 
 def test_migrator_upgrades_v1_without_splitting_existing_titles(
