@@ -190,12 +190,12 @@ def _score_group(
             key=abs,
         )
         absolute_delta_ns = abs(closest_delta_ns)
-        if absolute_delta_ns <= 2_000_000_000:
+        if absolute_delta_ns <= 5_000_000_000:
             confidence += 0.55
-            evidence.append("在保存标记前后 2 秒内发生变化")
-        elif absolute_delta_ns <= 10_000_000_000:
+            evidence.append("在保存标记前后 5 秒内发生变化")
+        elif absolute_delta_ns <= 15_000_000_000:
             confidence += 0.30
-            evidence.append("在保存标记前后 10 秒内发生变化")
+            evidence.append("在保存标记前后 15 秒内发生变化")
 
     if len(ordered) >= 2:
         confidence += 0.15

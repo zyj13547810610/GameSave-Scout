@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from gameshelf.platform.windows.known_folders import KnownFolders
 from gameshelf.saves.guided_events import AggregatedFileChange
 from gameshelf.saves.guided_scanner import ScannedFileMetadata
@@ -102,8 +104,42 @@ def test_scanned_wall_clock_metadata_is_compared_in_monotonic_time(
     )[0]
 
     assert draft.mark_offset_ms == 500
-    assert "在保存标记前后 2 秒内发生变化" in draft.evidence
+    assert "在保存标记前后 5 秒内发生变化" in draft.evidence
     assert draft.first_changed_at == "2023-11-14T22:13:30.500+00:00"
+
+
+@pytest.mark.parametrize(
+    ("mark_offset_ns", "expected_confidence", "expected_time_evidence"),
+    (
+        (-5_000_000_000, 0.70, "在保存标记前后 5 秒内发生变化"),
+        (-15_000_000_000, 0.45, "在保存标记前后 15 秒内发生变化"),
+        (-15_000_000_001, 0.15, None),
+    ),
+)
+def test_save_mark_time_weight_uses_five_and_fifteen_second_boundaries(
+    tmp_path: Path,
+    mark_offset_ns: int,
+    expected_confidence: float,
+    expected_time_evidence: str | None,
+) -> None:
+    context = _context(tmp_path)
+    save_mark_ns = 20_000_000_000
+
+    draft = score_guided_changes(
+        changes=(
+            _change(context.game_dir / "slot1.sav", save_mark_ns + mark_offset_ns),
+        ),
+        save_mark_ns=save_mark_ns,
+        context=context.scoring,
+    )[0]
+
+    assert draft.confidence == expected_confidence
+    time_evidence = tuple(
+        item for item in draft.evidence if item.startswith("在保存标记前后")
+    )
+    assert time_evidence == (
+        () if expected_time_evidence is None else (expected_time_evidence,)
+    )
 
 
 def test_missing_mark_keeps_candidates_unselected(tmp_path: Path) -> None:
