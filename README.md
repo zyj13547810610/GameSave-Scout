@@ -21,7 +21,14 @@ V0.1 不包含存档备份、恢复、同步、云服务和常驻后台监控。
 
 ## 版本更新记录
 
-以下记录按源码开发里程碑整理；除 `V0.1.0` 外，不表示每个小版本都曾单独生成便携包或发布到 GitHub Release。详细设计、实现边界和验证记录以[固定设计文档](docs/superpowers/plans)为准。
+以下记录按源码开发里程碑整理；`V0.1.0` 已生成本地双版本便携候选包，`V0.1.4` 正在执行本轮版本收口与重建，其余小版本不表示曾单独生成便携包或发布到 GitHub Release。详细设计、实现边界和验证记录以[固定设计文档](docs/superpowers/plans)为准。
+
+### V0.1.4 — 2026-08-18
+
+- 启动快速核验改为只检查已入库游戏，并可全局关闭；手动完整扫描继续负责发现新游戏；
+- 新增持久化游戏分析缓存、文件指纹分层失效和 1～4 全局共享分析并发，减少未变化游戏的重复遍历；
+- 新增 quick/full 分阶段进度、缓存统计、扫描中耗时和单游戏“重新检测主程序和引擎”；
+- 新根目录默认排除 `Mods` 与 `**/Mods`，规则可由用户删除；相关自动门禁和 10 项真实人工验收全部通过。
 
 ### V0.1.3 — 2026-08-18
 
@@ -83,8 +90,8 @@ V0.1 提供两个 Windows x64 便携包：
 
 | 版本 | 目录/ZIP 名称 | WebView2 | 适用场景 |
 | --- | --- | --- | --- |
-| 完整离线版 | `GameShelf-0.1.0-win-x64` | 自带 Fixed Version Runtime | 体积较大，可在系统没有 WebView2 时离线启动 |
-| 轻量联网版 | `GameShelf-0.1.0-win-x64-lite` | 使用系统 Evergreen Runtime | 下载体积较小，系统缺失 Runtime 时需要联网手动安装 |
+| 完整离线版 | `GameShelf-0.1.4-win-x64` | 自带 Fixed Version Runtime | 体积较大，可在系统没有 WebView2 时离线启动 |
+| 轻量联网版 | `GameShelf-0.1.4-win-x64-lite` | 使用系统 Evergreen Runtime | 下载体积较小，系统缺失 Runtime 时需要联网手动安装 |
 
 使用步骤：
 
@@ -176,22 +183,22 @@ $webView2Bootstrapper = (Resolve-Path ".\webview安装包\MicrosoftEdgeWebview2S
 
 ```text
 dist/
-├─ GameShelf-0.1.0-win-x64/
-├─ GameShelf-0.1.0-win-x64.zip
-├─ GameShelf-0.1.0-win-x64.zip.sha256
-├─ GameShelf-0.1.0-win-x64-lite/
-├─ GameShelf-0.1.0-win-x64-lite.zip
-└─ GameShelf-0.1.0-win-x64-lite.zip.sha256
+├─ GameShelf-0.1.4-win-x64/
+├─ GameShelf-0.1.4-win-x64.zip
+├─ GameShelf-0.1.4-win-x64.zip.sha256
+├─ GameShelf-0.1.4-win-x64-lite/
+├─ GameShelf-0.1.4-win-x64-lite.zip
+└─ GameShelf-0.1.4-win-x64-lite.zip.sha256
 ```
 
 可以独立复核两个 ZIP：
 
 ```powershell
-Get-FileHash .\dist\GameShelf-0.1.0-win-x64.zip -Algorithm SHA256
-Get-Content .\dist\GameShelf-0.1.0-win-x64.zip.sha256
+Get-FileHash .\dist\GameShelf-0.1.4-win-x64.zip -Algorithm SHA256
+Get-Content .\dist\GameShelf-0.1.4-win-x64.zip.sha256
 
-Get-FileHash .\dist\GameShelf-0.1.0-win-x64-lite.zip -Algorithm SHA256
-Get-Content .\dist\GameShelf-0.1.0-win-x64-lite.zip.sha256
+Get-FileHash .\dist\GameShelf-0.1.4-win-x64-lite.zip -Algorithm SHA256
+Get-Content .\dist\GameShelf-0.1.4-win-x64-lite.zip.sha256
 ```
 
 构建失败时，脚本不会用不完整的新结果覆盖上一组六个正式产物。`build/`、`dist/` 与 `webview安装包/` 都是本地内容，不应提交到 Git。

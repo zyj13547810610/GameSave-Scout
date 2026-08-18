@@ -1,4 +1,4 @@
-GameShelf 0.1.0 Windows x64 轻量联网便携版
+GameShelf 0.1.4 Windows x64 轻量联网便携版
 ========================================
 
 运行方式
@@ -46,6 +46,6 @@ GameShelf 不会静默运行或等待安装器，也不会自动重新启动自�
 签名与许可证
 ------------
 
-GameShelf 0.1.0 本体未进行 Authenticode 代码签名。随包
+GameShelf 0.1.4 本体未进行 Authenticode 代码签名。随包
 MicrosoftEdgeWebview2Setup.exe 是微软官方签名的 Evergreen Bootstrapper；请勿替换。
 GameShelf 使用 MIT License，第三方来源和许可证详见 THIRD_PARTY_NOTICES.md。

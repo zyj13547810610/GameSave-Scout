@@ -134,7 +134,7 @@ def test_search_sends_exact_post_contract_and_builds_candidate(tmp_path: Path) -
     }
     assert request.get_header("Content-type") == "application/json"
     assert request.get_header("Accept") == "application/json"
-    assert request.get_header("User-agent") == "GameShelf/0.1.0"
+    assert request.get_header("User-agent") == "GameShelf/0.1.4"
     assert len(candidates) == 1
     assert candidates[0].source == "vndb"
     assert candidates[0].vndb_id == "v17"
