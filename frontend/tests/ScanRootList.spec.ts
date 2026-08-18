@@ -11,6 +11,7 @@ describe('ScanRootList', () => {
       props: {
         bridge: createMockBridge(),
         roots: [fixtureRoot()],
+        libraryScanSettings: { startupQuickScan: true, scanConcurrency: 1 },
         scanTasks: {},
         taskSnapshots: {},
       },
@@ -23,10 +24,44 @@ describe('ScanRootList', () => {
     wrapper.unmount()
   })
 
+  it('keeps scan settings fixed above the root scroll region', () => {
+    const wrapper = mount(ScanRootList, {
+      props: {
+        bridge: createMockBridge(),
+        roots: [fixtureRoot()],
+        libraryScanSettings: { startupQuickScan: true, scanConcurrency: 1 },
+        scanTasks: {},
+        taskSnapshots: {},
+      },
+    })
+
+    const panel = wrapper.get('.root-panel')
+    const settings = panel.get('[data-test="library-scan-settings"]')
+    const scroll = panel.get('[data-test="root-scroll-region"]')
+    expect(settings.element.compareDocumentPosition(scroll.element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(scroll.find('[data-test="library-scan-settings"]').exists()).toBe(false)
+  })
+
+  it('disables manual scanning for a disabled root', () => {
+    const wrapper = mount(ScanRootList, {
+      props: {
+        bridge: createMockBridge(),
+        roots: [fixtureRoot({ enabled: false })],
+        libraryScanSettings: { startupQuickScan: true, scanConcurrency: 1 },
+        scanTasks: {},
+        taskSnapshots: {},
+      },
+    })
+
+    const button = wrapper.get('[data-test="scan-root"]')
+    expect(button.attributes('disabled')).toBeDefined()
+    expect(button.attributes('title')).toContain('参与扫描')
+  })
+
   it('opens settings for the selected root', async () => {
     const root = fixtureRoot()
     const wrapper = mount(ScanRootList, {
-      props: { bridge: createMockBridge(), roots: [root], scanTasks: {}, taskSnapshots: {} },
+      props: { bridge: createMockBridge(), roots: [root], libraryScanSettings: { startupQuickScan: true, scanConcurrency: 1 }, scanTasks: {}, taskSnapshots: {} },
     })
 
     await wrapper.get('[data-test="edit-root"]').trigger('click')
@@ -40,6 +75,7 @@ describe('ScanRootList', () => {
       props: {
         bridge: createMockBridge(),
         roots: [root],
+        libraryScanSettings: { startupQuickScan: true, scanConcurrency: 1 },
         scanTasks: { [root.id]: 'task-1' },
         taskSnapshots: {
           [root.id]: {
@@ -80,6 +116,7 @@ describe('ScanRootList', () => {
       props: {
         bridge: createMockBridge(),
         roots: [root],
+        libraryScanSettings: { startupQuickScan: true, scanConcurrency: 1 },
         scanTasks: {},
         taskSnapshots: {
           [root.id]: {
@@ -91,7 +128,9 @@ describe('ScanRootList', () => {
             details: { stage: 'completed', elapsedSeconds: 5.5 },
             result: {
               sessionId: 'scan-1', status: 'completed', discovered: 4,
-              added: 2, updated: 1, missing: 1, warnings: 0, moveSuggestions: [],
+              added: 2, updated: 1, missing: 1, warnings: 0,
+              checked: 4, cacheHits: 2, reanalyzed: 1, fullAnalyses: 1,
+              moveSuggestions: [],
             },
             error: null,
           },

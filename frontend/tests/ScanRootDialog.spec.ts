@@ -4,6 +4,36 @@ import { createMockBridge, fixtureRoot, ok } from '../src/api/mockBridge'
 import ScanRootDialog from '../src/features/scan-roots/ScanRootDialog.vue'
 
 describe('ScanRootDialog', () => {
+  it('uses removable Mods defaults only for a new root', async () => {
+    const addRoot = vi.fn(async (input) => ok(fixtureRoot({ exclusions: input.exclusions })))
+    const wrapper = mount(ScanRootDialog, {
+      props: { bridge: createMockBridge({ add_root: addRoot }) },
+    })
+
+    expect(wrapper.get('[data-test="root-exclusions"]').element).toMatchObject({
+      value: 'Mods\n**/Mods',
+    })
+    await wrapper.get('[data-test="root-exclusions"]').setValue('')
+    await wrapper.get('[data-test="display-path"]').setValue('D:\\Games')
+    await wrapper.get('form').trigger('submit')
+
+    expect(addRoot).toHaveBeenCalledWith({
+      displayPath: 'D:\\Games',
+      scanMode: 'children',
+      maxDepth: 1,
+      exclusions: [],
+    })
+    expect(wrapper.emitted('saved')?.[0]?.[1]).toBe(true)
+  })
+
+  it('does not add defaults when an existing root has no exclusions', () => {
+    const wrapper = mount(ScanRootDialog, {
+      props: { bridge: createMockBridge(), root: fixtureRoot({ exclusions: [] }) },
+    })
+
+    expect(wrapper.get('[data-test="root-exclusions"]').element).toMatchObject({ value: '' })
+  })
+
   it('validates recursive depth before calling the bridge', async () => {
     const bridge = createMockBridge()
     const addRoot = vi.spyOn(bridge, 'add_root')
@@ -42,6 +72,6 @@ describe('ScanRootDialog', () => {
       maxDepth: 4,
       exclusions: ['Tools', 'GameA'],
     })
-    expect(wrapper.emitted('saved')).toEqual([[root]])
+    expect(wrapper.emitted('saved')).toEqual([[root, false]])
   })
 })

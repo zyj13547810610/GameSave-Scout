@@ -37,4 +37,17 @@ describe('library store', () => {
     expect(store.taskSnapshots['root-1']).toBeUndefined()
     expect(store.scanTasks['root-1']).toBe('task-2')
   })
+
+  it('shows a stable error when a disabled root is rejected', async () => {
+    const bridge = createMockBridge({
+      async start_scan() {
+        return { ok: false, error: { code: 'root_disabled', message: 'backend text' } }
+      },
+    })
+    const store = useLibraryStore()
+
+    await store.scan(bridge, 'root-1', 'full')
+
+    expect(store.error).toBe('该游戏目录未参与扫描。')
+  })
 })

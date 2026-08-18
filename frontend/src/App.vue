@@ -2,7 +2,7 @@
 import { createPinia, getActivePinia, storeToRefs } from 'pinia'
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { bridgeKey, createBridge } from './api/bridge'
-import type { CoverWizardSettings, Game, RemovableGameStatus, ScanRoot } from './api/contracts'
+import type { CoverWizardSettings, Game, LibraryScanSettings, RemovableGameStatus, ScanRoot } from './api/contracts'
 import CoverWizardWorkspace from './features/covers/CoverWizardWorkspace.vue'
 import BatchManagementBar from './features/library/BatchManagementBar.vue'
 import GameGrid from './features/library/GameGrid.vue'
@@ -50,6 +50,10 @@ const coverWizardSettings = ref<CoverWizardSettings>({
   coverOnlineEnabled: false,
   coverVndbCandidateLimit: 5,
   coverLocalScanCandidateLimit: 10,
+})
+const libraryScanSettings = ref<LibraryScanSettings>({
+  startupQuickScan: true,
+  scanConcurrency: 1,
 })
 const selectedGameIds = ref<Set<string>>(new Set())
 const filteredGames = computed(() => filterGames(games.value, {
@@ -172,20 +176,24 @@ async function bootstrap() {
   }
   uiScale.value = result.data.uiScale
   coverWizardSettings.value = result.data.coverWizardSettings
+  libraryScanSettings.value = result.data.libraryScanSettings
   applyUiScale(uiScale.value, document.documentElement)
   await store.load(bridge)
   await guidedStore.refreshActive(bridge)
   state.value = 'ready'
   await nextTick()
-  for (const root of roots.value.filter((item) => item.enabled)) {
-    await store.scan(bridge, root.id, 'quick')
+  if (libraryScanSettings.value.startupQuickScan) {
+    for (const root of roots.value.filter((item) => item.enabled)) {
+      void store.scan(bridge, root.id, 'quick')
+    }
   }
 }
 
-async function rootSaved() {
+async function rootSaved(root: ScanRoot, created: boolean) {
   showAddRoot.value = false
   editingRoot.value = null
   await store.load(bridge)
+  if (created) await store.scan(bridge, root.id, 'full')
 }
 
 async function gameRemoved() {
@@ -239,7 +247,7 @@ function restoreGuidedSave(gameId: string) {
     <template v-else>
       <div v-if="error" class="error-banner" role="alert"><span>{{ error }}</span><button type="button" @click="store.dismissError">关闭</button></div>
       <div class="library-layout" :inert="showCoverWizard" :aria-hidden="showCoverWizard ? 'true' : undefined">
-        <ScanRootList :bridge="bridge" :roots="roots" :scan-tasks="scanTasks" :task-snapshots="taskSnapshots" @scan="scan" @cancel="(id) => store.cancelScan(bridge, id)" @toggle="(root, enabled) => store.updateRoot(bridge, root, enabled)" @edit="editingRoot = $event" @remove="(id) => store.removeRoot(bridge, id)" @remap="(id, path) => store.remapRoot(bridge, id, path)" />
+        <ScanRootList :bridge="bridge" :roots="roots" :library-scan-settings="libraryScanSettings" :scan-tasks="scanTasks" :task-snapshots="taskSnapshots" @settings-updated="libraryScanSettings = $event" @scan="scan" @cancel="(id) => store.cancelScan(bridge, id)" @toggle="(root, enabled) => store.updateRoot(bridge, root, enabled)" @edit="editingRoot = $event" @remove="(id) => store.removeRoot(bridge, id)" @remap="(id, path) => store.remapRoot(bridge, id, path)" />
         <section class="library-content">
           <div class="library-fixed-controls" data-test="library-fixed-controls">
             <div class="content-heading">

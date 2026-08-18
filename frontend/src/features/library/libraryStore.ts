@@ -55,7 +55,13 @@ export const useLibraryStore = defineStore('library', {
     },
     async scan(bridge: GameShelfBridge, rootId: string, kind: 'quick' | 'full') {
       const result = await bridge.start_scan({ rootId, kind })
-      if (!result.ok) return this.fail(result.error.message)
+      if (!result.ok) {
+        return this.fail(
+          result.error.code === 'root_disabled'
+            ? '该游戏目录未参与扫描。'
+            : result.error.message,
+        )
+      }
       delete this.taskSnapshots[rootId]
       this.scanTasks[rootId] = result.data.taskId
       window.setTimeout(() => void this.refreshTask(bridge, rootId), 250)

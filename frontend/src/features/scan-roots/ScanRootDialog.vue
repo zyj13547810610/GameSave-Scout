@@ -3,11 +3,11 @@ import { ref } from 'vue'
 import type { GameShelfBridge, RootInput, ScanRoot } from '../../api/contracts'
 
 const props = defineProps<{ bridge: GameShelfBridge; root?: ScanRoot }>()
-const emit = defineEmits<{ saved: [root: ScanRoot]; close: [] }>()
+const emit = defineEmits<{ saved: [root: ScanRoot, created: boolean]; close: [] }>()
 const displayPath = ref(props.root?.displayPath ?? '')
 const recursive = ref(props.root?.scanMode === 'recursive')
 const maxDepth = ref(props.root?.maxDepth ?? 2)
-const exclusionsText = ref(props.root?.exclusions.join('\n') ?? '')
+const exclusionsText = ref(props.root ? props.root.exclusions.join('\n') : 'Mods\n**/Mods')
 const error = ref('')
 const submitting = ref(false)
 
@@ -39,7 +39,7 @@ async function submit() {
     : await props.bridge.add_root(input)
   submitting.value = false
   if (!result.ok) return void (error.value = result.error.message)
-  emit('saved', result.data)
+  emit('saved', result.data, !props.root)
 }
 </script>
 

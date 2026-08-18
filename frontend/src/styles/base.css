@@ -245,6 +245,41 @@ label {
   padding-right: .25rem;
 }
 
+.library-scan-settings {
+  display: grid;
+  flex: none;
+  gap: .5rem;
+  margin-bottom: .25rem;
+  border-top: 1px solid #2d2a35;
+  border-bottom: 1px solid #2d2a35;
+  padding: .7rem 0;
+}
+
+.library-scan-settings label {
+  margin: 0;
+}
+
+.scan-concurrency-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+}
+
+.scan-concurrency-setting select {
+  width: 4rem;
+  border: 1px solid #393641;
+  border-radius: .5rem;
+  padding: .4rem;
+  color: #eceaf2;
+  background: #17151e;
+}
+
+.library-scan-settings .form-error {
+  margin: 0;
+  font-size: .75rem;
+}
+
 .root-panel h2,
 .game-settings-panel h2,
 .content-heading h2 {

@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../src/App.vue'
 import { bridgeKey } from '../src/api/bridge'
 import type { ApiResult, Game, GameShelfBridge, UiScaleValue } from '../src/api/contracts'
-import { createMockBridge, fixtureGame, fixtureGuidedSession, ok } from '../src/api/mockBridge'
+import { createMockBridge, fixtureGame, fixtureGuidedSession, fixtureRoot, ok } from '../src/api/mockBridge'
 import '../src/styles/base.css'
 
 beforeEach(() => {
@@ -13,6 +13,102 @@ beforeEach(() => {
 })
 
 describe('App', () => {
+  it('skips startup scans when quick verification is disabled', async () => {
+    const startScan = vi.fn(async () => ok({ taskId: 'task-1' }))
+    const bridge = createMockBridge({
+      async bootstrap() {
+        return ok({
+          appName: 'GameShelf', schemaVersion: 2, portable: true, uiScale: 1,
+          coverWizardSettings: {
+            coverOnlineEnabled: false,
+            coverVndbCandidateLimit: 5,
+            coverLocalScanCandidateLimit: 10,
+          },
+          libraryScanSettings: { startupQuickScan: false, scanConcurrency: 1 },
+        })
+      },
+      async list_roots() { return ok([fixtureRoot()]) },
+      start_scan: startScan,
+    })
+    mount(App, {
+      global: { plugins: [createPinia()], provide: { [bridgeKey as symbol]: bridge } },
+    })
+
+    await flushPromises()
+
+    expect(startScan).not.toHaveBeenCalled()
+  })
+
+  it('starts quick verification only for enabled roots', async () => {
+    const startScan = vi.fn(async () => ok({ taskId: 'task-1' }))
+    const bridge = createMockBridge({
+      async list_roots() {
+        return ok([fixtureRoot({ id: 'enabled' }), fixtureRoot({ id: 'disabled', enabled: false })])
+      },
+      start_scan: startScan,
+    })
+    mount(App, {
+      global: { plugins: [createPinia()], provide: { [bridgeKey as symbol]: bridge } },
+    })
+
+    await flushPromises()
+
+    expect(startScan).toHaveBeenCalledTimes(1)
+    expect(startScan).toHaveBeenCalledWith({ rootId: 'enabled', kind: 'quick' })
+  })
+
+  it('starts one full scan after a new root is saved', async () => {
+    const root = fixtureRoot({ id: 'new-root' })
+    const startScan = vi.fn(async () => ok({ taskId: 'task-full' }))
+    const bridge = createMockBridge({
+      async list_roots() { return ok([]) },
+      async add_root() { return ok(root) },
+      start_scan: startScan,
+    })
+    const wrapper = mount(App, {
+      global: { plugins: [createPinia()], provide: { [bridgeKey as symbol]: bridge } },
+    })
+    await flushPromises()
+    await wrapper.get('.app-header button').trigger('click')
+    await wrapper.get('[data-test="display-path"]').setValue('D:\\Games')
+    await wrapper.get('.dialog-card form').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.find('.dialog-card').exists()).toBe(false)
+    expect(startScan).toHaveBeenCalledWith({ rootId: root.id, kind: 'full' })
+  })
+
+  it('does not automatically scan after an existing root is edited', async () => {
+    const root = fixtureRoot()
+    const startScan = vi.fn(async () => ok({ taskId: 'unexpected' }))
+    const bridge = createMockBridge({
+      async bootstrap() {
+        return ok({
+          appName: 'GameShelf', schemaVersion: 2, portable: true, uiScale: 1,
+          coverWizardSettings: {
+            coverOnlineEnabled: false,
+            coverVndbCandidateLimit: 5,
+            coverLocalScanCandidateLimit: 10,
+          },
+          libraryScanSettings: { startupQuickScan: false, scanConcurrency: 1 },
+        })
+      },
+      async list_roots() { return ok([root]) },
+      async update_root() { return ok(root) },
+      start_scan: startScan,
+    })
+    const wrapper = mount(App, {
+      global: { plugins: [createPinia()], provide: { [bridgeKey as symbol]: bridge } },
+    })
+    await flushPromises()
+    await wrapper.get('[data-test="edit-root"]').trigger('click')
+    await wrapper.get('.dialog-card form').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.find('.dialog-card').exists()).toBe(false)
+    expect(startScan).not.toHaveBeenCalled()
+  })
+
   it('places batch management to the left of batch covers', async () => {
     const bridge = createMockBridge({
       async list_games() { return ok([fixtureGame()]) },
@@ -158,6 +254,7 @@ describe('App', () => {
       async bootstrap() {
         return ok({
           appName: 'GameShelf', schemaVersion: 1, portable: true, uiScale: 1.2,
+          libraryScanSettings: { startupQuickScan: true, scanConcurrency: 1 },
           coverWizardSettings: {
             coverOnlineEnabled: false,
             coverVndbCandidateLimit: 5,

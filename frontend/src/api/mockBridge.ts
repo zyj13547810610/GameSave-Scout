@@ -61,9 +61,11 @@ export function createMockBridge(overrides: Partial<GameShelfBridge> = {}): Game
           coverVndbCandidateLimit: 5,
           coverLocalScanCandidateLimit: 10,
         },
+        libraryScanSettings: { startupQuickScan: true, scanConcurrency: 1 },
       })
     },
     async set_ui_scale(input) { return ok({ uiScale: input.uiScale }) },
+    async set_library_scan_settings(input) { return ok(input) },
     async set_cover_wizard_settings(input) { return ok(input) },
     async start_cover_wizard(input) {
       return ok(fixtureCoverWizard({ includeExisting: input.includeExisting ?? false }))
@@ -107,6 +109,7 @@ export function createMockBridge(overrides: Partial<GameShelfBridge> = {}): Game
       })
     },
     async start_scan() { return ok({ taskId: 'task-1' }) },
+    async start_game_reanalysis() { return ok({ taskId: 'reanalysis-task-1' }) },
     async confirm_move(input) { return ok(fixtureGame({ id: input.existingGameId })) },
     async set_game_metadata(input) {
       return ok(fixtureGame({ id: input.gameId, title: input.title, version: input.version }))

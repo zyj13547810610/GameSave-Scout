@@ -12,6 +12,11 @@ export type CoverWizardSettings = {
   coverLocalScanCandidateLimit: number
 }
 
+export type LibraryScanSettings = {
+  startupQuickScan: boolean
+  scanConcurrency: 1 | 2 | 3 | 4
+}
+
 export type CoverCandidateSource =
   | 'vndb'
   | 'clipboard'
@@ -64,6 +69,7 @@ export type BootstrapState = {
   portable: true
   uiScale: UiScaleValue
   coverWizardSettings: CoverWizardSettings
+  libraryScanSettings: LibraryScanSettings
   assetSessionToken?: string
 }
 
@@ -319,12 +325,17 @@ export type ScanResult = {
   updated: number
   missing: number
   warnings: number
+  checked: number
+  cacheHits: number
+  reanalyzed: number
+  fullAnalyses: number
   moveSuggestions: Omit<MoveSuggestion, 'sessionId'>[]
 }
 
 export interface GameShelfBridge {
   bootstrap(): Promise<ApiResult<BootstrapState>>
   set_ui_scale(input: { uiScale: UiScaleValue }): Promise<ApiResult<{ uiScale: UiScaleValue }>>
+  set_library_scan_settings(input: LibraryScanSettings): Promise<ApiResult<LibraryScanSettings>>
   set_cover_wizard_settings(input: CoverWizardSettings): Promise<ApiResult<CoverWizardSettings>>
   start_cover_wizard(input: { includeExisting?: boolean }): Promise<ApiResult<CoverWizardSnapshot>>
   cover_wizard_snapshot(input: { sessionId: string }): Promise<ApiResult<CoverWizardSnapshot>>
@@ -376,6 +387,7 @@ export interface GameShelfBridge {
     items: { gameId: string; expectedStatus: RemovableGameStatus }[]
   }): Promise<ApiResult<BatchGameRemovalResult>>
   start_scan(input: { rootId: string; kind: 'quick' | 'full' }): Promise<ApiResult<{ taskId: string }>>
+  start_game_reanalysis(input: { gameId: string }): Promise<ApiResult<{ taskId: string }>>
   confirm_move(input: {
     sessionId: string
     existingGameId: string

@@ -11,6 +11,7 @@ describe('desktop bridge', () => {
       ok: true,
       data: {
         appName: 'GameShelf', schemaVersion: 2, portable: true, uiScale: 1,
+        libraryScanSettings: { startupQuickScan: true, scanConcurrency: 1 },
         coverWizardSettings: {
           coverOnlineEnabled: false,
           coverVndbCandidateLimit: 5,
