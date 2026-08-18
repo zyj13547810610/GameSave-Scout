@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 UI_SCALE_OPTIONS = frozenset({0.8, 0.9, 1.0, 1.1, 1.2})
 COVER_VNDB_LIMIT_RANGE = range(1, 21)
 COVER_LOCAL_LIMIT_RANGE = range(1, 101)
+SCAN_CONCURRENCY_RANGE = range(1, 5)
 
 
 class InvalidConfigError(ValueError):
@@ -29,11 +30,16 @@ class InvalidCoverWizardSettingsError(ValueError):
     """Raised when cover wizard settings are outside the supported limits."""
 
 
+class InvalidLibraryScanSettingsError(ValueError):
+    """Raised when library scan settings are outside the supported limits."""
+
+
 @dataclass(frozen=True)
 class AppConfig:
-    version: int = 3
+    version: int = 4
     language: str = "zh-CN"
     startup_quick_scan: bool = True
+    scan_concurrency: int = 1
     orphan_scan_exclusions: tuple[str, ...] = ()
     ui_scale: float = 1.0
     cover_online_enabled: bool = False
@@ -45,6 +51,7 @@ class AppConfig:
             "version": self.version,
             "language": self.language,
             "startupQuickScan": self.startup_quick_scan,
+            "scanConcurrency": self.scan_concurrency,
             "orphanScanExclusions": list(self.orphan_scan_exclusions),
             "uiScale": self.ui_scale,
             "coverOnlineEnabled": self.cover_online_enabled,
@@ -60,6 +67,7 @@ class JsonConfigStore:
         "version",
         "language",
         "startupQuickScan",
+        "scanConcurrency",
         "orphanScanExclusions",
         "uiScale",
         "coverOnlineEnabled",
@@ -112,18 +120,26 @@ class JsonConfigStore:
         version = raw.get("version", 1)
         language = raw.get("language", "zh-CN")
         startup_quick_scan = raw.get("startupQuickScan", True)
+        scan_concurrency = raw.get("scanConcurrency", 1)
         exclusions = raw.get("orphanScanExclusions", [])
         ui_scale = raw.get("uiScale", 1.0)
         cover_online_enabled = raw.get("coverOnlineEnabled", False)
         cover_vndb_candidate_limit = raw.get("coverVndbCandidateLimit", 5)
         cover_local_scan_candidate_limit = raw.get("coverLocalScanCandidateLimit", 10)
 
-        if type(version) is not int or version not in {1, 2, 3}:
+        if type(version) is not int or version not in {1, 2, 3, 4}:
             raise InvalidConfigError("配置文件无效：不支持的版本。")
         if not isinstance(language, str) or not language:
             raise InvalidConfigError("配置文件无效：语言必须是非空字符串。")
         if not isinstance(startup_quick_scan, bool):
             raise InvalidConfigError("配置文件无效：启动扫描开关必须是布尔值。")
+        valid_scan_concurrency = (
+            type(scan_concurrency) is int
+            and scan_concurrency in SCAN_CONCURRENCY_RANGE
+        )
+        normalized_scan_concurrency = scan_concurrency if valid_scan_concurrency else 1
+        if not valid_scan_concurrency:
+            logger.warning("配置中的 scanConcurrency 无效，已回退为 1。")
         if not isinstance(exclusions, list) or not all(
             isinstance(item, str) for item in exclusions
         ):
@@ -159,9 +175,10 @@ class JsonConfigStore:
             logger.warning("配置中的 coverLocalScanCandidateLimit 无效，已回退为 10。")
 
         config = AppConfig(
-            version=3,
+            version=4,
             language=language,
             startup_quick_scan=startup_quick_scan,
+            scan_concurrency=normalized_scan_concurrency,
             orphan_scan_exclusions=tuple(exclusions),
             ui_scale=normalized_ui_scale,
             cover_online_enabled=normalized_online_enabled,
@@ -169,7 +186,8 @@ class JsonConfigStore:
             cover_local_scan_candidate_limit=normalized_local_limit,
         )
         needs_save = (
-            version != 3
+            version != 4
+            or raw.get("scanConcurrency") != normalized_scan_concurrency
             or raw.get("uiScale") != normalized_ui_scale
             or raw.get("coverOnlineEnabled") != normalized_online_enabled
             or raw.get("coverVndbCandidateLimit") != normalized_vndb_limit
@@ -206,6 +224,29 @@ class ConfigService:
             raise InvalidUiScaleError("界面缩放必须是 80%、90%、100%、110% 或 120%。")
         with self._lock:
             updated = replace(self._current, ui_scale=float(value))
+            self._store.save(updated)
+            self._current = updated
+            return updated
+
+    def set_library_scan_settings(
+        self,
+        *,
+        startup_quick_scan: object,
+        scan_concurrency: object,
+    ) -> AppConfig:
+        if not isinstance(startup_quick_scan, bool):
+            raise InvalidLibraryScanSettingsError("启动时快速核验开关必须是布尔值。")
+        if (
+            type(scan_concurrency) is not int
+            or scan_concurrency not in SCAN_CONCURRENCY_RANGE
+        ):
+            raise InvalidLibraryScanSettingsError("扫描并发数必须为 1 到 4。")
+        with self._lock:
+            updated = replace(
+                self._current,
+                startup_quick_scan=startup_quick_scan,
+                scan_concurrency=scan_concurrency,
+            )
             self._store.save(updated)
             self._current = updated
             return updated

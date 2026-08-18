@@ -8,19 +8,21 @@ from gameshelf.bootstrap.config import (
     AppConfig,
     ConfigService,
     InvalidConfigError,
+    InvalidLibraryScanSettingsError,
     InvalidUiScaleError,
     JsonConfigStore,
 )
 
 
-def test_missing_config_creates_version_three_portable_defaults(tmp_path: Path) -> None:
+def test_missing_config_creates_version_four_portable_defaults(tmp_path: Path) -> None:
     path = tmp_path / "data" / "config.json"
     store = JsonConfigStore(path)
 
     assert store.load() == AppConfig(
-        version=3,
+        version=4,
         language="zh-CN",
         startup_quick_scan=True,
+        scan_concurrency=1,
         orphan_scan_exclusions=(),
         ui_scale=1.0,
         cover_online_enabled=False,
@@ -39,9 +41,10 @@ def test_config_store_round_trips_utf8_and_camel_case_json(tmp_path: Path) -> No
 
     assert store.load() == config
     assert json.loads(path.read_text(encoding="utf-8")) == {
-        "version": 3,
+        "version": 4,
         "language": "zh-CN",
         "startupQuickScan": True,
+        "scanConcurrency": 1,
         "orphanScanExclusions": ["缓存", "临时目录"],
         "uiScale": 1.0,
         "coverOnlineEnabled": False,
@@ -71,9 +74,10 @@ def test_version_one_config_is_migrated_without_losing_existing_values(
     config = JsonConfigStore(path).load()
 
     assert config == AppConfig(
-        version=3,
+        version=4,
         language="ja-JP",
         startup_quick_scan=False,
+        scan_concurrency=1,
         orphan_scan_exclusions=("缓存",),
         ui_scale=1.0,
         cover_online_enabled=False,
@@ -120,7 +124,7 @@ def test_failed_migration_write_still_returns_normalized_runtime_config(
 
     config = store.load()
 
-    assert config.version == 3
+    assert config.version == 4
     assert config.ui_scale == 1.0
     assert "无法写回规范化配置" in caplog.text
 
@@ -158,9 +162,10 @@ def test_version_two_config_migrates_without_losing_ui_scale(tmp_path: Path) -> 
     config = JsonConfigStore(path).load()
 
     assert config == AppConfig(
-        version=3,
+        version=4,
         language="zh-CN",
         startup_quick_scan=False,
+        scan_concurrency=1,
         orphan_scan_exclusions=("旧目录",),
         ui_scale=1.2,
         cover_online_enabled=False,
@@ -199,6 +204,92 @@ def test_invalid_cover_preferences_fall_back_independently(
     assert "coverVndbCandidateLimit" in caplog.text
     assert "coverLocalScanCandidateLimit" in caplog.text
     assert json.loads(path.read_text(encoding="utf-8")) == config.to_json()
+
+
+@pytest.mark.parametrize("value", [0, 5, True, 2.0, "2"])
+def test_invalid_scan_concurrency_falls_back_to_one_and_is_normalized(
+    tmp_path: Path,
+    value: object,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    path = tmp_path / "data" / "config.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        json.dumps({"version": 3, "startupQuickScan": False, "scanConcurrency": value}),
+        encoding="utf-8",
+    )
+
+    config = JsonConfigStore(path).load()
+
+    assert config.version == 4
+    assert config.startup_quick_scan is False
+    assert config.scan_concurrency == 1
+    assert json.loads(path.read_text(encoding="utf-8"))["scanConcurrency"] == 1
+    assert "scanConcurrency" in caplog.text
+
+
+def test_library_scan_settings_save_atomically_without_losing_other_preferences(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "data" / "config.json"
+    service = ConfigService(JsonConfigStore(path))
+    service.set_ui_scale(1.2)
+    service.set_cover_wizard_settings(
+        online_enabled=True,
+        vndb_candidate_limit=8,
+        local_scan_candidate_limit=25,
+    )
+
+    updated = service.set_library_scan_settings(
+        startup_quick_scan=False,
+        scan_concurrency=4,
+    )
+
+    assert updated.startup_quick_scan is False
+    assert updated.scan_concurrency == 4
+    assert updated.ui_scale == 1.2
+    assert updated.cover_online_enabled is True
+    assert JsonConfigStore(path).load() == updated
+
+
+@pytest.mark.parametrize(
+    ("startup_quick_scan", "scan_concurrency"),
+    [(1, 1), (False, True), (False, 0), (False, 5), (False, "2")],
+)
+def test_config_service_rejects_invalid_library_scan_settings(
+    tmp_path: Path,
+    startup_quick_scan: object,
+    scan_concurrency: object,
+) -> None:
+    service = ConfigService(JsonConfigStore(tmp_path / "data" / "config.json"))
+
+    with pytest.raises(InvalidLibraryScanSettingsError):
+        service.set_library_scan_settings(
+            startup_quick_scan=startup_quick_scan,
+            scan_concurrency=scan_concurrency,
+        )
+
+
+def test_failed_library_scan_settings_write_keeps_both_previous_values(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = JsonConfigStore(tmp_path / "data" / "config.json")
+    service = ConfigService(store)
+
+    def fail_save(config: AppConfig) -> None:
+        raise OSError("read only")
+
+    monkeypatch.setattr(store, "save", fail_save)
+
+    with pytest.raises(OSError, match="read only"):
+        service.set_library_scan_settings(
+            startup_quick_scan=False,
+            scan_concurrency=4,
+        )
+
+    assert service.current.startup_quick_scan is True
+    assert service.current.scan_concurrency == 1
 
 
 def test_cover_settings_save_without_losing_ui_scale(tmp_path: Path) -> None:

@@ -12,6 +12,7 @@ from gameshelf.bootstrap.config import (
     AppConfig,
     ConfigService,
     InvalidCoverWizardSettingsError,
+    InvalidLibraryScanSettingsError,
     InvalidUiScaleError,
 )
 from gameshelf.bootstrap.paths import AppPaths
@@ -155,6 +156,9 @@ class BridgeApi:
         if self._asset_session_token is not None:
             state["assetSessionToken"] = self._asset_session_token
         if self._config is not None:
+            state["libraryScanSettings"] = _library_scan_settings_dto(
+                self._config.current
+            )
             state["coverWizardSettings"] = _cover_wizard_settings_dto(
                 self._config.current
             )
@@ -173,6 +177,25 @@ class BridgeApi:
             return failure(
                 "config_save_failed",
                 "缩放设置保存失败，下次启动可能恢复默认值。",
+            )
+
+    def set_library_scan_settings(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(payload, {"startupQuickScan", "scanConcurrency"})
+            config = self._require_config().set_library_scan_settings(
+                startup_quick_scan=_boolean(payload, "startupQuickScan"),
+                scan_concurrency=_integer(payload, "scanConcurrency"),
+            )
+            return success(_library_scan_settings_dto(config))
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except InvalidLibraryScanSettingsError as error:
+            return failure("invalid_library_scan_settings", str(error))
+        except OSError:
+            return failure(
+                "config_save_failed",
+                "游戏库扫描设置保存失败，下次启动可能恢复为原设置。",
             )
 
     def set_cover_wizard_settings(self, request: object) -> ApiResult:
@@ -1511,6 +1534,13 @@ def _cover_wizard_settings_dto(config: AppConfig) -> dict[str, JSONValue]:
         "coverOnlineEnabled": config.cover_online_enabled,
         "coverVndbCandidateLimit": config.cover_vndb_candidate_limit,
         "coverLocalScanCandidateLimit": config.cover_local_scan_candidate_limit,
+    }
+
+
+def _library_scan_settings_dto(config: AppConfig) -> dict[str, JSONValue]:
+    return {
+        "startupQuickScan": config.startup_quick_scan,
+        "scanConcurrency": config.scan_concurrency,
     }
 
 

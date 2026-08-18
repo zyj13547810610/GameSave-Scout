@@ -16,6 +16,10 @@ def test_bootstrap_returns_json_safe_success(tmp_path: Path) -> None:
                 "schemaVersion": 1,
                 "portable": True,
                 "uiScale": 1.0,
+                "libraryScanSettings": {
+                    "startupQuickScan": True,
+                    "scanConcurrency": 1,
+                },
                 "coverWizardSettings": {
                     "coverOnlineEnabled": False,
                     "coverVndbCandidateLimit": 5,
@@ -95,6 +99,79 @@ def test_set_ui_scale_reports_an_atomic_save_failure(
     monkeypatch.setattr(config, "set_ui_scale", fail_save)
     try:
         result = api.set_ui_scale({"uiScale": 0.8})
+
+        assert result["ok"] is False
+        assert result["error"]["code"] == "config_save_failed"
+    finally:
+        tasks.close()
+
+
+def test_set_library_scan_settings_persists_both_values(tmp_path: Path) -> None:
+    api, tasks, config = _api(tmp_path)
+    try:
+        result = api.set_library_scan_settings(
+            {"startupQuickScan": False, "scanConcurrency": 3}
+        )
+
+        assert result == {
+            "ok": True,
+            "data": {"startupQuickScan": False, "scanConcurrency": 3},
+        }
+        assert config.current.startup_quick_scan is False
+        assert config.current.scan_concurrency == 3
+    finally:
+        tasks.close()
+
+
+def test_set_library_scan_settings_rejects_an_incomplete_or_extra_payload(
+    tmp_path: Path,
+) -> None:
+    api, tasks, config = _api(tmp_path)
+    try:
+        missing = api.set_library_scan_settings({"startupQuickScan": False})
+        extra = api.set_library_scan_settings(
+            {"startupQuickScan": False, "scanConcurrency": 2, "other": True}
+        )
+
+        assert missing["ok"] is False
+        assert missing["error"]["code"] == "invalid_request"
+        assert extra["ok"] is False
+        assert extra["error"]["code"] == "invalid_request"
+        assert config.current.scan_concurrency == 1
+    finally:
+        tasks.close()
+
+
+def test_set_library_scan_settings_rejects_out_of_range_concurrency(
+    tmp_path: Path,
+) -> None:
+    api, tasks, config = _api(tmp_path)
+    try:
+        result = api.set_library_scan_settings(
+            {"startupQuickScan": True, "scanConcurrency": 5}
+        )
+
+        assert result["ok"] is False
+        assert result["error"]["code"] == "invalid_library_scan_settings"
+        assert config.current.scan_concurrency == 1
+    finally:
+        tasks.close()
+
+
+def test_set_library_scan_settings_reports_an_atomic_save_failure(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    api, tasks, config = _api(tmp_path)
+
+    def fail_save(*, startup_quick_scan: object, scan_concurrency: object) -> None:
+        raise OSError("read only")
+
+    monkeypatch.setattr(config, "set_library_scan_settings", fail_save)
+    try:
+        result = api.set_library_scan_settings(
+            {"startupQuickScan": False, "scanConcurrency": 4}
+        )
 
         assert result["ok"] is False
         assert result["error"]["code"] == "config_save_failed"
