@@ -6,6 +6,7 @@ import pytest
 from gameshelf.library.models import GameRemovalRequest
 from gameshelf.library.service import (
     GameNotFoundError,
+    InvalidGameConfiguration,
     InvalidGameRemoval,
     InvalidRootConfiguration,
     LibraryService,
@@ -228,6 +229,50 @@ def test_batch_remove_rejects_more_than_five_hundred_submitted_items(
 
     with pytest.raises(InvalidGameRemoval, match="500"):
         library_service.remove_games(requests)
+
+
+@pytest.mark.parametrize(
+    ("raw_version", "expected_version"),
+    [("  Ver 2.0  ", "Ver 2.0"), ("   ", None), (None, None)],
+)
+def test_set_game_metadata_atomically_normalizes_and_protects_both_fields(
+    library_service: LibraryService,
+    raw_version: str | None,
+    expected_version: str | None,
+) -> None:
+    root = library_service.add_root(r"D:\Games", "children", 1, [])
+    game = library_service.create_game_for_test(root.id, "Alice", "Alice")
+
+    updated = library_service.set_game_metadata(
+        game.id,
+        "  自定义标题  ",
+        raw_version,
+    )
+
+    with library_service._repository.factory.connect(readonly=True) as connection:  # noqa: SLF001
+        row = connection.execute(
+            "SELECT title_is_manual, version_is_manual FROM games WHERE id = ?",
+            (game.id,),
+        ).fetchone()
+    assert updated.title == "自定义标题"
+    assert updated.version == expected_version
+    assert (row["title_is_manual"], row["version_is_manual"]) == (1, 1)
+
+
+def test_set_game_metadata_rejects_empty_title_without_changing_either_field(
+    library_service: LibraryService,
+) -> None:
+    root = library_service.add_root(r"D:\Games", "children", 1, [])
+    game = library_service.create_game_for_test(root.id, "Alice", "Alice")
+    library_service.set_game_metadata(game.id, "Saved title", "v1.0")
+
+    with pytest.raises(InvalidGameConfiguration, match="标题|title"):
+        library_service.set_game_metadata(game.id, "   ", "v2.0")
+
+    preserved = library_service.get_game(game.id)
+    assert preserved is not None
+    assert preserved.title == "Saved title"
+    assert preserved.version == "v1.0"
 
 
 def test_update_root_normalizes_children_depth_and_keeps_identity(

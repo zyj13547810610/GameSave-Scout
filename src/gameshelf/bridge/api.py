@@ -626,11 +626,19 @@ class BridgeApi:
         except ConfirmMoveError as error:
             return failure("invalid_move", str(error))
 
-    def set_game_title(self, request: object) -> ApiResult:
+    def set_game_metadata(self, request: object) -> ApiResult:
         try:
             payload = _payload(request)
-            game = self._require_library().set_game_title(
-                _string(payload, "gameId"), _string(payload, "title")
+            _only_keys(payload, {"gameId", "title", "version"})
+            if "version" not in payload:
+                raise InvalidRequest("version is required.")
+            version = payload["version"]
+            if version is not None and not isinstance(version, str):
+                raise InvalidRequest("version must be a string or null.")
+            game = self._require_library().set_game_metadata(
+                _string(payload, "gameId"),
+                _string(payload, "title"),
+                version,
             )
             return success(self._game_dto(game))
         except (InvalidRequest, InvalidGameConfiguration) as error:
@@ -1257,6 +1265,7 @@ class BridgeApi:
             "relativeDir": game.relative_dir,
             "installPath": install_path,
             "title": game.title,
+            "version": game.version,
             "status": game.status,
             "engineId": game.engine_id,
             "engineVariant": game.engine_variant,

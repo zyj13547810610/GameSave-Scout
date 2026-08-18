@@ -340,14 +340,21 @@ class LibraryService:
     def delete_missing_game(self, game_id: str) -> None:
         self.remove_games((GameRemovalRequest(game_id, "missing"),))
 
-    def set_game_title(self, game_id: str, title: str) -> Game:
+    def set_game_metadata(
+        self,
+        game_id: str,
+        title: str,
+        version: str | None,
+    ) -> Game:
         clean_title = title.strip()
+        clean_version = version.strip() if version is not None else ""
         if not clean_title:
-            raise InvalidGameConfiguration("Game title cannot be empty.")
+            raise InvalidGameConfiguration("游戏标题不能为空。")
         return self._update_game(
             game_id,
-            "title = ?, title_is_manual = 1, updated_at = ?",
-            (clean_title, _utc_now()),
+            "title = ?, title_is_manual = 1, "
+            "version = ?, version_is_manual = 1, updated_at = ?",
+            (clean_title, clean_version or None, _utc_now()),
         )
 
     def set_game_executable(self, game_id: str, selected_path: str) -> Game:

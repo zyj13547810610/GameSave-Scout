@@ -94,6 +94,56 @@ def test_library_dtos_are_camel_case_and_bad_payloads_are_rejected(
         writer.close()
 
 
+def test_set_game_metadata_returns_version_and_accepts_null(tmp_path: Path) -> None:
+    api, tasks, writer, library = _library_api(tmp_path)
+    try:
+        root = library.add_root(r"D:\Games", "children", 1, [])
+        game = library.create_game_for_test(root.id, "Alice", "Alice")
+
+        updated = api.set_game_metadata(
+            {"gameId": game.id, "title": "  Alice  ", "version": "  v1.0  "}
+        )
+        cleared = api.set_game_metadata(
+            {"gameId": game.id, "title": "Alice", "version": None}
+        )
+
+        assert updated["ok"] is True
+        assert updated["data"]["title"] == "Alice"
+        assert updated["data"]["version"] == "v1.0"
+        assert cleared["ok"] is True
+        assert cleared["data"]["version"] is None
+    finally:
+        tasks.close()
+        writer.close()
+
+
+def test_set_game_metadata_rejects_incomplete_or_malformed_payloads(
+    tmp_path: Path,
+) -> None:
+    api, tasks, writer, library = _library_api(tmp_path)
+    try:
+        root = library.add_root(r"D:\Games", "children", 1, [])
+        game = library.create_game_for_test(root.id, "Alice", "Alice")
+        invalid_payloads = (
+            {"gameId": game.id, "title": "Alice"},
+            {"gameId": game.id, "title": "Alice", "version": 1},
+            {"gameId": game.id, "title": "Alice", "version": None, "extra": True},
+            {"gameId": game.id, "title": "   ", "version": "v2"},
+        )
+
+        results = [api.set_game_metadata(payload) for payload in invalid_payloads]
+
+        assert all(result["ok"] is False for result in results)
+        assert all(result["error"]["code"] == "invalid_request" for result in results)
+        preserved = library.get_game(game.id)
+        assert preserved is not None
+        assert preserved.title == "Alice"
+        assert preserved.version is None
+    finally:
+        tasks.close()
+        writer.close()
+
+
 def test_remove_installed_game_adds_exclusion_through_bridge(tmp_path: Path) -> None:
     api, tasks, writer, library = _library_api(tmp_path)
     try:
