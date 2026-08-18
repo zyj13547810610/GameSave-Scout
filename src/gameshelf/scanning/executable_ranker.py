@@ -40,6 +40,7 @@ _REJECTED_NORMALIZED_PREFIXES = ("unitycrashhandler", "crashpadhandler")
 _AUXILIARY_PATH_PARTS = {"source", "debug", "obj", "_redist"}
 _TITLE_ANNOTATION_PATTERN = re.compile(r"[\(\[\u3010\uff08]")
 _REPARSE_FLAG = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+RANKER_RULES_VERSION = "2026.08.18-1"
 
 
 @dataclass(frozen=True)

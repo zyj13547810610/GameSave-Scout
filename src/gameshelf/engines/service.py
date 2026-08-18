@@ -42,6 +42,7 @@ _BUILTIN_OPTIONS = (
     EngineOption("rpg_developer_bakin", "RPG Developer Bakin"),
     EngineOption("visual_novel_maker", "Visual Novel Maker"),
 )
+BUILTIN_ENGINE_CACHE_VERSION = "2026.08.18-1"
 
 
 class EngineDetectionService:
@@ -49,10 +50,15 @@ class EngineDetectionService:
         self,
         registry: DetectorRegistry,
         options: tuple[EngineOption, ...] = (),
+        rule_versions: tuple[str, ...] = (),
     ) -> None:
         self._registry = registry
         self._options = options
         self._options_by_id = {option.id: option for option in options}
+        versions = ",".join(sorted(set(rule_versions))) or "none"
+        self._cache_version = (
+            f"builtin:{BUILTIN_ENGINE_CACHE_VERSION}|declarative:{versions}"
+        )
 
     @classmethod
     def builtins_only(cls) -> EngineDetectionService:
@@ -87,7 +93,15 @@ class EngineDetectionService:
                 key=lambda option: (option.experimental, option.label.casefold()),
             )
         )
-        return cls(DetectorRegistry(detectors), options)
+        return cls(
+            DetectorRegistry(detectors),
+            options,
+            tuple(rule.version for rule in rules),
+        )
+
+    @property
+    def cache_version(self) -> str:
+        return self._cache_version
 
     def detect(self, game_dir: Path, executable: Path | None) -> DetectionOutcome:
         return self._registry.detect(game_dir, executable)

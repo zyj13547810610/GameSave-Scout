@@ -115,6 +115,7 @@ def game_from_row(row: sqlite3.Row) -> Game:
         missing_since=row["missing_since"],
         version=row["version"],
         detected_version=row["detected_version"],
+        detected_main_exe_relpath=row["detected_main_exe_relpath"],
     )
 
 

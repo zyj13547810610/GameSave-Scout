@@ -59,6 +59,7 @@ class Game:
     missing_since: str | None
     version: str | None = None
     detected_version: str | None = None
+    detected_main_exe_relpath: str | None = None
 
 
 @dataclass(frozen=True)
