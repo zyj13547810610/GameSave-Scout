@@ -56,6 +56,43 @@ def test_successful_full_scan_adds_games_and_marks_removed_game_missing(
     assert scan_harness.game(game.id).status == "missing"
 
 
+def test_scan_splits_only_explicit_version_suffixes(
+    scan_harness: "ScanHarness",
+) -> None:
+    root = scan_harness.add_root(mode="children")
+    scan_harness.mkdir("AoiChan.v1.0.8")
+    scan_harness.mkdir("Need for Speed 21 Heat")
+
+    scan_harness.scan(root.id, "full")
+
+    games = {game.relative_dir: game for game in scan_harness.games()}
+    explicit = games["AoiChan.v1.0.8"]
+    ambiguous = games["Need for Speed 21 Heat"]
+    assert explicit.title == "AoiChan"
+    assert explicit.detected_title == "AoiChan"
+    assert explicit.version == "v1.0.8"
+    assert explicit.detected_version == "v1.0.8"
+    assert ambiguous.title == "Need for Speed 21 Heat"
+    assert ambiguous.version is None
+
+
+def test_rescan_refreshes_detection_without_overwriting_manual_empty_version(
+    scan_harness: "ScanHarness",
+) -> None:
+    root = scan_harness.add_root(mode="children")
+    scan_harness.mkdir("AoiChan.v1.0.8")
+    game = scan_harness.scan(root.id, "full").games[0]
+    scan_harness.library.set_game_metadata(game.id, "自定义标题", None)
+
+    scan_harness.scan(root.id, "full")
+
+    refreshed = scan_harness.game(game.id)
+    assert refreshed.title == "自定义标题"
+    assert refreshed.version is None
+    assert refreshed.detected_title == "AoiChan"
+    assert refreshed.detected_version == "v1.0.8"
+
+
 def test_reconcile_uses_latest_exclusions_after_game_is_removed_mid_scan(
     scan_harness: "ScanHarness",
     monkeypatch: pytest.MonkeyPatch,
@@ -251,6 +288,44 @@ def test_confirmed_move_preserves_original_game_id_and_removes_temporary_candida
     assert confirmed.status == "installed"
     assert confirmed.exe_arch == "x64"
     assert scan_harness.games() == (confirmed,)
+
+
+def test_confirmed_move_preserves_manual_metadata_and_refreshes_detection(
+    scan_harness: "ScanHarness",
+) -> None:
+    original_root = scan_harness.add_root(mode="children")
+    scan_harness.mkdir("GameA.v1.0", exes=["Game.exe"])
+    original = scan_harness.scan(original_root.id, "full").games[0]
+    scan_harness.library.set_game_metadata(original.id, "GameA!", "manual-v")
+    scan_harness.remove_dir("GameA.v1.0")
+    scan_harness.scan(original_root.id, "full")
+
+    moved_root_path = scan_harness.root_path.parent / "moved-versioned-games"
+    moved_game = moved_root_path / "GameA.v2.0"
+    moved_game.mkdir(parents=True)
+    (moved_game / "Game.exe").write_bytes(b"not-a-real-pe")
+    moved_root = scan_harness.add_root(mode="children", path=moved_root_path)
+    summary = scan_harness.scan(moved_root.id, "full")
+    suggestion = summary.move_suggestions[0]
+
+    confirmed = scan_harness.scanner.confirm_move(
+        summary.session_id,
+        suggestion.existing_game_id,
+        suggestion.candidate_relative_dir,
+    )
+
+    with scan_harness.factory.connect(readonly=True) as connection:
+        flags = connection.execute(
+            "SELECT title_is_manual, version_is_manual FROM games WHERE id = ?",
+            (confirmed.id,),
+        ).fetchone()
+    assert confirmed.id == original.id
+    assert confirmed.relative_dir == "GameA.v2.0"
+    assert confirmed.title == "GameA!"
+    assert confirmed.version == "manual-v"
+    assert confirmed.detected_title == "GameA"
+    assert confirmed.detected_version == "v2.0"
+    assert (flags["title_is_manual"], flags["version_is_manual"]) == (1, 1)
 
 
 def test_confirmed_move_preserves_architecture_for_a_manual_executable(

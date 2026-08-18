@@ -21,6 +21,7 @@ from gameshelf.engines.service import EngineDetectionService
 from gameshelf.library.models import Game, ScanRoot
 from gameshelf.library.repository import LibraryRepository, game_from_row
 from gameshelf.library.service import RootNotFoundError
+from gameshelf.library.title_parser import split_title_and_version
 from gameshelf.scanning.discovery import RootUnavailableError, enumerate_candidates
 from gameshelf.scanning.executable_ranker import rank_executables
 from gameshelf.scanning.models import DirectoryCandidate
@@ -144,9 +145,13 @@ class ScanService:
                     else DetectionOutcome(None, (), False)
                 )
                 warnings += len(detection.diagnostics)
+                detected_title, detected_version = split_title_and_version(
+                    candidate.path.name
+                )
                 payload = {
                     "relativeDir": candidate.relative_dir,
-                    "title": candidate.path.name,
+                    "title": detected_title,
+                    "version": detected_version,
                     "mainExeRelpath": (
                         recommendation.relative_path if recommendation is not None else None
                     ),
@@ -261,7 +266,8 @@ class ScanService:
                 UPDATE games
                 SET scan_root_id = ?, relative_dir = ?, install_path_key = ?,
                     status = 'installed', missing_since = NULL,
-                    detected_title = ?, detected_main_exe_relpath = ?,
+                    detected_title = ?, detected_version = ?,
+                    detected_main_exe_relpath = ?,
                     main_exe_relpath = CASE WHEN main_exe_is_manual = 1
                         THEN main_exe_relpath ELSE ? END,
                     detected_engine_id = CASE
@@ -288,6 +294,7 @@ class ScanService:
                     candidate["relative_dir"],
                     candidate["install_path_key"],
                     candidate["detected_title"],
+                    candidate["detected_version"],
                     candidate["detected_main_exe_relpath"],
                     candidate["main_exe_relpath"],
                     detection_failed,

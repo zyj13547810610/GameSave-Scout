@@ -74,14 +74,14 @@ def reconcile_session(
                 """
                 INSERT INTO games(
                     id, scan_root_id, relative_dir, install_path_key,
-                    title, detected_title, status,
+                    title, detected_title, version, detected_version, status,
                     detected_engine_id, detected_engine_variant,
                     engine_id, engine_variant, engine_confidence,
                     engine_evidence_json, engine_rules_version,
                     detected_main_exe_relpath, main_exe_relpath, exe_arch,
                     added_at, updated_at
                 ) VALUES (
-                    ?, ?, ?, ?, ?, ?, 'installed',
+                    ?, ?, ?, ?, ?, ?, ?, ?, 'installed',
                     ?, ?, ?, ?, ?, json(?), ?,
                     ?, ?, ?, ?, ?
                 )
@@ -93,6 +93,8 @@ def reconcile_session(
                     install_key,
                     payload["title"],
                     payload["title"],
+                    payload["version"],
+                    payload["version"],
                     payload["detectedEngineId"],
                     payload["detectedEngineVariant"],
                     payload["detectedEngineId"],
@@ -116,6 +118,8 @@ def reconcile_session(
                 SET scan_root_id = ?, relative_dir = ?, install_path_key = ?,
                     detected_title = ?,
                     title = CASE WHEN title_is_manual = 1 THEN title ELSE ? END,
+                    detected_version = ?,
+                    version = CASE WHEN version_is_manual = 1 THEN version ELSE ? END,
                     status = 'installed',
                     detected_engine_id = CASE WHEN ? THEN detected_engine_id ELSE ? END,
                     detected_engine_variant = CASE
@@ -144,6 +148,8 @@ def reconcile_session(
                     install_key,
                     payload["title"],
                     payload["title"],
+                    payload["version"],
+                    payload["version"],
                     payload["engineDetectionFailed"],
                     payload["detectedEngineId"],
                     payload["engineDetectionFailed"],
