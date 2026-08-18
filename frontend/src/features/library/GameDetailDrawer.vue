@@ -117,7 +117,10 @@ onBeforeUnmount(() => {
           <img v-if="game.coverOriginalUrl" data-test="detail-cover" :src="game.coverOriginalUrl" :alt="`${game.title} 完整封面`" />
           <div v-else class="cover-placeholder">{{ game.title.slice(0, 1).toUpperCase() }}</div>
         </div>
-        <h2>{{ game.title }}</h2>
+        <div class="detail-title-row">
+          <h2>{{ game.title }}</h2>
+          <span v-if="game.version" class="detail-version-badge">{{ game.version }}</span>
+        </div>
         <div class="detail-badges">
           <span class="detail-status-badge">{{ statusLabels[game.status] }}</span>
           <span class="engine-badge">{{ game.engineLabel }}</span>

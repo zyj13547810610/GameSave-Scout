@@ -34,6 +34,7 @@ const labels = { installed: '已安装', missing: '本体失效', save_only: '�
       <span v-if="game.status === 'installed' && !game.mainExeRelpath" class="card-badge no-exe">无 EXE</span>
     </div>
     <strong>{{ game.title }}</strong>
+    <small v-if="game.version" class="game-version">{{ game.version }}</small>
     <EngineBadge v-if="game.engineId" :label="game.engineLabel" :experimental="game.engineExperimental" />
   </button>
 </template>

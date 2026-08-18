@@ -28,6 +28,7 @@ export function fixtureGame(overrides: Partial<Game> = {}): Game {
     relativeDir: 'Alice',
     installPath: 'D:\\Games\\Alice',
     title: 'Alice',
+    version: null,
     status: 'installed',
     engineId: null,
     engineVariant: null,
@@ -54,7 +55,7 @@ export function createMockBridge(overrides: Partial<GameShelfBridge> = {}): Game
   const bridge: GameShelfBridge = {
     async bootstrap() {
       return ok({
-        appName: 'GameShelf', schemaVersion: 1, portable: true, uiScale: 1,
+        appName: 'GameShelf', schemaVersion: 2, portable: true, uiScale: 1,
         coverWizardSettings: {
           coverOnlineEnabled: false,
           coverVndbCandidateLimit: 5,
@@ -107,7 +108,9 @@ export function createMockBridge(overrides: Partial<GameShelfBridge> = {}): Game
     },
     async start_scan() { return ok({ taskId: 'task-1' }) },
     async confirm_move(input) { return ok(fixtureGame({ id: input.existingGameId })) },
-    async set_game_title(input) { return ok(fixtureGame({ id: input.gameId, title: input.title })) },
+    async set_game_metadata(input) {
+      return ok(fixtureGame({ id: input.gameId, title: input.title, version: input.version }))
+    },
     async choose_game_executable() { return ok(null) },
     async set_game_executable(input) { return ok(fixtureGame({ id: input.gameId, mainExeRelpath: input.selectedPath })) },
     async list_engine_options() { return ok([]) },

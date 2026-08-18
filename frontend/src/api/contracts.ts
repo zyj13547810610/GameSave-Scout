@@ -117,6 +117,7 @@ export type Game = {
   relativeDir: string | null
   installPath: string | null
   title: string
+  version: string | null
   status: 'installed' | 'missing' | 'save_only'
   engineId: string | null
   engineVariant: string | null
@@ -379,7 +380,11 @@ export interface GameShelfBridge {
     existingGameId: string
     candidateRelativeDir: string
   }): Promise<ApiResult<Game>>
-  set_game_title(input: { gameId: string; title: string }): Promise<ApiResult<Game>>
+  set_game_metadata(input: {
+    gameId: string
+    title: string
+    version: string | null
+  }): Promise<ApiResult<Game>>
   choose_game_executable(input: { gameId: string }): Promise<ApiResult<string | null>>
   set_game_executable(input: { gameId: string; selectedPath: string }): Promise<ApiResult<Game>>
   list_engine_options(): Promise<ApiResult<EngineOption[]>>
