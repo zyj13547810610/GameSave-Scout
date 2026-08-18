@@ -23,6 +23,7 @@ export const useCoverWizardStore = defineStore('cover-wizard', {
     taskSnapshot: null as TaskSnapshot | null,
     pollTimer: null as number | null,
     requestRevision: 0,
+    pollRevision: 0,
     error: '',
     sourceError: '',
     closing: false,
@@ -30,6 +31,7 @@ export const useCoverWizardStore = defineStore('cover-wizard', {
   actions: {
     clearPolling() {
       this.requestRevision += 1
+      this.pollRevision += 1
       if (this.pollTimer !== null) window.clearTimeout(this.pollTimer)
       this.pollTimer = null
     },
@@ -132,14 +134,16 @@ export const useCoverWizardStore = defineStore('cover-wizard', {
         this.sourceError = result.error.message
         return false
       }
+      this.pollRevision += 1
+      const pollRevision = this.pollRevision
       this.activeTaskId = result.data.taskId
       this.taskSnapshot = null
-      await this.pollTask(bridge, result.data.taskId, this.requestRevision)
+      await this.pollTask(bridge, result.data.taskId, pollRevision)
       return true
     },
-    async pollTask(bridge: GameShelfBridge, taskId: string, revision: number) {
+    async pollTask(bridge: GameShelfBridge, taskId: string, pollRevision: number) {
       const result = await bridge.task_snapshot(taskId)
-      if (revision !== this.requestRevision || this.activeTaskId !== taskId) return
+      if (pollRevision !== this.pollRevision || this.activeTaskId !== taskId) return
       if (!result.ok) {
         this.sourceError = result.error.message
         this.activeTaskId = null
@@ -148,7 +152,7 @@ export const useCoverWizardStore = defineStore('cover-wizard', {
       this.taskSnapshot = result.data
       if (activeTaskStatuses.has(result.data.status)) {
         this.pollTimer = window.setTimeout(
-          () => void this.pollTask(bridge, taskId, revision),
+          () => void this.pollTask(bridge, taskId, pollRevision),
           POLL_INTERVAL_MS,
         )
         return

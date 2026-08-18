@@ -63,6 +63,32 @@ describe('coverWizardStore', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 
+  it('continues polling a source task when the selected game changes', async () => {
+    const status = vi
+      .fn()
+      .mockResolvedValueOnce(ok(task('running')))
+      .mockResolvedValueOnce(ok(task('completed')))
+    const refresh = vi.fn(async () => ok(snapshot('game-1')))
+    const bridge = createMockBridge({
+      task_snapshot: status,
+      cover_wizard_snapshot: refresh,
+      async list_cover_candidates() { return ok([]) },
+    })
+    const store = useCoverWizardStore()
+    store.session = snapshot('game-1')
+    store.selectedGameId = 'game-1'
+
+    await store.startSourceTask(bridge, Promise.resolve(ok({ taskId: 'task-1' })))
+    await store.selectGame(bridge, 'game-2')
+    await vi.advanceTimersByTimeAsync(350)
+
+    expect(store.taskSnapshot?.status).toBe('completed')
+    expect(store.activeTaskId).toBeNull()
+    expect(store.selectedGameId).toBe('game-2')
+    expect(refresh).toHaveBeenCalledWith({ sessionId: 'wizard-1' })
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
   it('keeps the selected candidate when adoption fails', async () => {
     const bridge = createMockBridge({
       async adopt_cover_candidate() {
