@@ -19,11 +19,32 @@ async function remap(rootId: string) {
 const stageLabels: Record<string, string> = {
   preparing: '正在准备',
   discovering: '正在查找游戏',
+  checking: '正在核验游戏',
+  analyzing: '正在分析游戏',
   reconciling: '正在更新游戏库',
   completed: '扫描完成',
   cancelled: '扫描已取消',
   failed: '扫描失败',
   unavailable: '根目录不可访问',
+}
+
+function stage(snapshot: TaskSnapshot): string {
+  return textDetail(snapshot, 'stage')
+}
+
+function hasDeterminateProgress(snapshot: TaskSnapshot): boolean {
+  return snapshot.progress.total !== null && ['checking', 'analyzing'].includes(stage(snapshot))
+}
+
+function progressHeading(snapshot: TaskSnapshot): string {
+  const total = snapshot.progress.total
+  if (total !== null && stage(snapshot) === 'checking') {
+    return `正在核验游戏 ${snapshot.progress.completed}/${total}`
+  }
+  if (total !== null && stage(snapshot) === 'analyzing') {
+    return `正在分析游戏 ${snapshot.progress.completed}/${total}`
+  }
+  return stageLabels[stage(snapshot)] ?? snapshot.message
 }
 
 function numberDetail(snapshot: TaskSnapshot, key: string): number {
@@ -58,10 +79,23 @@ function scanResult(snapshot: TaskSnapshot): ScanResult | null {
         <span>{{ root.scanMode === 'children' ? '直接子目录' : `递归 ${root.maxDepth} 层` }}</span>
         <span :class="['status-text', root.lastScanStatus]">{{ root.lastScanStatus }}</span>
         <section v-if="taskSnapshots[root.id] && scanTasks[root.id]" data-test="scan-progress" class="scan-progress" aria-live="polite">
-          <div data-test="indeterminate-progress" class="indeterminate-progress"><span /></div>
-          <strong>{{ stageLabels[textDetail(taskSnapshots[root.id], 'stage')] ?? taskSnapshots[root.id].message }}</strong>
+          <progress
+            v-if="hasDeterminateProgress(taskSnapshots[root.id])"
+            data-test="determinate-progress"
+            :max="taskSnapshots[root.id].progress.total ?? 0"
+            :value="taskSnapshots[root.id].progress.completed"
+          />
+          <div v-else data-test="indeterminate-progress" class="indeterminate-progress"><span /></div>
+          <strong>{{ progressHeading(taskSnapshots[root.id]) }}</strong>
           <span v-if="textDetail(taskSnapshots[root.id], 'currentPath')" class="scan-current" :title="textDetail(taskSnapshots[root.id], 'currentPath')">{{ textDetail(taskSnapshots[root.id], 'currentPath') }}</span>
-          <small>
+          <small v-if="['checking', 'analyzing'].includes(stage(taskSnapshots[root.id]))">
+            已核验 {{ numberDetail(taskSnapshots[root.id], 'checked') }} ·
+            复用缓存 {{ numberDetail(taskSnapshots[root.id], 'cacheHits') }} ·
+            重新分析 {{ numberDetail(taskSnapshots[root.id], 'reanalyzed') }} ·
+            完整分析 {{ numberDetail(taskSnapshots[root.id], 'fullAnalyses') }} ·
+            警告 {{ numberDetail(taskSnapshots[root.id], 'warnings') }}
+          </small>
+          <small v-else>
             已检查 {{ numberDetail(taskSnapshots[root.id], 'directoriesScanned') }} 个目录 ·
             发现 {{ numberDetail(taskSnapshots[root.id], 'discovered') }} 个游戏 ·
             不可访问 {{ numberDetail(taskSnapshots[root.id], 'inaccessibleDirectories') }} 个 ·
@@ -77,6 +111,12 @@ function scanResult(snapshot: TaskSnapshot): ScanResult | null {
               新增 {{ scanResult(taskSnapshots[root.id])?.added }} ·
               更新 {{ scanResult(taskSnapshots[root.id])?.updated }} ·
               失效 {{ scanResult(taskSnapshots[root.id])?.missing }}
+            </span>
+            <span>
+              复用缓存 {{ scanResult(taskSnapshots[root.id])?.cacheHits }} ·
+              重新分析 {{ scanResult(taskSnapshots[root.id])?.reanalyzed }} ·
+              完整分析 {{ scanResult(taskSnapshots[root.id])?.fullAnalyses }} ·
+              警告 {{ scanResult(taskSnapshots[root.id])?.warnings }}
             </span>
           </template>
           <template v-else>

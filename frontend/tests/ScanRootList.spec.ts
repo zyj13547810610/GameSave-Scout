@@ -110,6 +110,66 @@ describe('ScanRootList', () => {
     expect(wrapper.find('[data-test="indeterminate-progress"]').exists()).toBe(true)
   })
 
+  it('shows determinate quick verification progress and cache counters', () => {
+    const root = fixtureRoot()
+    const wrapper = mount(ScanRootList, {
+      props: {
+        bridge: createMockBridge(),
+        roots: [root],
+        libraryScanSettings: { startupQuickScan: true, scanConcurrency: 1 },
+        scanTasks: { [root.id]: 'task-1' },
+        taskSnapshots: {
+          [root.id]: {
+            id: 'task-1', kind: 'library_scan', status: 'running',
+            progress: { completed: 8, total: 13 }, message: '已核验：Alice',
+            details: {
+              stage: 'checking', currentPath: 'Alice', checked: 8,
+              cacheHits: 5, reanalyzed: 2, fullAnalyses: 1, warnings: 1,
+            },
+            result: null, error: null,
+          },
+        },
+      },
+    })
+
+    const progress = wrapper.get('[data-test="determinate-progress"]')
+    expect(progress.attributes('max')).toBe('13')
+    expect(progress.attributes('value')).toBe('8')
+    expect(wrapper.get('[data-test="scan-progress"]').text()).toContain('正在核验游戏 8/13')
+    expect(wrapper.text()).toContain('Alice')
+    expect(wrapper.text()).toContain('复用缓存 5')
+    expect(wrapper.text()).toContain('重新分析 2')
+    expect(wrapper.text()).toContain('完整分析 1')
+    expect(wrapper.text()).toContain('警告 1')
+  })
+
+  it('shows determinate full analysis progress after discovery completes', () => {
+    const root = fixtureRoot()
+    const wrapper = mount(ScanRootList, {
+      props: {
+        bridge: createMockBridge(),
+        roots: [root],
+        libraryScanSettings: { startupQuickScan: true, scanConcurrency: 1 },
+        scanTasks: { [root.id]: 'task-1' },
+        taskSnapshots: {
+          [root.id]: {
+            id: 'task-1', kind: 'library_scan', status: 'running',
+            progress: { completed: 3, total: 13 }, message: '正在分析：Alice',
+            details: {
+              stage: 'analyzing', currentPath: 'Alice', checked: 3,
+              cacheHits: 2, reanalyzed: 0, fullAnalyses: 1, warnings: 0,
+            },
+            result: null, error: null,
+          },
+        },
+      },
+    })
+
+    expect(wrapper.get('[data-test="scan-progress"]').text()).toContain('正在分析游戏 3/13')
+    expect(wrapper.find('[data-test="determinate-progress"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="indeterminate-progress"]').exists()).toBe(false)
+  })
+
   it('keeps the completed scan summary visible', () => {
     const root = fixtureRoot()
     const wrapper = mount(ScanRootList, {
@@ -139,6 +199,9 @@ describe('ScanRootList', () => {
     })
 
     expect(wrapper.get('[data-test="scan-summary"]').text()).toContain('发现 4 · 新增 2 · 更新 1 · 失效 1')
+    expect(wrapper.get('[data-test="scan-summary"]').text()).toContain(
+      '复用缓存 2 · 重新分析 1 · 完整分析 1 · 警告 0',
+    )
     expect(wrapper.text()).toContain('用时 5.5 秒')
   })
 })
