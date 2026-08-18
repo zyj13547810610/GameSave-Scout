@@ -1,5 +1,7 @@
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from threading import Event
+from threading import enumerate as enumerate_threads
 from urllib.request import urlopen
 
 import pytest
@@ -7,6 +9,7 @@ import pytest
 from gameshelf.bootstrap.application import build_application
 from gameshelf.bootstrap.paths import AppPaths
 from gameshelf.bootstrap.resources import ResourcePaths
+from gameshelf.bridge.tasks import TaskContext
 from gameshelf.engines.rule_schema import RuleSchemaError
 
 
@@ -47,6 +50,27 @@ def test_application_close_releases_its_logging_handler(tmp_path: Path) -> None:
 
     assert logger.propagate is True
     assert not any(isinstance(handler, RotatingFileHandler) for handler in logger.handlers)
+
+
+def test_application_close_releases_scan_analysis_threads(tmp_path: Path) -> None:
+    application = build_application(AppPaths.from_root(tmp_path / "便携应用"))
+    context = TaskContext(Event(), lambda *_: None)
+
+    assert application.analysis_pool.map_ordered((1, 2), lambda value: value, context) == (
+        1,
+        2,
+    )
+    assert any(
+        thread.name.startswith("gameshelf-scan-analysis")
+        for thread in enumerate_threads()
+    )
+
+    application.close()
+
+    assert not any(
+        thread.name.startswith("gameshelf-scan-analysis")
+        for thread in enumerate_threads()
+    )
 
 
 def test_application_uses_injected_resource_paths(tmp_path: Path) -> None:
@@ -167,6 +191,7 @@ def test_application_closes_guided_session_before_shared_writer(
     order: list[str] = []
     original_guided_close = application.guided_saves.close
     original_tasks_close = application.tasks.close
+    original_analysis_close = application.analysis_pool.close
     original_wizard_close = application.cover_wizard.close_all
     original_assets_stop = application.asset_server.stop
     original_writer_close = application.writer.close
@@ -183,6 +208,10 @@ def test_application_closes_guided_session_before_shared_writer(
         order.append("tasks")
         original_tasks_close()
 
+    def close_analysis() -> None:
+        order.append("analysis")
+        original_analysis_close()
+
     def close_wizard() -> None:
         order.append("wizard")
         original_wizard_close()
@@ -193,6 +222,7 @@ def test_application_closes_guided_session_before_shared_writer(
 
     monkeypatch.setattr(application.guided_saves, "close", close_guided)
     monkeypatch.setattr(application.tasks, "close", close_tasks)
+    monkeypatch.setattr(application.analysis_pool, "close", close_analysis)
     monkeypatch.setattr(application.cover_wizard, "close_all", close_wizard)
     monkeypatch.setattr(application.asset_server, "stop", stop_assets)
     monkeypatch.setattr(application.writer, "close", close_writer)
@@ -200,4 +230,4 @@ def test_application_closes_guided_session_before_shared_writer(
     application.close()
     application.close()
 
-    assert order == ["guided", "tasks", "wizard", "assets", "writer"]
+    assert order == ["guided", "tasks", "analysis", "wizard", "assets", "writer"]

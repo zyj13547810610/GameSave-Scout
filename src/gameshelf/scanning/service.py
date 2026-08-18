@@ -22,6 +22,7 @@ from gameshelf.library.models import Game, ScanRoot
 from gameshelf.library.repository import LibraryRepository, game_from_row
 from gameshelf.library.service import RootNotFoundError
 from gameshelf.library.title_parser import split_title_and_version
+from gameshelf.scanning.analysis_pool import ScanAnalysisPool
 from gameshelf.scanning.discovery import RootUnavailableError, enumerate_candidates
 from gameshelf.scanning.executable_ranker import rank_executables
 from gameshelf.scanning.models import DirectoryCandidate
@@ -59,10 +60,13 @@ class ScanService:
         repository: LibraryRepository,
         writer: DbWriter,
         engine_detection: EngineDetectionService | None = None,
+        *,
+        analysis_pool: ScanAnalysisPool | None = None,
     ) -> None:
         self._repository = repository
         self._writer = writer
         self._engine_detection = engine_detection
+        self._analysis_pool = analysis_pool
 
     def scan_root(
         self, root_id: str, scan_kind: ScanKind, context: TaskContext

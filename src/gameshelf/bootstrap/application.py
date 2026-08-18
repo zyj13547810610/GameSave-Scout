@@ -53,6 +53,7 @@ from gameshelf.saves.repository import SaveLocationRepository
 from gameshelf.saves.service import SaveLocationService
 from gameshelf.saves.static_discovery import StaticSaveDiscovery
 from gameshelf.saves.templates import PathTemplateResolver
+from gameshelf.scanning.analysis_pool import ScanAnalysisPool
 from gameshelf.scanning.path_keys import windows_path_key
 from gameshelf.scanning.service import ScanService
 from gameshelf.web.asset_server import AssetServer, AssetServerAddress
@@ -72,6 +73,7 @@ class Application:
     asset_address: AssetServerAddress
     guided_saves: GuidedSaveSessionService
     cover_wizard: CoverWizardService
+    analysis_pool: ScanAnalysisPool
     _close_lock: Lock = field(default_factory=Lock, repr=False)
     _closed: bool = field(default=False, init=False, repr=False)
 
@@ -82,6 +84,7 @@ class Application:
             self._closed = True
         self.guided_saves.close()
         self.tasks.close()
+        self.analysis_pool.close()
         self.cover_wizard.close_all()
         self.asset_server.stop()
         self.writer.close()
@@ -112,7 +115,13 @@ def build_application(
     tasks = TaskRegistry(logger=logger)
     repository = LibraryRepository(database)
     library = LibraryService(repository, writer)
-    scanner = ScanService(repository, writer, engine_detection)
+    analysis_pool = ScanAnalysisPool(lambda: config.current.scan_concurrency)
+    scanner = ScanService(
+        repository,
+        writer,
+        engine_detection,
+        analysis_pool=analysis_pool,
+    )
     shell = WindowsShell()
     launcher = GameLauncher(repository, writer, WindowsProcessLauncher(), shell)
     covers = CoverService(paths, repository, writer)
@@ -250,6 +259,7 @@ def build_application(
         asset_address=asset_address,
         guided_saves=guided_saves,
         cover_wizard=cover_wizard,
+        analysis_pool=analysis_pool,
     )
 
 
