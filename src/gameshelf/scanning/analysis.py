@@ -147,13 +147,18 @@ class GameAnalyzer:
             context.raise_if_cancelled()
             detection = self._engine_detection.detect(candidate.path, plan.executable)
             context.raise_if_cancelled()
+            detection_payload = _engine_payload(detection)
             return AnalyzedCandidate(
                 payload={
                     "mainExeRelpath": existing.detected_main_exe_relpath,
                     "exeArch": architecture,
-                    **_engine_payload(detection),
+                    **detection_payload,
                 },
-                pending_cache=self._pending_cache(plan.executable, candidate.path),
+                pending_cache=(
+                    None
+                    if detection_payload["engineDetectionFailed"] is True
+                    else self._pending_cache(plan.executable, candidate.path)
+                ),
                 analysis_kind=plan.kind,
                 warning_count=len(detection.diagnostics),
             )
@@ -172,6 +177,7 @@ class GameAnalyzer:
         context.raise_if_cancelled()
         detection = self._engine_detection.detect(candidate.path, executable)
         context.raise_if_cancelled()
+        detection_payload = _engine_payload(detection)
         return AnalyzedCandidate(
             payload={
                 "mainExeRelpath": (
@@ -182,11 +188,12 @@ class GameAnalyzer:
                     if recommendation is not None
                     else "unknown"
                 ),
-                **_engine_payload(detection),
+                **detection_payload,
             },
             pending_cache=(
                 self._pending_cache(executable, candidate.path)
                 if executable is not None
+                and detection_payload["engineDetectionFailed"] is not True
                 else None
             ),
             analysis_kind="full",

@@ -17,17 +17,21 @@ from uuid import uuid4
 
 from gameshelf.bridge.tasks import TaskCancelled, TaskContext
 from gameshelf.db.writer import DbWriter
-from gameshelf.engines.models import DetectionOutcome, EngineEvidence
 from gameshelf.engines.service import EngineDetectionService
 from gameshelf.library.models import Game, ScanRoot
 from gameshelf.library.repository import LibraryRepository, game_from_row
 from gameshelf.library.service import RootNotFoundError
 from gameshelf.library.title_parser import split_title_and_version
 from gameshelf.scanning.analysis import AnalyzedCandidate, GameAnalyzer
-from gameshelf.scanning.analysis_cache import AnalysisCacheEntry, AnalysisCacheRepository
+from gameshelf.scanning.analysis_cache import (
+    AnalysisCacheEntry,
+    AnalysisCacheRepository,
+    PendingAnalysisCache,
+    delete_analysis_cache,
+    upsert_analysis_cache,
+)
 from gameshelf.scanning.analysis_pool import ScanAnalysisPool
 from gameshelf.scanning.discovery import RootUnavailableError, enumerate_candidates
-from gameshelf.scanning.executable_ranker import rank_executables
 from gameshelf.scanning.models import DirectoryCandidate
 from gameshelf.scanning.path_keys import (
     PathTraversalError,
@@ -42,7 +46,6 @@ type ScanStatus = Literal["completed", "cancelled", "failed", "unavailable"]
 type PathProbeStatus = Literal["present", "missing", "unknown"]
 
 logger = logging.getLogger(__name__)
-_REPARSE_FLAG = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
 
 
 @dataclass(frozen=True)
@@ -72,6 +75,13 @@ class PathProbe:
 class _QuickWork:
     candidate: DirectoryCandidate
     existing: Game
+    cache: AnalysisCacheEntry | None
+
+
+@dataclass(frozen=True)
+class _AnalysisWork:
+    candidate: DirectoryCandidate
+    existing: Game | None
     cache: AnalysisCacheEntry | None
 
 
@@ -118,12 +128,24 @@ class ScanService:
         directories_scanned = 0
         inaccessible_directories = 0
         current_path = "."
-        batch: list[tuple[str, str]] = []
+        checked = 0
+        cache_hits = 0
+        reanalyzed = 0
+        full_analyses = 0
+        progress_lock = Lock()
+        candidates: list[DirectoryCandidate] = []
 
-        def report(stage: str, message: str, **summary: int) -> None:
+        def report(
+            stage: str,
+            message: str,
+            *,
+            completed: int | None = None,
+            total: int | None = None,
+            **summary: int,
+        ) -> None:
             context.report(
-                discovered,
-                None,
+                discovered if completed is None else completed,
+                total,
                 message,
                 details={
                     "stage": stage,
@@ -132,6 +154,10 @@ class ScanService:
                     "discovered": discovered,
                     "inaccessibleDirectories": inaccessible_directories,
                     "warnings": warnings,
+                    "checked": checked,
+                    "cacheHits": cache_hits,
+                    "reanalyzed": reanalyzed,
+                    "fullAnalyses": full_analyses,
                     "elapsedSeconds": round(time.monotonic() - started_at, 2),
                     **summary,
                 },
@@ -160,54 +186,76 @@ class ScanService:
                 install_key = windows_path_key(candidate.path)
                 if self._owning_root_id(install_key) != root.id:
                     continue
-                ranked = rank_executables(candidate.path)
-                recommendation = ranked[0] if ranked else None
-                automatic_executable = (
-                    candidate.path.joinpath(*recommendation.relative_path.split("/"))
-                    if recommendation is not None
-                    else None
-                )
-                existing = self._repository.get_game_by_install_path_key(install_key)
-                executable, manual_warning = _detection_executable(
-                    candidate.path, existing, automatic_executable
-                )
-                if manual_warning:
-                    warnings += 1
-                    logger.warning(
-                        "Stored manual executable is unavailable or unsafe for %s; "
-                        "using the automatic recommendation for engine detection.",
-                        candidate.path,
-                    )
-                detection = (
-                    self._engine_detection.detect(candidate.path, executable)
-                    if self._engine_detection is not None
-                    else DetectionOutcome(None, (), False)
-                )
-                warnings += len(detection.diagnostics)
-                detected_title, detected_version = split_title_and_version(
-                    candidate.path.name
-                )
-                payload = {
-                    "relativeDir": candidate.relative_dir,
-                    "title": detected_title,
-                    "version": detected_version,
-                    "mainExeRelpath": (
-                        recommendation.relative_path if recommendation is not None else None
-                    ),
-                    "exeArch": (
-                        recommendation.architecture if recommendation is not None else "unknown"
-                    ),
-                    **_engine_payload(detection),
-                }
-                batch.append(
-                    (
-                        install_key,
-                        json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
-                    )
-                )
+                candidates.append(candidate)
                 discovered += 1
                 current_path = candidate.relative_dir
                 report("discovering", f"已发现：{candidate.relative_dir}")
+            context.raise_if_cancelled()
+
+            work: list[_AnalysisWork] = []
+            for candidate in candidates:
+                install_key = windows_path_key(candidate.path)
+                existing = self._repository.get_game_by_install_path_key(install_key)
+                work.append(
+                    _AnalysisWork(
+                        candidate,
+                        existing,
+                        self._analysis_cache.get(existing.id)
+                        if existing is not None
+                        else None,
+                    )
+                )
+
+            def analyze(item: _AnalysisWork) -> tuple[_AnalysisWork, AnalyzedCandidate]:
+                nonlocal checked, warnings, cache_hits, reanalyzed, full_analyses
+                nonlocal current_path
+                result = self._analyzer.analyze(
+                    item.candidate,
+                    item.existing,
+                    item.cache,
+                    context,
+                )
+                with progress_lock:
+                    checked += 1
+                    warnings += result.warning_count
+                    current_path = item.candidate.relative_dir
+                    if result.analysis_kind == "reuse":
+                        cache_hits += 1
+                    elif result.analysis_kind == "full":
+                        full_analyses += 1
+                    else:
+                        reanalyzed += 1
+                    report(
+                        "analyzing",
+                        f"正在分析：{current_path}",
+                        completed=checked,
+                        total=len(work),
+                    )
+                return item, result
+
+            analyzed = (
+                self._analysis_pool.map_ordered(tuple(work), analyze, context)
+                if self._analysis_pool is not None
+                else tuple(analyze(item) for item in work)
+            )
+            batch: list[tuple[str, str]] = []
+            for item, analysis_result in analyzed:
+                detected_title, detected_version = split_title_and_version(
+                    item.candidate.path.name
+                )
+                payload = {
+                    "relativeDir": item.candidate.relative_dir,
+                    "title": detected_title,
+                    "version": detected_version,
+                    **analysis_result.payload,
+                    "analysisCache": _pending_cache_payload(analysis_result),
+                }
+                batch.append(
+                    (
+                        windows_path_key(item.candidate.path),
+                        json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+                    )
+                )
                 if len(batch) == 200:
                     self._stage_batch(session_id, batch)
                     batch.clear()
@@ -241,6 +289,10 @@ class ScanService:
             warnings=warnings,
             move_suggestions=result.move_suggestions,
             games=result.games,
+            checked=checked,
+            cache_hits=cache_hits,
+            reanalyzed=reanalyzed,
+            full_analyses=full_analyses,
         )
         report(
             "completed",
@@ -248,6 +300,8 @@ class ScanService:
             added=result.added,
             updated=result.updated,
             missing=result.missing,
+            completed=checked,
+            total=len(candidates),
         )
         return summary
 
@@ -509,6 +563,7 @@ class ScanService:
                 and not any(code.startswith("candidate:") for code in evidence_codes)
             )
             connection.execute("DELETE FROM games WHERE id = ?", (candidate["id"],))
+            delete_analysis_cache(connection, existing_game_id)
             now = _utc_now()
             connection.execute(
                 """
@@ -572,6 +627,104 @@ class ScanService:
             return game_from_row(row)
 
         return self._writer.submit(operation).result()
+
+    def reanalyze_game(self, game_id: str, context: TaskContext) -> Game:
+        game = self._repository.get_game(game_id)
+        if game is None:
+            raise GameReanalysisError("没有找到对应的游戏。")
+        if game.status != "installed":
+            raise GameReanalysisError("只有已安装游戏可以重新检测。")
+        if game.scan_root_id is None or game.relative_dir is None:
+            raise GameReanalysisError("游戏没有可用的安装目录。")
+        root = self._repository.get_root(game.scan_root_id)
+        if root is None:
+            raise GameReanalysisError("游戏所属根目录已不存在。")
+        try:
+            game_path = expand_relative(Path(root.display_path), game.relative_dir)
+        except PathTraversalError as error:
+            raise GameReanalysisError("游戏安装目录不安全。") from error
+        probe = _probe_directory(game_path)
+        if probe.status != "present":
+            raise GameReanalysisError("游戏安装目录当前不可访问。")
+
+        candidate = DirectoryCandidate(
+            path=game_path,
+            relative_dir=game.relative_dir,
+            depth=len(game.relative_dir.split("/")),
+            reason="direct_child",
+        )
+        context.report(0, 1, "正在重新检测主程序和引擎…")
+
+        def analyze(item: DirectoryCandidate) -> AnalyzedCandidate:
+            return self._analyzer.analyze(item, game, None, context)
+
+        analyzed = (
+            self._analysis_pool.map_ordered((candidate,), analyze, context)[0]
+            if self._analysis_pool is not None
+            else analyze(candidate)
+        )
+        context.raise_if_cancelled()
+        if analyzed.payload.get("engineDetectionFailed") is True:
+            raise GameReanalysisError("引擎检测失败，已保留原有结果。")
+
+        def operation(connection: sqlite3.Connection) -> Game:
+            context.raise_if_cancelled()
+            current = connection.execute(
+                "SELECT * FROM games WHERE id = ? AND status = 'installed'",
+                (game_id,),
+            ).fetchone()
+            if current is None:
+                raise GameReanalysisError("游戏状态已改变，请刷新后重试。")
+            if (
+                current["scan_root_id"] != game.scan_root_id
+                or current["relative_dir"] != game.relative_dir
+                or current["install_path_key"] != game.install_path_key
+            ):
+                raise GameReanalysisError("游戏安装位置已改变，请重新执行检测。")
+            payload = analyzed.payload
+            now = _utc_now()
+            connection.execute(
+                """
+                UPDATE games
+                SET detected_main_exe_relpath = ?,
+                    main_exe_relpath = CASE
+                        WHEN main_exe_is_manual = 1 THEN main_exe_relpath ELSE ? END,
+                    exe_arch = CASE
+                        WHEN main_exe_is_manual = 1 THEN exe_arch ELSE ? END,
+                    detected_engine_id = ?, detected_engine_variant = ?,
+                    engine_id = CASE
+                        WHEN engine_is_manual = 1 THEN engine_id ELSE ? END,
+                    engine_variant = CASE
+                        WHEN engine_is_manual = 1 THEN engine_variant ELSE ? END,
+                    engine_confidence = ?, engine_evidence_json = json(?),
+                    engine_rules_version = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    payload["mainExeRelpath"],
+                    payload["mainExeRelpath"],
+                    payload["exeArch"],
+                    payload["detectedEngineId"],
+                    payload["detectedEngineVariant"],
+                    payload["detectedEngineId"],
+                    payload["detectedEngineVariant"],
+                    payload["engineConfidence"],
+                    json.dumps(payload["engineEvidence"], ensure_ascii=False),
+                    payload["engineRulesVersion"],
+                    now,
+                    game_id,
+                ),
+            )
+            _replace_analysis_cache(connection, game_id, analyzed.pending_cache, now)
+            row = connection.execute(
+                "SELECT * FROM games WHERE id = ?", (game_id,)
+            ).fetchone()
+            assert row is not None
+            return game_from_row(row)
+
+        result = self._writer.submit(operation).result()
+        context.report(1, 1, "重新检测完成。")
+        return result
 
     def _candidates(
         self,
@@ -704,96 +857,25 @@ def _pending_cache_payload(result: AnalyzedCandidate) -> dict[str, object] | Non
     }
 
 
+def _replace_analysis_cache(
+    connection: sqlite3.Connection,
+    game_id: str,
+    pending: PendingAnalysisCache | None,
+    analyzed_at: str,
+) -> None:
+    if pending is None:
+        delete_analysis_cache(connection, game_id)
+    else:
+        upsert_analysis_cache(connection, game_id, pending, analyzed_at)
+
+
 def _utc_now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
-
-
-def _engine_payload(outcome: DetectionOutcome) -> dict[str, object]:
-    match = outcome.best
-    evidence: tuple[EngineEvidence, ...]
-    if match is not None:
-        evidence = match.evidence
-    elif outcome.ambiguous:
-        evidence = tuple(
-            EngineEvidence(
-                code=f"candidate:{candidate.engine_id}",
-                detail=candidate.variant or candidate.engine_id,
-                weight=candidate.confidence,
-            )
-            for candidate in outcome.alternatives
-        )
-    else:
-        evidence = ()
-    evidence_json = [
-        {
-            "code": item.code,
-            "detail": item.detail,
-            "path": item.path,
-            "weight": item.weight,
-        }
-        for item in (*evidence, *outcome.diagnostics)
-    ]
-    return {
-        "engineDetectionFailed": bool(outcome.diagnostics)
-        and match is None
-        and not outcome.ambiguous,
-        "detectedEngineId": match.engine_id if match is not None else None,
-        "detectedEngineVariant": match.variant if match is not None else None,
-        "engineConfidence": (
-            match.confidence
-            if match is not None
-            else max(
-                (candidate.confidence for candidate in outcome.alternatives),
-                default=None,
-            )
-        ),
-        "engineEvidence": evidence_json,
-        "engineRulesVersion": (
-            match.rule_version
-            if match is not None
-            else ",".join(
-                dict.fromkeys(candidate.rule_version for candidate in outcome.alternatives)
-            )
-            or None
-        ),
-    }
 
 
 class ConfirmMoveError(ValueError):
     """Raised when a move suggestion is stale or cannot be verified."""
 
 
-def _detection_executable(
-    game_dir: Path,
-    existing: Game | None,
-    automatic: Path | None,
-) -> tuple[Path | None, bool]:
-    if existing is None or not existing.main_exe_is_manual:
-        return automatic, False
-    relative = existing.main_exe_relpath
-    if relative is None:
-        return automatic, True
-    try:
-        selected = expand_relative(game_dir, relative)
-    except PathTraversalError:
-        return automatic, True
-    if selected.suffix.casefold() != ".exe" or not _safe_regular_file(
-        selected, game_dir
-    ):
-        return automatic, True
-    return selected, False
-
-
-def _safe_regular_file(path: Path, root: Path) -> bool:
-    try:
-        info = path.stat(follow_symlinks=False)
-        resolved_root = root.resolve(strict=True)
-        resolved_path = path.resolve(strict=True)
-    except OSError:
-        return False
-    return (
-        stat.S_ISREG(info.st_mode)
-        and not path.is_symlink()
-        and not bool(getattr(info, "st_file_attributes", 0) & _REPARSE_FLAG)
-        and resolved_path.is_relative_to(resolved_root)
-    )
+class GameReanalysisError(ValueError):
+    """Raised when a game cannot be safely reanalyzed."""

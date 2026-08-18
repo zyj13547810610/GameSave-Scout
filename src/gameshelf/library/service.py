@@ -180,6 +180,13 @@ class LibraryService:
                 ) from error
             if changed == 0:
                 raise RootNotFoundError(root_id)
+            connection.execute(
+                """
+                DELETE FROM game_analysis_cache
+                WHERE game_id IN (SELECT id FROM games WHERE scan_root_id = ?)
+                """,
+                (root_id,),
+            )
             games = connection.execute(
                 "SELECT id, relative_dir FROM games WHERE scan_root_id = ?", (root_id,)
             ).fetchall()
@@ -383,6 +390,7 @@ class LibraryService:
             updated_at = ?
             """,
             (relative, architecture, _utc_now()),
+            invalidate_analysis_cache=True,
         )
 
     def set_game_engine(
@@ -483,7 +491,12 @@ class LibraryService:
         return game
 
     def _update_game(
-        self, game_id: str, assignments: str, parameters: tuple[object, ...]
+        self,
+        game_id: str,
+        assignments: str,
+        parameters: tuple[object, ...],
+        *,
+        invalidate_analysis_cache: bool = False,
     ) -> Game:
         def operation(connection: sqlite3.Connection) -> Game:
             cursor = connection.execute(
@@ -492,6 +505,11 @@ class LibraryService:
             )
             if cursor.rowcount == 0:
                 raise GameNotFoundError(game_id)
+            if invalidate_analysis_cache:
+                connection.execute(
+                    "DELETE FROM game_analysis_cache WHERE game_id = ?",
+                    (game_id,),
+                )
             row = connection.execute(
                 "SELECT * FROM games WHERE id = ?", (game_id,)
             ).fetchone()

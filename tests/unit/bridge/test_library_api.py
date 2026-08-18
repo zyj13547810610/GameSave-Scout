@@ -81,6 +81,64 @@ def test_start_scan_rejects_a_disabled_root_before_submitting_task(
         writer.close()
 
 
+def test_start_game_reanalysis_returns_task_id_and_updated_game(tmp_path: Path) -> None:
+    api, tasks, writer, library = _library_api(tmp_path)
+    game_root = tmp_path / "games"
+    game_dir = game_root / "Alice"
+    game_dir.mkdir(parents=True)
+    (game_dir / "Alice.exe").write_bytes(b"not-a-real-pe")
+    try:
+        root = library.add_root(str(game_root), "children", 1, [])
+        game = library.create_game_for_test(root.id, "Alice", "Alice")
+
+        result = api.start_game_reanalysis({"gameId": game.id})
+
+        assert result["ok"] is True
+        task_id = result["data"]["taskId"]
+        assert isinstance(task_id, str)
+        snapshot = tasks.wait(task_id, timeout=3)
+        assert snapshot.status == "completed"
+        assert snapshot.result["id"] == game.id
+        assert snapshot.result["mainExeRelpath"] == "Alice.exe"
+    finally:
+        tasks.close()
+        writer.close()
+
+
+def test_start_game_reanalysis_rejects_bad_or_unavailable_games(
+    tmp_path: Path,
+) -> None:
+    api, tasks, writer, library = _library_api(tmp_path)
+    game_root = tmp_path / "games"
+    game_dir = game_root / "Alice"
+    game_dir.mkdir(parents=True)
+    try:
+        root = library.add_root(str(game_root), "children", 1, [])
+        game = library.create_game_for_test(root.id, "Alice", "Alice")
+        writer.submit(
+            lambda connection: connection.execute(
+                "UPDATE games SET status = 'missing' WHERE id = ?", (game.id,)
+            ).rowcount
+        ).result()
+
+        malformed = (
+            api.start_game_reanalysis({"gameId": ""}),
+            api.start_game_reanalysis({"gameId": game.id, "extra": True}),
+        )
+        missing = api.start_game_reanalysis({"gameId": "unknown"})
+        unavailable = api.start_game_reanalysis({"gameId": game.id})
+
+        assert [item["error"]["code"] for item in malformed] == [
+            "invalid_request",
+            "invalid_request",
+        ]
+        assert missing["error"]["code"] == "game_not_found"
+        assert unavailable["error"]["code"] == "invalid_game_state"
+    finally:
+        tasks.close()
+        writer.close()
+
+
 def test_manual_executable_must_remain_inside_game_directory(tmp_path: Path) -> None:
     api, tasks, writer, library = _library_api(tmp_path)
     game_root = tmp_path / "games"

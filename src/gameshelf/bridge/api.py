@@ -90,6 +90,7 @@ from gameshelf.saves.service import (
 from gameshelf.saves.static_discovery import StaticSaveDiscovery
 from gameshelf.scanning.service import (
     ConfirmMoveError,
+    GameReanalysisError,
     RootDisabledError,
     ScanService,
     ScanSummary,
@@ -656,6 +657,39 @@ class BridgeApi:
             return failure("root_not_found", "没有找到对应的游戏目录。")
         except RootDisabledError as error:
             return failure("root_disabled", str(error))
+
+    def start_game_reanalysis(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(payload, {"gameId"})
+            game_id = _string(payload, "gameId")
+            library = self._require_library()
+            game = library.get_game(game_id)
+            if game is None:
+                raise GameNotFoundError(game_id)
+            if (
+                game.status != "installed"
+                or game.scan_root_id is None
+                or game.relative_dir is None
+            ):
+                raise GameReanalysisError("只有安装目录可用的已安装游戏可以重新检测。")
+            install_dir = library.install_directory(game_id)
+            if not install_dir.is_dir():
+                raise GameReanalysisError("游戏安装目录当前不可访问。")
+            scanner = self._require_scanner()
+            task_id = self._tasks.submit(
+                "game_reanalysis",
+                lambda context: self._game_dto(
+                    scanner.reanalyze_game(game_id, context)
+                ),
+            )
+            return success({"taskId": task_id})
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except GameNotFoundError:
+            return failure("game_not_found", "没有找到对应的游戏。")
+        except (InvalidGameConfiguration, GameReanalysisError) as error:
+            return failure("invalid_game_state", str(error))
 
     def confirm_move(self, request: object) -> ApiResult:
         try:

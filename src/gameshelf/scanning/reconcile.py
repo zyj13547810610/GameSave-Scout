@@ -12,6 +12,11 @@ from uuid import uuid4
 
 from gameshelf.library.models import Game, ScanRoot
 from gameshelf.library.repository import game_from_row, scan_root_from_row
+from gameshelf.scanning.analysis_cache import (
+    PendingAnalysisCache,
+    delete_analysis_cache,
+    upsert_analysis_cache,
+)
 from gameshelf.scanning.discovery import is_excluded
 
 
@@ -174,6 +179,11 @@ def reconcile_session(
                 ),
             )
             updated += 1
+        pending_cache = _pending_analysis_cache(payload.get("analysisCache"))
+        if pending_cache is None:
+            delete_analysis_cache(connection, game_id)
+        else:
+            upsert_analysis_cache(connection, game_id, pending_cache, now)
         observed_game_ids.append(game_id)
 
     missing = 0
@@ -293,6 +303,41 @@ def _suggest_moves(
             )
         )
     return suggestions
+
+
+def _pending_analysis_cache(value: object) -> PendingAnalysisCache | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError("Invalid analysis cache payload.")
+    try:
+        executable_relpath = value["executableRelpath"]
+        file_size = value["fileSize"]
+        modified_time_ns = value["modifiedTimeNs"]
+        ranker_rules_version = value["rankerRulesVersion"]
+        engine_rules_version = value["engineRulesVersion"]
+    except KeyError as error:
+        raise ValueError("Incomplete analysis cache payload.") from error
+    if (
+        not isinstance(executable_relpath, str)
+        or not executable_relpath
+        or type(file_size) is not int
+        or file_size < 0
+        or type(modified_time_ns) is not int
+        or modified_time_ns < 0
+        or not isinstance(ranker_rules_version, str)
+        or not ranker_rules_version
+        or not isinstance(engine_rules_version, str)
+        or not engine_rules_version
+    ):
+        raise ValueError("Invalid analysis cache payload.")
+    return PendingAnalysisCache(
+        executable_relpath=executable_relpath,
+        file_size=file_size,
+        modified_time_ns=modified_time_ns,
+        ranker_rules_version=ranker_rules_version,
+        engine_rules_version=engine_rules_version,
+    )
 
 
 def _utc_now() -> str:

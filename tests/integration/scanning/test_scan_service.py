@@ -10,13 +10,23 @@ from gameshelf.bridge.tasks import TaskCancelled, TaskContext
 from gameshelf.db.connection import ConnectionFactory
 from gameshelf.db.migrator import Migrator
 from gameshelf.db.writer import DbWriter
+from gameshelf.engines.models import DetectionOutcome
 from gameshelf.library.models import Game, ScanRoot
 from gameshelf.library.repository import LibraryRepository
 from gameshelf.library.service import LibraryService
-from gameshelf.scanning.analysis_cache import PendingAnalysisCache, upsert_analysis_cache
+from gameshelf.scanning.analysis import GameAnalyzer
+from gameshelf.scanning.analysis_cache import (
+    AnalysisCacheRepository,
+    PendingAnalysisCache,
+    upsert_analysis_cache,
+)
 from gameshelf.scanning.analysis_pool import ScanAnalysisPool
-from gameshelf.scanning.executable_ranker import RANKER_RULES_VERSION
-from gameshelf.scanning.service import ScanService, ScanSummary
+from gameshelf.scanning.executable_ranker import (
+    RANKER_RULES_VERSION,
+    ExecutableCandidate,
+)
+from gameshelf.scanning.pe_metadata import PeMetadata
+from gameshelf.scanning.service import GameReanalysisError, ScanService, ScanSummary
 
 
 @pytest.fixture
@@ -154,6 +164,7 @@ def test_scan_reports_structured_stages_and_completion_summary(
     stages = [report["stage"] for report in reports]
     assert stages[0] == "preparing"
     assert "discovering" in stages
+    assert "analyzing" in stages
     assert stages[-2:] == ["reconciling", "completed"]
     final = dict(reports[-1])
     elapsed = final.pop("elapsedSeconds")
@@ -166,6 +177,10 @@ def test_scan_reports_structured_stages_and_completion_summary(
         "discovered": 1,
         "inaccessibleDirectories": 0,
         "warnings": 0,
+        "checked": 1,
+        "cacheHits": 0,
+        "reanalyzed": 0,
+        "fullAnalyses": 1,
         "added": 1,
         "updated": 0,
         "missing": 0,
@@ -296,6 +311,302 @@ def test_quick_reuses_a_matching_persistent_analysis_cache(
     assert summary.full_analyses == 0
 
 
+def test_full_scan_persists_cache_and_second_scan_skips_expensive_analysis(
+    scan_harness: "ScanHarness",
+) -> None:
+    root = scan_harness.add_root(mode="children")
+    game_dir = scan_harness.mkdir("GameA", exes=["GameA.exe"])
+    rank_calls: list[Path] = []
+    detection_calls: list[Path | None] = []
+
+    class Detector:
+        cache_version = "engine-test-1"
+
+        def detect(self, _: Path, executable: Path | None) -> DetectionOutcome:
+            detection_calls.append(executable)
+            return DetectionOutcome(None, (), False)
+
+    def rank(_: Path) -> tuple[ExecutableCandidate, ...]:
+        rank_calls.append(game_dir)
+        return (ExecutableCandidate("GameA.exe", 100, "x64", ("best",)),)
+
+    repository = LibraryRepository(scan_harness.factory)
+    pool = ScanAnalysisPool(lambda: 2)
+    scanner = ScanService(
+        repository,
+        scan_harness.writer,
+        analysis_pool=pool,
+        analyzer=GameAnalyzer(Detector(), ranker=rank),
+    )
+    try:
+        first = scanner.scan_root(root.id, "full", TaskContext(Event(), lambda *_: None))
+        game = first.games[0]
+        cache_after_first = AnalysisCacheRepository(scan_harness.factory).get(game.id)
+        second = scanner.scan_root(root.id, "full", TaskContext(Event(), lambda *_: None))
+    finally:
+        pool.close()
+
+    assert rank_calls == [game_dir]
+    assert detection_calls == [game_dir / "GameA.exe"]
+    assert cache_after_first is not None
+    assert cache_after_first.executable_relpath == "GameA.exe"
+    assert first.full_analyses == 1
+    assert second.cache_hits == 1
+    assert second.full_analyses == 0
+
+
+def test_full_scan_refreshes_only_changed_executable_without_reranking(
+    scan_harness: "ScanHarness",
+) -> None:
+    root = scan_harness.add_root(mode="children")
+    game_dir = scan_harness.mkdir("GameA", exes=["GameA.exe"])
+    executable = game_dir / "GameA.exe"
+    rank_calls = 0
+    pe_calls = 0
+    detection_calls = 0
+
+    class Detector:
+        cache_version = "engine-test-1"
+
+        def detect(self, _: Path, __: Path | None) -> DetectionOutcome:
+            nonlocal detection_calls
+            detection_calls += 1
+            return DetectionOutcome(None, (), False)
+
+    def rank(_: Path) -> tuple[ExecutableCandidate, ...]:
+        nonlocal rank_calls
+        rank_calls += 1
+        return (ExecutableCandidate("GameA.exe", 100, "x64", ("best",)),)
+
+    def read_pe(_: Path) -> PeMetadata:
+        nonlocal pe_calls
+        pe_calls += 1
+        return PeMetadata("", "", "", "x86")
+
+    scanner = ScanService(
+        LibraryRepository(scan_harness.factory),
+        scan_harness.writer,
+        analyzer=GameAnalyzer(Detector(), ranker=rank, pe_reader=read_pe),
+    )
+    scanner.scan_root(root.id, "full", TaskContext(Event(), lambda *_: None))
+    executable.write_bytes(b"changed executable")
+
+    refreshed = scanner.scan_root(
+        root.id, "full", TaskContext(Event(), lambda *_: None)
+    )
+
+    assert rank_calls == 1
+    assert pe_calls == 1
+    assert detection_calls == 2
+    assert refreshed.reanalyzed == 1
+    assert refreshed.games[0].exe_arch == "x86"
+
+
+def test_full_scan_engine_version_refreshes_only_detector(
+    scan_harness: "ScanHarness",
+) -> None:
+    root = scan_harness.add_root(mode="children")
+    scan_harness.mkdir("GameA", exes=["GameA.exe"])
+    rank_calls = 0
+    pe_calls = 0
+    detection_calls = 0
+
+    class Detector:
+        cache_version = "engine-test-1"
+
+        def detect(self, _: Path, __: Path | None) -> DetectionOutcome:
+            nonlocal detection_calls
+            detection_calls += 1
+            return DetectionOutcome(None, (), False)
+
+    detector = Detector()
+
+    def rank(_: Path) -> tuple[ExecutableCandidate, ...]:
+        nonlocal rank_calls
+        rank_calls += 1
+        return (ExecutableCandidate("GameA.exe", 100, "x64", ("best",)),)
+
+    def read_pe(_: Path) -> PeMetadata:
+        nonlocal pe_calls
+        pe_calls += 1
+        return PeMetadata("", "", "", "unknown")
+
+    scanner = ScanService(
+        LibraryRepository(scan_harness.factory),
+        scan_harness.writer,
+        analyzer=GameAnalyzer(detector, ranker=rank, pe_reader=read_pe),
+    )
+    scanner.scan_root(root.id, "full", TaskContext(Event(), lambda *_: None))
+    detector.cache_version = "engine-test-2"
+
+    refreshed = scanner.scan_root(
+        root.id, "full", TaskContext(Event(), lambda *_: None)
+    )
+
+    assert rank_calls == 1
+    assert pe_calls == 0
+    assert detection_calls == 2
+    assert refreshed.reanalyzed == 1
+
+
+def test_full_scan_without_executable_never_creates_a_cache_hit(
+    scan_harness: "ScanHarness",
+) -> None:
+    root = scan_harness.add_root(mode="children")
+    scan_harness.mkdir("NoExe")
+
+    first = scan_harness.scan(root.id, "full")
+    second = scan_harness.scan(root.id, "full")
+
+    assert AnalysisCacheRepository(scan_harness.factory).get(first.games[0].id) is None
+    assert first.full_analyses == 1
+    assert second.full_analyses == 1
+    assert second.cache_hits == 0
+
+
+def test_full_scan_keeps_discovery_order_when_analysis_finishes_out_of_order(
+    scan_harness: "ScanHarness",
+) -> None:
+    root = scan_harness.add_root(mode="children")
+    scan_harness.mkdir("GameA", exes=["GameA.exe"])
+    scan_harness.mkdir("GameB", exes=["GameB.exe"])
+    second_started = Event()
+
+    def rank(path: Path) -> tuple[ExecutableCandidate, ...]:
+        if path.name == "GameA":
+            assert second_started.wait(timeout=2)
+        else:
+            second_started.set()
+        return (
+            ExecutableCandidate(f"{path.name}.exe", 100, "x64", ("best",)),
+        )
+
+    pool = ScanAnalysisPool(lambda: 2)
+    scanner = ScanService(
+        LibraryRepository(scan_harness.factory),
+        scan_harness.writer,
+        analysis_pool=pool,
+        analyzer=GameAnalyzer(None, ranker=rank),
+    )
+    try:
+        summary = scanner.scan_root(
+            root.id, "full", TaskContext(Event(), lambda *_: None)
+        )
+    finally:
+        pool.close()
+
+    assert [game.relative_dir for game in summary.games] == ["GameA", "GameB"]
+
+
+def test_reanalyze_game_ignores_cache_and_preserves_manual_fields(
+    scan_harness: "ScanHarness",
+) -> None:
+    root = scan_harness.add_root(mode="children")
+    game_dir = scan_harness.mkdir("GameA.v1.0", exes=["Auto.exe", "Manual.exe"])
+    rank_calls: list[Path] = []
+
+    class Detector:
+        cache_version = "engine-test-1"
+
+        def detect(self, _: Path, __: Path | None) -> DetectionOutcome:
+            return DetectionOutcome(None, (), False)
+
+    def rank(path: Path) -> tuple[ExecutableCandidate, ...]:
+        rank_calls.append(path)
+        return (ExecutableCandidate("Auto.exe", 100, "x64", ("best",)),)
+
+    scanner = ScanService(
+        LibraryRepository(scan_harness.factory),
+        scan_harness.writer,
+        analyzer=GameAnalyzer(Detector(), ranker=rank),
+    )
+    game = scanner.scan_root(
+        root.id, "full", TaskContext(Event(), lambda *_: None)
+    ).games[0]
+    scan_harness.library.set_game_metadata(game.id, "手动标题", "手动版本")
+    scan_harness.library.set_game_executable(game.id, str(game_dir / "Manual.exe"))
+    scan_harness.library.set_game_engine(game.id, "custom:mine")
+    scan_harness.library.update_launch_configuration(
+        game.id,
+        working_dir_relpath=".",
+        launch_args=("--safe",),
+        environment={"MODE": "manual"},
+    )
+    scanner.scan_root(root.id, "full", TaskContext(Event(), lambda *_: None))
+    rank_calls.clear()
+
+    refreshed = scanner.reanalyze_game(
+        game.id, TaskContext(Event(), lambda *_: None)
+    )
+
+    assert rank_calls == [game_dir]
+    assert refreshed.title == "手动标题"
+    assert refreshed.version == "手动版本"
+    assert refreshed.main_exe_relpath == "Manual.exe"
+    assert refreshed.main_exe_is_manual is True
+    assert refreshed.detected_main_exe_relpath == "Auto.exe"
+    assert refreshed.engine_id == "custom:mine"
+    assert refreshed.engine_is_manual is True
+    assert refreshed.working_dir_relpath == "."
+    assert refreshed.launch_args == ("--safe",)
+    assert refreshed.environment == {"MODE": "manual"}
+    cache = AnalysisCacheRepository(scan_harness.factory).get(game.id)
+    assert cache is not None
+    assert cache.executable_relpath == "Manual.exe"
+
+
+def test_failed_or_cancelled_reanalysis_preserves_game_and_cache(
+    scan_harness: "ScanHarness",
+) -> None:
+    root = scan_harness.add_root(mode="children")
+    scan_harness.mkdir("GameA", exes=["GameA.exe"])
+    game = scan_harness.scan(root.id, "full").games[0]
+    before = scan_harness.game(game.id)
+    cache_before = AnalysisCacheRepository(scan_harness.factory).get(game.id)
+
+    def fail_rank(_: Path) -> tuple[ExecutableCandidate, ...]:
+        raise RuntimeError("rank failed")
+
+    scanner = ScanService(
+        LibraryRepository(scan_harness.factory),
+        scan_harness.writer,
+        analyzer=GameAnalyzer(None, ranker=fail_rank),
+    )
+    with pytest.raises(RuntimeError, match="rank failed"):
+        scanner.reanalyze_game(game.id, TaskContext(Event(), lambda *_: None))
+    cancelled = Event()
+    cancelled.set()
+    with pytest.raises(TaskCancelled):
+        scan_harness.scanner.reanalyze_game(
+            game.id, TaskContext(cancelled, lambda *_: None)
+        )
+
+    assert scan_harness.game(game.id) == before
+    assert AnalysisCacheRepository(scan_harness.factory).get(game.id) == cache_before
+
+
+def test_reanalyze_game_rejects_missing_or_unknown_games(
+    scan_harness: "ScanHarness",
+) -> None:
+    root = scan_harness.add_root(mode="children")
+    scan_harness.mkdir("GameA")
+    game = scan_harness.scan(root.id, "full").games[0]
+    scan_harness.writer.submit(
+        lambda connection: connection.execute(
+            "UPDATE games SET status = 'missing' WHERE id = ?", (game.id,)
+        ).rowcount
+    ).result()
+
+    with pytest.raises(GameReanalysisError, match="已安装"):
+        scan_harness.scanner.reanalyze_game(
+            game.id, TaskContext(Event(), lambda *_: None)
+        )
+    with pytest.raises(GameReanalysisError, match="没有找到"):
+        scan_harness.scanner.reanalyze_game(
+            "unknown", TaskContext(Event(), lambda *_: None)
+        )
+
+
 def test_manual_executable_survives_new_auto_recommendation(
     scan_harness: "ScanHarness",
 ) -> None:
@@ -376,6 +687,7 @@ def test_confirmed_move_preserves_original_game_id_and_removes_temporary_candida
     original_root = scan_harness.add_root(mode="children")
     scan_harness.mkdir("GameA", exes=["Game.exe"])
     original = scan_harness.scan(original_root.id, "full").games[0]
+    assert AnalysisCacheRepository(scan_harness.factory).get(original.id) is not None
     scan_harness.remove_dir("GameA")
     scan_harness.scan(original_root.id, "full")
 
@@ -399,6 +711,7 @@ def test_confirmed_move_preserves_original_game_id_and_removes_temporary_candida
     assert confirmed.status == "installed"
     assert confirmed.exe_arch == "x64"
     assert scan_harness.games() == (confirmed,)
+    assert AnalysisCacheRepository(scan_harness.factory).get(confirmed.id) is None
 
 
 def test_confirmed_move_preserves_manual_metadata_and_refreshes_detection(

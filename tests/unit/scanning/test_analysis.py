@@ -291,6 +291,43 @@ def test_full_analysis_without_an_executable_does_not_create_cache(
     assert result.pending_cache is None
 
 
+def test_engine_detection_failure_does_not_create_a_reusable_cache(
+    tmp_path: Path,
+) -> None:
+    game_dir = tmp_path / "Game"
+    game_dir.mkdir()
+    (game_dir / "Auto.exe").write_bytes(b"MZ")
+
+    class BrokenDetector:
+        cache_version = "engine-1"
+
+        def detect(self, _: Path, __: Path | None) -> DetectionOutcome:
+            return DetectionOutcome(
+                None,
+                (),
+                False,
+                (EngineEvidence("detector_error", "failed", 0),),
+            )
+
+    analyzer = GameAnalyzer(
+        BrokenDetector(),
+        ranker=lambda _: (
+            ExecutableCandidate("Auto.exe", 100, "x64", ("best",)),
+        ),
+        ranker_rules_version="ranker-1",
+    )
+
+    result = analyzer.analyze(
+        DirectoryCandidate(game_dir, "Game", 1, "direct_child"),
+        None,
+        None,
+        _context(),
+    )
+
+    assert result.payload["engineDetectionFailed"] is True
+    assert result.pending_cache is None
+
+
 def test_full_analysis_stops_before_detection_when_ranking_cancels(
     tmp_path: Path,
 ) -> None:

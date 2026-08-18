@@ -11,7 +11,25 @@ from gameshelf.library.service import (
     InvalidRootConfiguration,
     LibraryService,
 )
+from gameshelf.scanning.analysis_cache import (
+    AnalysisCacheRepository,
+    PendingAnalysisCache,
+    upsert_analysis_cache,
+)
 from gameshelf.scanning.pe_metadata import PeMetadata
+
+
+def _seed_cache(library_service: LibraryService, game_id: str) -> AnalysisCacheRepository:
+    factory = library_service._repository.factory  # noqa: SLF001
+    repository = AnalysisCacheRepository(factory)
+    with factory.connect() as connection:
+        upsert_analysis_cache(
+            connection,
+            game_id,
+            PendingAnalysisCache("Game.exe", 10, 20, "ranker", "engine"),
+            "now",
+        )
+    return repository
 
 
 def test_add_root_deduplicates_by_windows_key(
@@ -30,10 +48,13 @@ def test_remap_root_preserves_id_and_relative_game(
     root = library_service.add_root(r"D:\Games", "recursive", 2, ["tools"])
     game = library_service.create_game_for_test(root.id, "group/game", "Game")
 
+    cache = _seed_cache(library_service, game.id)
+
     remapped = library_service.remap_root(root.id, r"E:\PortableGames")
 
     assert remapped.id == root.id
     assert library_service.get_game(game.id).relative_dir == "group/game"  # type: ignore[union-attr]
+    assert cache.get(game.id) is None
 
 
 def test_remove_root_preserves_games_as_missing_records(
@@ -323,6 +344,7 @@ def test_set_game_executable_stores_the_selected_pe_architecture(
     executable.write_bytes(b"MZ")
     root = library_service.add_root(str(root_path), "children", 1, [])
     game = library_service.create_game_for_test(root.id, "Alice", "Alice")
+    cache = _seed_cache(library_service, game.id)
     monkeypatch.setattr(
         "gameshelf.library.service.read_pe_metadata",
         lambda _: PeMetadata("", "", "", "x64"),
@@ -334,3 +356,4 @@ def test_set_game_executable_stores_the_selected_pe_architecture(
     assert updated.main_exe_relpath == "Alice.exe"
     assert updated.main_exe_is_manual is True
     assert updated.exe_arch == "x64"
+    assert cache.get(game.id) is None

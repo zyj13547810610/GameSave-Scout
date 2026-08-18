@@ -13,6 +13,8 @@ from gameshelf.engines.service import EngineDetectionService
 from gameshelf.library.models import Game
 from gameshelf.library.repository import LibraryRepository
 from gameshelf.library.service import LibraryService
+from gameshelf.scanning.analysis import GameAnalyzer
+from gameshelf.scanning.analysis_cache import AnalysisCacheRepository
 from gameshelf.scanning.executable_ranker import ExecutableCandidate
 from gameshelf.scanning.pe_metadata import PeMetadata
 from gameshelf.scanning.service import ScanService
@@ -68,7 +70,9 @@ def test_scan_refreshes_suggestion_but_preserves_manual_engine(
     engine_scan_harness.set_manual_engine(game.id, "custom:my-engine", None)
     engine_scan_harness.replace_fixture_with_unity()
 
-    refreshed = engine_scan_harness.rescan()
+    refreshed = engine_scan_harness.scanner.reanalyze_game(
+        game.id, TaskContext(Event(), lambda *_: None)
+    )
 
     assert refreshed.detected_engine_id == "unity"
     assert refreshed.engine_id == "custom:my-engine"
@@ -102,6 +106,7 @@ def test_detector_failure_preserves_previous_detected_and_adopted_engine(
     assert refreshed.detected_engine_id == "renpy"
     assert refreshed.engine_id == "renpy"
     assert refreshed.engine_evidence == game.engine_evidence
+    assert AnalysisCacheRepository(engine_scan_harness.factory).get(game.id) is None
 
 
 def test_rescan_uses_valid_manual_executable_for_engine_detection(
@@ -123,11 +128,18 @@ def test_rescan_uses_valid_manual_executable_for_engine_detection(
     data = engine_scan_harness.game_path / "Game_Data"
     data.mkdir()
     (data / "globalgamemanagers").write_bytes(b"unity")
-    monkeypatch.setattr(
-        "gameshelf.scanning.service.rank_executables",
-        lambda _: (
-            ExecutableCandidate("WrongTool.exe", 100, "x86", ("test",)),
-            ExecutableCandidate("Game.exe", 10, "x64", ("test",)),
+    detector = EngineDetectionService.from_rules_file(
+        Path(__file__).parents[3] / "resources" / "rules" / "engines.yaml"
+    )
+    engine_scan_harness.scanner = ScanService(
+        LibraryRepository(engine_scan_harness.factory),
+        engine_scan_harness.writer,
+        analyzer=GameAnalyzer(
+            detector,
+            ranker=lambda _: (
+                ExecutableCandidate("WrongTool.exe", 100, "x86", ("test",)),
+                ExecutableCandidate("Game.exe", 10, "x64", ("test",)),
+            ),
         ),
     )
 
