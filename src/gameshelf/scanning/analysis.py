@@ -90,16 +90,23 @@ def choose_analysis_plan(
     return AnalysisPlan("reuse", executable)
 
 
+class _NoEngineDetector:
+    cache_version = "none"
+
+    def detect(self, game_dir: Path, executable: Path | None) -> DetectionOutcome:
+        return DetectionOutcome(None, (), False)
+
+
 class GameAnalyzer:
     def __init__(
         self,
-        engine_detection: EngineDetector,
+        engine_detection: EngineDetector | None,
         *,
         ranker: Callable[[Path], tuple[ExecutableCandidate, ...]] = rank_executables,
         pe_reader: Callable[[Path], PeMetadata] = read_pe_metadata,
         ranker_rules_version: str = RANKER_RULES_VERSION,
     ) -> None:
-        self._engine_detection = engine_detection
+        self._engine_detection: EngineDetector = engine_detection or _NoEngineDetector()
         self._ranker = ranker
         self._pe_reader = pe_reader
         self._ranker_rules_version = ranker_rules_version

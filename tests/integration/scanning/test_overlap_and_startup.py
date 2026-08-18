@@ -10,7 +10,7 @@ from gameshelf.library.service import LibraryService
 from gameshelf.scanning.service import ScanService
 
 
-def test_quick_children_discovers_direct_games_but_quick_recursive_only_checks_known(
+def test_quick_checks_only_known_games_for_children_and_recursive_roots(
     tmp_path: Path,
 ) -> None:
     factory = ConnectionFactory(tmp_path / "data" / "library.db")
@@ -26,11 +26,15 @@ def test_quick_children_discovers_direct_games_but_quick_recursive_only_checks_k
 
     try:
         children_path = tmp_path / "children"
-        children_path.mkdir()
+        known_child = children_path / "KnownChild"
+        known_child.mkdir(parents=True)
         children = library.add_root(str(children_path), "children", 1, [])
-        (children_path / "DirectGame").mkdir()
+        library.create_game_for_test(children.id, "KnownChild", "KnownChild")
+        (children_path / "NewChild").mkdir()
         quick_children = scanner.scan_root(children.id, "quick", context())
-        assert quick_children.added == 1
+        assert quick_children.discovered == 1
+        assert quick_children.added == 0
+        assert not any(game.title == "NewChild" for game in library.list_games())
 
         recursive_path = tmp_path / "recursive"
         known = recursive_path / "group" / "Known"
@@ -46,7 +50,9 @@ def test_quick_children_discovers_direct_games_but_quick_recursive_only_checks_k
         assert quick_recursive.discovered == 1
         assert not any(game.title == "NewGame" for game in library.list_games())
 
+        scanner.scan_root(children.id, "full", context())
         scanner.scan_root(recursive.id, "full", context())
+        assert any(game.title == "NewChild" for game in library.list_games())
         assert any(game.title == "NewGame" for game in library.list_games())
     finally:
         writer.close()

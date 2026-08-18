@@ -88,7 +88,12 @@ from gameshelf.saves.service import (
     SaveLocationService,
 )
 from gameshelf.saves.static_discovery import StaticSaveDiscovery
-from gameshelf.scanning.service import ConfirmMoveError, ScanService, ScanSummary
+from gameshelf.scanning.service import (
+    ConfirmMoveError,
+    RootDisabledError,
+    ScanService,
+    ScanSummary,
+)
 
 
 class InvalidRequest(ValueError):
@@ -620,10 +625,23 @@ class BridgeApi:
     def start_scan(self, request: object) -> ApiResult:
         try:
             payload = _payload(request)
+            _only_keys(payload, {"rootId", "kind"})
             root_id = _string(payload, "rootId")
             kind = _string(payload, "kind")
             if kind not in {"quick", "full"}:
                 raise InvalidRequest("kind must be 'quick' or 'full'.")
+            root = next(
+                (
+                    item
+                    for item in self._require_library().list_roots()
+                    if item.id == root_id
+                ),
+                None,
+            )
+            if root is None:
+                raise RootNotFoundError(root_id)
+            if not root.enabled:
+                raise RootDisabledError("该游戏目录未参与扫描。")
             scanner = self._require_scanner()
             task_id = self._tasks.submit(
                 "library_scan",
@@ -634,6 +652,10 @@ class BridgeApi:
             return success({"taskId": task_id})
         except InvalidRequest as error:
             return failure("invalid_request", str(error))
+        except RootNotFoundError:
+            return failure("root_not_found", "没有找到对应的游戏目录。")
+        except RootDisabledError as error:
+            return failure("root_disabled", str(error))
 
     def confirm_move(self, request: object) -> ApiResult:
         try:
@@ -1731,6 +1753,10 @@ def _scan_summary_dto(summary: ScanSummary) -> dict[str, JSONValue]:
         "updated": summary.updated,
         "missing": summary.missing,
         "warnings": summary.warnings,
+        "checked": summary.checked,
+        "cacheHits": summary.cache_hits,
+        "reanalyzed": summary.reanalyzed,
+        "fullAnalyses": summary.full_analyses,
         "moveSuggestions": [
             {
                 "existingGameId": suggestion.existing_game_id,

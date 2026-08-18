@@ -36,7 +36,46 @@ def test_start_scan_returns_task_id(tmp_path: Path) -> None:
 
         assert result["ok"] is True
         assert isinstance(result["data"]["taskId"], str)
-        tasks.wait(result["data"]["taskId"], timeout=3)
+        snapshot = tasks.wait(result["data"]["taskId"], timeout=3)
+        assert snapshot.result["checked"] == 0
+        assert snapshot.result["cacheHits"] == 0
+        assert snapshot.result["reanalyzed"] == 0
+        assert snapshot.result["fullAnalyses"] == 0
+    finally:
+        tasks.close()
+        writer.close()
+
+
+def test_start_scan_rejects_a_disabled_root_before_submitting_task(
+    tmp_path: Path,
+) -> None:
+    api, tasks, writer, _ = _library_api(tmp_path)
+    game_root = tmp_path / "games"
+    game_root.mkdir()
+    try:
+        root = api.add_root(
+            {
+                "displayPath": str(game_root),
+                "scanMode": "children",
+                "maxDepth": 1,
+                "exclusions": [],
+            }
+        )["data"]
+        api.update_root(
+            {
+                "rootId": root["id"],
+                "displayPath": root["displayPath"],
+                "enabled": False,
+                "scanMode": root["scanMode"],
+                "maxDepth": root["maxDepth"],
+                "exclusions": root["exclusions"],
+            }
+        )
+
+        result = api.start_scan({"rootId": root["id"], "kind": "quick"})
+
+        assert result["ok"] is False
+        assert result["error"]["code"] == "root_disabled"
     finally:
         tasks.close()
         writer.close()

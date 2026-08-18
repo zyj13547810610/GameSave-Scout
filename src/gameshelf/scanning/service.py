@@ -11,6 +11,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from threading import Lock
 from typing import Literal
 from uuid import uuid4
 
@@ -22,6 +23,8 @@ from gameshelf.library.models import Game, ScanRoot
 from gameshelf.library.repository import LibraryRepository, game_from_row
 from gameshelf.library.service import RootNotFoundError
 from gameshelf.library.title_parser import split_title_and_version
+from gameshelf.scanning.analysis import AnalyzedCandidate, GameAnalyzer
+from gameshelf.scanning.analysis_cache import AnalysisCacheEntry, AnalysisCacheRepository
 from gameshelf.scanning.analysis_pool import ScanAnalysisPool
 from gameshelf.scanning.discovery import RootUnavailableError, enumerate_candidates
 from gameshelf.scanning.executable_ranker import rank_executables
@@ -36,6 +39,7 @@ from gameshelf.scanning.reconcile import MoveSuggestion, reconcile_session
 
 type ScanKind = Literal["quick", "full"]
 type ScanStatus = Literal["completed", "cancelled", "failed", "unavailable"]
+type PathProbeStatus = Literal["present", "missing", "unknown"]
 
 logger = logging.getLogger(__name__)
 _REPARSE_FLAG = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
@@ -52,6 +56,27 @@ class ScanSummary:
     warnings: int
     move_suggestions: tuple[MoveSuggestion, ...]
     games: tuple[Game, ...] = ()
+    checked: int = 0
+    cache_hits: int = 0
+    reanalyzed: int = 0
+    full_analyses: int = 0
+
+
+@dataclass(frozen=True)
+class PathProbe:
+    status: PathProbeStatus
+    warning: str | None = None
+
+
+@dataclass(frozen=True)
+class _QuickWork:
+    candidate: DirectoryCandidate
+    existing: Game
+    cache: AnalysisCacheEntry | None
+
+
+class RootDisabledError(ValueError):
+    """Raised before a disabled root can create a scan session."""
 
 
 class ScanService:
@@ -62,11 +87,17 @@ class ScanService:
         engine_detection: EngineDetectionService | None = None,
         *,
         analysis_pool: ScanAnalysisPool | None = None,
+        analyzer: GameAnalyzer | None = None,
+        analysis_cache: AnalysisCacheRepository | None = None,
     ) -> None:
         self._repository = repository
         self._writer = writer
         self._engine_detection = engine_detection
         self._analysis_pool = analysis_pool
+        self._analyzer = analyzer or GameAnalyzer(engine_detection)
+        self._analysis_cache = analysis_cache or AnalysisCacheRepository(
+            repository.factory
+        )
 
     def scan_root(
         self, root_id: str, scan_kind: ScanKind, context: TaskContext
@@ -76,6 +107,10 @@ class ScanService:
         root = self._repository.get_root(root_id)
         if root is None:
             raise RootNotFoundError(root_id)
+        if not root.enabled:
+            raise RootDisabledError("该游戏目录未参与扫描。")
+        if scan_kind == "quick":
+            return self._scan_quick(root, context)
         session_id = self._create_session(root_id, scan_kind)
         started_at = time.monotonic()
         discovered = 0
@@ -213,6 +248,216 @@ class ScanService:
             added=result.added,
             updated=result.updated,
             missing=result.missing,
+        )
+        return summary
+
+    def _scan_quick(self, root: ScanRoot, context: TaskContext) -> ScanSummary:
+        session_id = self._create_session(root.id, "quick")
+        started_at = time.monotonic()
+        known_games = self._repository.list_games_for_root(root.id)
+        total = len(known_games)
+        checked = 0
+        discovered = 0
+        warnings = 0
+        inaccessible_directories = 0
+        current_path = "."
+        cache_hits = 0
+        reanalyzed = 0
+        full_analyses = 0
+        progress_lock = Lock()
+
+        def report(stage: str, message: str, **summary: int) -> None:
+            context.report(
+                checked,
+                total,
+                message,
+                details={
+                    "stage": stage,
+                    "currentPath": current_path,
+                    "directoriesScanned": checked,
+                    "discovered": discovered,
+                    "inaccessibleDirectories": inaccessible_directories,
+                    "warnings": warnings,
+                    "checked": checked,
+                    "cacheHits": cache_hits,
+                    "reanalyzed": reanalyzed,
+                    "fullAnalyses": full_analyses,
+                    "elapsedSeconds": round(time.monotonic() - started_at, 2),
+                    **summary,
+                },
+            )
+
+        report("preparing", "正在准备快速核验…")
+        root_path = Path(root.display_path)
+        root_probe = _probe_directory(root_path)
+        if root_probe.status != "present":
+            message = root_probe.warning or "根目录不存在或不再是目录。"
+            warnings = int(root_probe.status == "unknown")
+            self._finish_without_reconcile(
+                session_id,
+                root.id,
+                "unavailable",
+                message,
+            )
+            report("unavailable", "根目录暂时无法访问。")
+            return ScanSummary(
+                session_id,
+                "unavailable",
+                0,
+                0,
+                0,
+                0,
+                warnings,
+                (),
+                checked=0,
+            )
+
+        work: list[_QuickWork] = []
+        missing_game_ids: list[str] = []
+        try:
+            for game in known_games:
+                context.raise_if_cancelled()
+                relative = game.relative_dir
+                current_path = relative or game.title
+                if relative is None:
+                    probe = PathProbe("unknown", "游戏记录缺少相对目录。")
+                else:
+                    try:
+                        game_path = expand_relative(root_path, relative)
+                    except PathTraversalError:
+                        probe = PathProbe("unknown", "游戏目录越过了根目录边界。")
+                    else:
+                        probe = _probe_directory(game_path)
+                if probe.status == "present":
+                    assert relative is not None
+                    candidate = DirectoryCandidate(
+                        path=game_path,
+                        relative_dir=relative,
+                        depth=len(relative.split("/")),
+                        reason="direct_child",
+                    )
+                    work.append(
+                        _QuickWork(
+                            candidate,
+                            game,
+                            self._analysis_cache.get(game.id),
+                        )
+                    )
+                    continue
+                checked += 1
+                if probe.status == "missing":
+                    missing_game_ids.append(game.id)
+                    report("checking", f"目录已不存在：{current_path}")
+                else:
+                    warnings += 1
+                    inaccessible_directories += 1
+                    logger.warning(
+                        "Cannot determine game directory state for %s: %s",
+                        current_path,
+                        probe.warning,
+                    )
+                    report("checking", f"无法核验：{current_path}")
+
+            def analyze(item: _QuickWork) -> tuple[_QuickWork, AnalyzedCandidate]:
+                nonlocal checked, discovered, warnings
+                nonlocal cache_hits, reanalyzed, full_analyses, current_path
+                result = self._analyzer.analyze(
+                    item.candidate,
+                    item.existing,
+                    item.cache,
+                    context,
+                )
+                with progress_lock:
+                    checked += 1
+                    discovered += 1
+                    warnings += result.warning_count
+                    current_path = item.candidate.relative_dir
+                    if result.analysis_kind == "reuse":
+                        cache_hits += 1
+                    elif result.analysis_kind == "full":
+                        full_analyses += 1
+                    else:
+                        reanalyzed += 1
+                    report("checking", f"已核验：{current_path}")
+                return item, result
+
+            analyzed = (
+                self._analysis_pool.map_ordered(tuple(work), analyze, context)
+                if self._analysis_pool is not None
+                else tuple(analyze(item) for item in work)
+            )
+            batch: list[tuple[str, str]] = []
+            for item, analysis_result in analyzed:
+                detected_title, detected_version = split_title_and_version(
+                    item.candidate.path.name
+                )
+                payload = {
+                    "relativeDir": item.candidate.relative_dir,
+                    "title": detected_title,
+                    "version": detected_version,
+                    **analysis_result.payload,
+                    "analysisCache": _pending_cache_payload(analysis_result),
+                }
+                install_key = item.existing.install_path_key or windows_path_key(
+                    item.candidate.path
+                )
+                batch.append(
+                    (
+                        install_key,
+                        json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+                    )
+                )
+                if len(batch) == 200:
+                    self._stage_batch(session_id, batch)
+                    batch.clear()
+            if batch:
+                self._stage_batch(session_id, batch)
+            context.raise_if_cancelled()
+        except TaskCancelled:
+            self._finish_without_reconcile(
+                session_id,
+                root.id,
+                "cancelled",
+                "Scan cancelled.",
+            )
+            report("cancelled", "扫描已取消。")
+            raise
+        except Exception as error:
+            self._finish_without_reconcile(session_id, root.id, "failed", str(error))
+            report("failed", "扫描失败。")
+            raise
+
+        report("reconciling", "正在更新游戏库…")
+        reconcile_result = self._writer.submit(
+            lambda connection: reconcile_session(
+                connection,
+                session_id,
+                root,
+                "quick",
+                quick_missing_game_ids=tuple(missing_game_ids),
+            )
+        ).result()
+        summary = ScanSummary(
+            session_id=session_id,
+            status="completed",
+            discovered=discovered,
+            added=reconcile_result.added,
+            updated=reconcile_result.updated,
+            missing=reconcile_result.missing,
+            warnings=warnings,
+            move_suggestions=reconcile_result.move_suggestions,
+            games=reconcile_result.games,
+            checked=checked,
+            cache_hits=cache_hits,
+            reanalyzed=reanalyzed,
+            full_analyses=full_analyses,
+        )
+        report(
+            "completed",
+            "快速核验完成。",
+            added=reconcile_result.added,
+            updated=reconcile_result.updated,
+            missing=reconcile_result.missing,
         )
         return summary
 
@@ -432,6 +677,31 @@ def _empty_summary(
     session_id: str, status: ScanStatus, discovered: int
 ) -> ScanSummary:
     return ScanSummary(session_id, status, discovered, 0, 0, 0, 0, ())
+
+
+def _probe_directory(path: Path) -> PathProbe:
+    try:
+        info = path.stat(follow_symlinks=False)
+    except (FileNotFoundError, NotADirectoryError):
+        return PathProbe("missing")
+    except OSError as error:
+        return PathProbe("unknown", f"{type(error).__name__}: {error}")
+    if not stat.S_ISDIR(info.st_mode):
+        return PathProbe("missing")
+    return PathProbe("present")
+
+
+def _pending_cache_payload(result: AnalyzedCandidate) -> dict[str, object] | None:
+    pending = result.pending_cache
+    if pending is None:
+        return None
+    return {
+        "executableRelpath": pending.executable_relpath,
+        "fileSize": pending.file_size,
+        "modifiedTimeNs": pending.modified_time_ns,
+        "rankerRulesVersion": pending.ranker_rules_version,
+        "engineRulesVersion": pending.engine_rules_version,
+    }
 
 
 def _utc_now() -> str:

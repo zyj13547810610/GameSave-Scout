@@ -47,6 +47,18 @@ class LibraryRepository:
             ).fetchall()
         return tuple(game_from_row(row) for row in rows)
 
+    def list_games_for_root(self, root_id: str) -> tuple[Game, ...]:
+        with self._factory.connect(readonly=True) as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM games
+                WHERE scan_root_id = ? AND status IN ('installed', 'missing')
+                ORDER BY relative_dir COLLATE NOCASE, id
+                """,
+                (root_id,),
+            ).fetchall()
+        return tuple(game_from_row(row) for row in rows)
+
     def get_game(self, game_id: str) -> Game | None:
         with self._factory.connect(readonly=True) as connection:
             row = connection.execute(

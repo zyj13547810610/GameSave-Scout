@@ -37,6 +37,8 @@ def reconcile_session(
     session_id: str,
     root: ScanRoot,
     scan_kind: str,
+    *,
+    quick_missing_game_ids: tuple[str, ...] = (),
 ) -> ReconcileResult:
     current_root = connection.execute(
         "SELECT * FROM scan_roots WHERE id = ?", (root.id,)
@@ -188,6 +190,17 @@ def reconcile_session(
             """,
             (now, now, root.id, session_id),
         ).rowcount
+    elif quick_missing_game_ids:
+        for game_id in quick_missing_game_ids:
+            missing += connection.execute(
+                """
+                UPDATE games
+                SET status = 'missing', missing_since = COALESCE(missing_since, ?),
+                    updated_at = ?
+                WHERE id = ? AND scan_root_id = ? AND status = 'installed'
+                """,
+                (now, now, game_id, root.id),
+            ).rowcount
 
     connection.execute(
         """

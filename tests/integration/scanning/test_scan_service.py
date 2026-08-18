@@ -13,6 +13,9 @@ from gameshelf.db.writer import DbWriter
 from gameshelf.library.models import Game, ScanRoot
 from gameshelf.library.repository import LibraryRepository
 from gameshelf.library.service import LibraryService
+from gameshelf.scanning.analysis_cache import PendingAnalysisCache, upsert_analysis_cache
+from gameshelf.scanning.analysis_pool import ScanAnalysisPool
+from gameshelf.scanning.executable_ranker import RANKER_RULES_VERSION
 from gameshelf.scanning.service import ScanService, ScanSummary
 
 
@@ -183,6 +186,114 @@ def test_unavailable_root_preserves_installed_status(
 
     assert summary.status == "unavailable"
     assert scan_harness.game(game.id).status == "installed"
+
+
+def test_quick_marks_only_a_confirmed_missing_game_and_restores_it(
+    scan_harness: "ScanHarness",
+) -> None:
+    root = scan_harness.add_root(mode="children")
+    scan_harness.mkdir("GameA")
+    scan_harness.mkdir("GameB")
+    scan_harness.scan(root.id, "full")
+    games = {game.relative_dir: game for game in scan_harness.games()}
+
+    scan_harness.remove_dir("GameA")
+    missing = scan_harness.scan(root.id, "quick")
+
+    assert missing.checked == 2
+    assert missing.missing == 1
+    assert scan_harness.game(games["GameA"].id).status == "missing"
+    assert scan_harness.game(games["GameB"].id).status == "installed"
+
+    scan_harness.mkdir("GameA")
+    restored = scan_harness.scan(root.id, "quick")
+
+    assert restored.checked == 2
+    assert scan_harness.game(games["GameA"].id).status == "installed"
+
+
+def test_quick_unknown_game_path_keeps_status_and_reports_warning(
+    scan_harness: "ScanHarness",
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = scan_harness.add_root(mode="children")
+    game_dir = scan_harness.mkdir("GameA")
+    game = scan_harness.scan(root.id, "full").games[0]
+    from gameshelf.scanning import service as scanning_service
+
+    original_probe = scanning_service._probe_directory
+
+    def probe(path: Path):
+        if path == game_dir:
+            return scanning_service.PathProbe("unknown", "permission denied")
+        return original_probe(path)
+
+    monkeypatch.setattr(scanning_service, "_probe_directory", probe)
+
+    summary = scan_harness.scan(root.id, "quick")
+
+    assert summary.checked == 1
+    assert summary.warnings == 1
+    assert scan_harness.game(game.id).status == "installed"
+
+
+def test_disabled_root_is_rejected_before_a_scan_session_is_created(
+    scan_harness: "ScanHarness",
+) -> None:
+    root = scan_harness.add_root(mode="children")
+    scan_harness.library.update_root(
+        root.id,
+        enabled=False,
+        scan_mode=root.scan_mode,
+        max_depth=root.max_depth,
+        exclusions=root.exclusions,
+    )
+    before = scan_harness.session_count()
+
+    with pytest.raises(ValueError, match="未参与扫描"):
+        scan_harness.scan(root.id, "quick")
+    with pytest.raises(ValueError, match="未参与扫描"):
+        scan_harness.scan(root.id, "full")
+
+    assert scan_harness.session_count() == before
+
+
+def test_quick_reuses_a_matching_persistent_analysis_cache(
+    scan_harness: "ScanHarness",
+) -> None:
+    root = scan_harness.add_root(mode="children")
+    game_dir = scan_harness.mkdir("GameA", exes=["GameA.exe"])
+    game = scan_harness.scan(root.id, "full").games[0]
+    executable = game_dir / "GameA.exe"
+    info = executable.stat()
+    with scan_harness.factory.connect() as connection:
+        upsert_analysis_cache(
+            connection,
+            game.id,
+            PendingAnalysisCache(
+                "GameA.exe",
+                info.st_size,
+                info.st_mtime_ns,
+                RANKER_RULES_VERSION,
+                "none",
+            ),
+            "now",
+        )
+    pool = ScanAnalysisPool(lambda: 2)
+    scanner = ScanService(
+        LibraryRepository(scan_harness.factory),
+        scan_harness.writer,
+        analysis_pool=pool,
+    )
+    try:
+        summary = scanner.scan_root(root.id, "quick", TaskContext(Event(), lambda *_: None))
+    finally:
+        pool.close()
+
+    assert summary.checked == 1
+    assert summary.cache_hits == 1
+    assert summary.reanalyzed == 0
+    assert summary.full_analyses == 0
 
 
 def test_manual_executable_survives_new_auto_recommendation(
@@ -586,3 +697,7 @@ class ScanHarness:
             ).fetchone()
         assert row is not None
         return str(row[0])
+
+    def session_count(self) -> int:
+        with self.factory.connect(readonly=True) as connection:
+            return int(connection.execute("SELECT COUNT(*) FROM scan_sessions").fetchone()[0])
