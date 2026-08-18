@@ -113,6 +113,8 @@ def game_from_row(row: sqlite3.Row) -> Game:
         cover_revision=int(row["cover_revision"]),
         last_launched_at=row["last_launched_at"],
         missing_since=row["missing_since"],
+        version=row["version"],
+        detected_version=row["detected_version"],
     )
 
 

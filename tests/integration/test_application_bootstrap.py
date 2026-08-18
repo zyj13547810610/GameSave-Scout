@@ -18,6 +18,8 @@ def test_application_bootstrap_creates_only_portable_state(tmp_path: Path) -> No
         bootstrap = application.api.bootstrap()
         assert bootstrap["ok"] is True
         assert bootstrap["data"]["appName"] == "GameShelf"
+        assert bootstrap["data"]["schemaVersion"] == 2
+        assert application.schema_version == 2
         assert bootstrap["data"]["uiScale"] == 1.0
         assert isinstance(bootstrap["data"]["assetSessionToken"], str)
         assert paths.config_file.exists()

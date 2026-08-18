@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from gameshelf.db.connection import ConnectionFactory
 
-LATEST_SCHEMA_VERSION = 1
+LATEST_SCHEMA_VERSION = 2
 _BACKUP_PATTERN = re.compile(
     r"^library-before-v\d+-\d{8}T\d{6}Z-[0-9a-f]{8}\.db$"
 )

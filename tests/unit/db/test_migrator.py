@@ -18,7 +18,7 @@ V1_TABLES = {
 }
 
 
-def test_migrator_creates_v1_schema_with_foreign_keys_and_wal(tmp_path: Path) -> None:
+def test_migrator_creates_v2_schema_with_version_fields_and_wal(tmp_path: Path) -> None:
     factory = ConnectionFactory(tmp_path / "data" / "library.db")
 
     version = Migrator(factory, tmp_path / "backups").migrate()
@@ -31,11 +31,46 @@ def test_migrator_creates_v1_schema_with_foreign_keys_and_wal(tmp_path: Path) ->
         foreign_keys = connection.execute("PRAGMA foreign_keys").fetchone()[0]
         journal_mode = connection.execute("PRAGMA journal_mode").fetchone()[0]
         user_version = connection.execute("PRAGMA user_version").fetchone()[0]
+        game_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(games)")
+        }
 
-    assert version == user_version == 1
+    assert version == user_version == 2
     assert tables >= V1_TABLES
+    assert {"version", "detected_version", "version_is_manual"} <= game_columns
     assert foreign_keys == 1
     assert journal_mode == "wal"
+
+
+def test_migrator_upgrades_v1_without_splitting_existing_titles(
+    tmp_path: Path,
+) -> None:
+    factory = ConnectionFactory(tmp_path / "library.db")
+    migrator = Migrator(factory, tmp_path / "backups")
+    with factory.connect() as connection:
+        connection.executescript(migrator.migration_sql(1))
+        connection.execute(
+            "INSERT INTO games (id, title, detected_title, status, added_at, updated_at) "
+            "VALUES (?, ?, ?, 'save_only', ?, ?)",
+            ("game-1", "AoiChan.v1.0.8", "AoiChan.v1.0.8", "now", "now"),
+        )
+        connection.commit()
+
+    result = migrator.migrate()
+
+    with factory.connect(readonly=True) as connection:
+        row = connection.execute(
+            "SELECT title, version, detected_version, version_is_manual "
+            "FROM games WHERE id = 'game-1'"
+        ).fetchone()
+    backups = list((tmp_path / "backups").glob("library-before-v2-*.db"))
+
+    assert result == 2
+    assert row["title"] == "AoiChan.v1.0.8"
+    assert row["version"] is None
+    assert row["detected_version"] is None
+    assert row["version_is_manual"] == 0
+    assert len(backups) == 1
 
 
 def test_v1_guided_save_schema_has_single_active_slot_and_review_fields(
@@ -92,7 +127,7 @@ def test_migrator_backs_up_existing_database_before_upgrade(tmp_path: Path) -> N
 
     Migrator(factory, tmp_path / "backups").migrate()
 
-    backups = list((tmp_path / "backups").glob("library-before-v1-*.db"))
+    backups = list((tmp_path / "backups").glob("library-before-v2-*.db"))
     assert len(backups) == 1
     backup_factory = ConnectionFactory(backups[0])
     with backup_factory.connect(readonly=True) as connection:

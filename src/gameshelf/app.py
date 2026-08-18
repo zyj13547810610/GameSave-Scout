@@ -21,6 +21,7 @@ from gameshelf.bootstrap.webview_bootstrapper import (
     WebViewManualInstallRequired,
 )
 from gameshelf.bootstrap.webview_runtime import WebViewRuntime
+from gameshelf.db.migrator import LATEST_SCHEMA_VERSION
 from gameshelf.platform.windows.startup_reporter import FrozenStartupReporter
 
 
@@ -154,7 +155,7 @@ def _smoke_report(
     error: BaseException | None = None,
 ) -> SmokeReport:
     return SmokeReport(
-        schema_version=1,
+        schema_version=LATEST_SCHEMA_VERSION,
         ok=ok,
         app_version=__version__,
         frozen=frozen,

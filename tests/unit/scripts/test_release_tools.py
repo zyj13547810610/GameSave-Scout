@@ -388,7 +388,7 @@ def test_release_manifest_records_environment_and_every_payload_file(
     assert manifest["npmVersion"] == "11.17.0"
     assert manifest["pyinstallerVersion"] == "6.22.1"
     assert manifest["pywebviewVersion"] == "6.2.1"
-    assert manifest["databaseSchemaVersion"] == 1
+    assert manifest["databaseSchemaVersion"] == 2
     assert manifest["engineRulesVersion"] == "2026.08.13-2"
     assert manifest["ludusaviSha256"] == "b" * 64
     assert manifest["ludusaviUpstreamCommit"] == "c" * 40
@@ -407,6 +407,7 @@ def test_release_manifest_records_environment_and_every_payload_file(
         "README.txt",
         "THIRD_PARTY_NOTICES.md",
         "_internal/gameshelf/db/migrations/0001_initial.sql",
+        "_internal/gameshelf/db/migrations/0002_initial.sql",
         "_internal/resources/manifests/ludusavi/manifest-index.sqlite",
         "_internal/resources/manifests/ludusavi/manifest-meta.json",
         "_internal/resources/manifests/ludusavi/manifest.yaml",
@@ -774,6 +775,10 @@ def _minimal_release_tree(
         "PRAGMA user_version = 1;\n",
         encoding="utf-8",
     )
+    (root / "_internal" / "gameshelf" / "db" / "migrations" / "0002_initial.sql").write_text(
+        "PRAGMA user_version = 2;\n",
+        encoding="utf-8",
+    )
     if mode is ReleaseMode.FIXED:
         (root / "runtime" / "msedgewebview2.exe").write_bytes(
             b"webview runtime"
@@ -803,7 +808,7 @@ def _release_metadata() -> ReleaseMetadata:
         npm_version="11.17.0",
         pyinstaller_version="6.22.1",
         pywebview_version="6.2.1",
-        database_schema_version=1,
+        database_schema_version=2,
         engine_rules_version="2026.08.13-2",
         ludusavi_sha256="b" * 64,
         ludusavi_upstream_commit="c" * 40,

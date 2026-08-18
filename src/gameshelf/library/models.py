@@ -57,6 +57,8 @@ class Game:
     cover_revision: int
     last_launched_at: str | None
     missing_since: str | None
+    version: str | None = None
+    detected_version: str | None = None
 
 
 @dataclass(frozen=True)
