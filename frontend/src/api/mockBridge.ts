@@ -91,6 +91,58 @@ export function createMockBridge(overrides: Partial<GameShelfBridge> = {}): Game
     async set_ui_scale(input) { return ok({ uiScale: input.uiScale }) },
     async set_library_scan_settings(input) { return ok(input) },
     async set_cover_wizard_settings(input) { return ok(input) },
+    async add_batch_save_custom_root(input) {
+      return ok({ id: 'batch-root-1', ...input })
+    },
+    async update_batch_save_custom_root(input) {
+      return ok({
+        id: input.rootId,
+        displayPath: 'D:\\Save Archive',
+        enabled: input.enabled,
+        maxDepth: input.maxDepth,
+      })
+    },
+    async remove_batch_save_custom_root() { return ok({ removed: true }) },
+    async choose_batch_save_custom_root() { return ok(null) },
+    async start_batch_save_scan() { return ok({ taskId: 'batch-save-task-1' }) },
+    async current_batch_save_task() { return ok(null) },
+    async list_batch_save_candidates() { return ok({ items: [], total: 0 }) },
+    async get_batch_save_candidate() {
+      return { ok: false, error: { code: 'batch_candidate_not_found', message: '没有找到对应的批量存档候选。' } }
+    },
+    async select_batch_save_candidate_ids() { return ok({ candidateIds: [] }) },
+    async accept_batch_save_candidates() {
+      return ok({ locations: [], recordedCount: 0, unchangedCount: 0 })
+    },
+    async reassociate_batch_save_candidates(input) {
+      return ok({ updatedCount: input.candidateIds.length })
+    },
+    async ignore_batch_save_candidates(input) {
+      return ok({ updatedCount: input.candidateIds.length })
+    },
+    async restore_batch_save_candidates(input) {
+      return ok({ updatedCount: input.candidateIds.length })
+    },
+    async clear_unavailable_batch_save_candidates(input) {
+      return ok({ updatedCount: input.candidateIds.length })
+    },
+    async create_batch_save_only_game(input) {
+      return ok(fixtureGame({
+        id: 'save-only-1',
+        scanRootId: null,
+        relativeDir: null,
+        installPath: null,
+        title: input.title,
+        version: input.version,
+        status: 'save_only',
+        engineId: input.engineId,
+        groupIds: input.groupIds,
+      }))
+    },
+    async open_batch_save_candidate() { return ok({ opened: true }) },
+    async open_batch_save_lookup(input) {
+      return ok({ opened: true, url: `https://${input.provider}.example` })
+    },
     async start_cover_wizard(input) {
       return ok(fixtureCoverWizard({ includeExisting: input.includeExisting ?? false }))
     },

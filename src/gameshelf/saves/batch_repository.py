@@ -7,7 +7,7 @@ import sqlite3
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
-from typing import Literal, Protocol, cast
+from typing import TYPE_CHECKING, Literal, cast
 from uuid import uuid4
 
 from gameshelf.db.connection import ConnectionFactory
@@ -26,6 +26,9 @@ from gameshelf.saves.batch_models import (
     RepresentativeFile,
 )
 from gameshelf.saves.batch_scanner import BatchScopeResult
+
+if TYPE_CHECKING:
+    from gameshelf.saves.batch_service import BatchScanRequest
 
 type BatchCandidateStatusFilter = Literal[
     "all",
@@ -73,11 +76,6 @@ _VALID_SOURCE_FILTERS = frozenset(
     }
 )
 _FINISHED_STATUSES = frozenset({"completed", "cancelled", "failed", "unavailable", "interrupted"})
-
-
-class BatchSessionRequest(Protocol):
-    standard_scope_ids: tuple[str, ...]
-    custom_root_ids: tuple[str, ...]
 
 
 class BatchSessionNotFoundError(LookupError):
@@ -171,7 +169,7 @@ class BatchSaveRepository:
 
     def start_session(
         self,
-        request: BatchSessionRequest,
+        request: BatchScanRequest,
         rules_version: str,
     ) -> str:
         session_id = str(uuid4())
@@ -739,7 +737,7 @@ def _require_running_session(
     return cast(sqlite3.Row, row)
 
 
-def _initial_scopes(request: BatchSessionRequest) -> dict[str, dict[str, object]]:
+def _initial_scopes(request: BatchScanRequest) -> dict[str, dict[str, object]]:
     standard_ids = _request_ids(request.standard_scope_ids, "标准范围")
     custom_ids = _request_ids(request.custom_root_ids, "自定义目录")
     keys = (*standard_ids, *(f"custom:{root_id}" for root_id in custom_ids))

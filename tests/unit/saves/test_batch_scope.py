@@ -71,6 +71,19 @@ def test_scope_builder_exposes_all_five_standard_roots(tmp_path: Path) -> None:
     assert all(scope.source == "standard" for scope in scopes)
 
 
+def test_scope_builder_reads_latest_config_when_building(tmp_path: Path) -> None:
+    folders = _folders(tmp_path)
+    current = AppConfig()
+    builder = BatchScopeBuilder(folders, lambda: current)
+    custom = BatchSaveCustomRoot("later", str(tmp_path / "Later"), True, 5)
+
+    current = AppConfig(batch_save_custom_roots=(custom,))
+    scopes = builder.build((), ("later",))
+
+    assert [scope.key for scope in scopes] == ["custom:later"]
+    assert scopes[0].max_depth == 5
+
+
 def test_scope_builder_rejects_unknown_ids_and_drive_roots(tmp_path: Path) -> None:
     folders = _folders(tmp_path)
     invalid = AppConfig(batch_save_custom_roots=(BatchSaveCustomRoot("drive", "D:\\", True, 3),))

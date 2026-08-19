@@ -10,7 +10,9 @@ from typing import Any, cast
 
 from gameshelf.bootstrap.config import (
     AppConfig,
+    BatchSaveCustomRoot,
     ConfigService,
+    InvalidBatchSaveSettingsError,
     InvalidCoverWizardSettingsError,
     InvalidLibraryScanSettingsError,
     InvalidUiScaleError,
@@ -70,6 +72,25 @@ from gameshelf.library.service import (
     LibraryService,
     RootNotFoundError,
 )
+from gameshelf.saves.batch_external import (
+    BatchCandidateOpener,
+    BatchCandidateOpenError,
+    BatchExternalLookup,
+    BatchExternalLookupError,
+)
+from gameshelf.saves.batch_models import BatchScanSummary
+from gameshelf.saves.batch_repository import (
+    BatchCandidatePage,
+    BatchCandidateQuery,
+    BatchSaveRepository,
+    PersistedBatchCandidate,
+)
+from gameshelf.saves.batch_review import (
+    BatchReviewError,
+    BatchSaveReviewService,
+    SaveOnlyDraft,
+)
+from gameshelf.saves.batch_service import BatchSaveDiscoveryService, BatchScanRequest
 from gameshelf.saves.custom_manifest_provider import CustomManifestProvider
 from gameshelf.saves.guided_models import (
     GuidedSaveDiscovery,
@@ -135,6 +156,11 @@ class BridgeApi:
         guided_saves: GuidedSaveSessionService | None = None,
         guided_repository: GuidedSaveRepository | None = None,
         guided_review: GuidedSaveReviewService | None = None,
+        batch_repository: BatchSaveRepository | None = None,
+        batch_saves: BatchSaveDiscoveryService | None = None,
+        batch_review: BatchSaveReviewService | None = None,
+        batch_external: BatchExternalLookup | None = None,
+        batch_candidate_opener: BatchCandidateOpener | None = None,
         ludusavi_provider: LudusaviProvider | None = None,
         custom_provider: CustomManifestProvider | None = None,
         custom_manifest_directory: Path | None = None,
@@ -157,6 +183,11 @@ class BridgeApi:
         self._guided_saves = guided_saves
         self._guided_repository = guided_repository
         self._guided_review = guided_review
+        self._batch_repository = batch_repository
+        self._batch_saves = batch_saves
+        self._batch_review = batch_review
+        self._batch_external = batch_external
+        self._batch_candidate_opener = batch_candidate_opener
         self._ludusavi_provider = ludusavi_provider
         self._custom_provider = custom_provider
         self._custom_manifest_directory = custom_manifest_directory
@@ -243,6 +274,244 @@ class BridgeApi:
                 "config_save_failed",
                 "封面向导设置保存失败，下次启动可能恢复为原设置。",
             )
+
+    def add_batch_save_custom_root(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(payload, {"displayPath", "enabled", "maxDepth"})
+            root = self._require_config().add_batch_save_custom_root(
+                _string(payload, "displayPath"),
+                enabled=_boolean(payload, "enabled"),
+                max_depth=_integer(payload, "maxDepth"),
+            )
+            return success(_batch_save_custom_root_dto(root))
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except InvalidBatchSaveSettingsError as error:
+            return failure("invalid_batch_save_settings", str(error))
+        except OSError:
+            return failure("config_save_failed", "批量存档目录设置保存失败。")
+
+    def update_batch_save_custom_root(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(payload, {"rootId", "enabled", "maxDepth"})
+            root = self._require_config().update_batch_save_custom_root(
+                _string(payload, "rootId"),
+                enabled=_boolean(payload, "enabled"),
+                max_depth=_integer(payload, "maxDepth"),
+            )
+            return success(_batch_save_custom_root_dto(root))
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except InvalidBatchSaveSettingsError as error:
+            return failure("invalid_batch_save_settings", str(error))
+        except OSError:
+            return failure("config_save_failed", "批量存档目录设置保存失败。")
+
+    def remove_batch_save_custom_root(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(payload, {"rootId"})
+            removed = self._require_config().remove_batch_save_custom_root(
+                _string(payload, "rootId")
+            )
+            return success({"removed": removed})
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except InvalidBatchSaveSettingsError as error:
+            return failure("invalid_batch_save_settings", str(error))
+        except OSError:
+            return failure("config_save_failed", "批量存档目录设置保存失败。")
+
+    def choose_batch_save_custom_root(self) -> ApiResult:
+        return success(self._choose_native_path(directory=True))
+
+    def start_batch_save_scan(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(payload, {"standardScopeIds", "customRootIds"})
+            scan_request = BatchScanRequest(
+                standard_scope_ids=tuple(_clean_string_list(payload, "standardScopeIds")),
+                custom_root_ids=tuple(_clean_string_list(payload, "customRootIds")),
+            )
+
+            def operation(context: TaskContext) -> dict[str, JSONValue]:
+                summary = self._require_batch_saves().run(scan_request, context)
+                return _batch_scan_summary_dto(summary)
+
+            task_id = self._tasks.submit(
+                "batch_save_scan",
+                operation,
+                exclusive_group="disk_scan",
+            )
+            return success({"taskId": task_id})
+        except (InvalidRequest, ValueError) as error:
+            return failure("invalid_request", str(error))
+        except ActiveTaskConflict:
+            return failure(
+                "disk_scan_active",
+                "已有磁盘扫描正在运行，请等待完成或先取消。",
+            )
+
+    def current_batch_save_task(self) -> ApiResult:
+        snapshot = self._tasks.latest_snapshot("batch_save_scan")
+        return success(None if snapshot is None else self._snapshot_data(snapshot))
+
+    def list_batch_save_candidates(self, request: object) -> ApiResult:
+        try:
+            query = _batch_candidate_query(request, paginated=True)
+            page = self._require_batch_repository().list_candidates(query)
+            return success(_batch_candidate_page_dto(page))
+        except (InvalidRequest, ValueError) as error:
+            return failure("invalid_request", str(error))
+
+    def get_batch_save_candidate(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(payload, {"candidateId"})
+            candidate = self._require_batch_repository().get_candidate(
+                _string(payload, "candidateId")
+            )
+            if candidate is None:
+                return failure(
+                    "batch_candidate_not_found",
+                    "没有找到对应的批量存档候选。",
+                )
+            return success(_batch_candidate_dto(candidate))
+        except (InvalidRequest, ValueError) as error:
+            return failure("invalid_request", str(error))
+
+    def select_batch_save_candidate_ids(self, request: object) -> ApiResult:
+        try:
+            query = _batch_candidate_query(request, paginated=False)
+            candidate_ids = self._require_batch_repository().selectable_ids(
+                query,
+                limit=500,
+            )
+            return success({"candidateIds": list(candidate_ids)})
+        except (InvalidRequest, ValueError) as error:
+            return failure("invalid_request", str(error))
+
+    def accept_batch_save_candidates(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(payload, {"candidateIds", "confirmRegistry"})
+            result = self._require_batch_review().accept(
+                _batch_candidate_ids(payload),
+                confirm_registry=_boolean(payload, "confirmRegistry"),
+            )
+            return success(
+                {
+                    "locations": [_save_location_dto(item) for item in result.locations],
+                    "recordedCount": result.recorded_count,
+                    "unchangedCount": result.unchanged_count,
+                }
+            )
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except BatchReviewError as error:
+            return failure(error.code, str(error))
+
+    def reassociate_batch_save_candidates(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(payload, {"candidateIds", "gameId"})
+            changed = self._require_batch_review().reassociate_many(
+                _batch_candidate_ids(payload),
+                _string(payload, "gameId"),
+            )
+            return success({"updatedCount": changed})
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except BatchReviewError as error:
+            return failure(error.code, str(error))
+
+    def ignore_batch_save_candidates(self, request: object) -> ApiResult:
+        return self._set_batch_candidate_review(request, "ignore")
+
+    def restore_batch_save_candidates(self, request: object) -> ApiResult:
+        return self._set_batch_candidate_review(request, "restore")
+
+    def clear_unavailable_batch_save_candidates(self, request: object) -> ApiResult:
+        return self._set_batch_candidate_review(request, "clear")
+
+    def create_batch_save_only_game(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(
+                payload,
+                {
+                    "title",
+                    "version",
+                    "engineId",
+                    "groupIds",
+                    "candidateIds",
+                    "confirmRegistry",
+                },
+            )
+            game = self._require_batch_review().create_save_only(
+                SaveOnlyDraft(
+                    title=_string(payload, "title"),
+                    version=_nullable_string(payload, "version"),
+                    engine_id=_nullable_string(payload, "engineId"),
+                    group_ids=tuple(_clean_string_list(payload, "groupIds")),
+                    candidate_ids=_batch_candidate_ids(payload),
+                    confirm_registry=_boolean(payload, "confirmRegistry"),
+                )
+            )
+            return success(self._game_dto(game))
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except BatchReviewError as error:
+            return failure(error.code, str(error))
+
+    def open_batch_save_candidate(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(payload, {"candidateId"})
+            self._require_batch_candidate_opener().open(_string(payload, "candidateId"))
+            return success({"opened": True})
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except BatchCandidateOpenError as error:
+            return failure(error.code, str(error))
+        except OSError as error:
+            return failure("batch_candidate_open_failed", str(error))
+
+    def open_batch_save_lookup(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(payload, {"candidateId", "provider"})
+            url = self._require_batch_external().open(
+                _string(payload, "candidateId"),
+                _string(payload, "provider"),
+            )
+            return success({"opened": True, "url": url})
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except BatchExternalLookupError as error:
+            return failure(error.code, str(error))
+        except OSError as error:
+            return failure("batch_lookup_open_failed", str(error))
+
+    def _set_batch_candidate_review(self, request: object, action: str) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(payload, {"candidateIds"})
+            ids = _batch_candidate_ids(payload)
+            review = self._require_batch_review()
+            if action == "ignore":
+                changed = review.ignore(ids)
+            elif action == "restore":
+                changed = review.restore(ids)
+            else:
+                changed = review.clear_unavailable(ids)
+            return success({"updatedCount": changed})
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except BatchReviewError as error:
+            return failure(error.code, str(error))
 
     def start_cover_wizard(self, request: object) -> ApiResult:
         try:
@@ -1500,6 +1769,31 @@ class BridgeApi:
             raise RuntimeError("Guided save review is not configured.")
         return self._guided_review
 
+    def _require_batch_repository(self) -> BatchSaveRepository:
+        if self._batch_repository is None:
+            raise RuntimeError("Batch save repository is not configured.")
+        return self._batch_repository
+
+    def _require_batch_saves(self) -> BatchSaveDiscoveryService:
+        if self._batch_saves is None:
+            raise RuntimeError("Batch save discovery is not configured.")
+        return self._batch_saves
+
+    def _require_batch_review(self) -> BatchSaveReviewService:
+        if self._batch_review is None:
+            raise RuntimeError("Batch save review is not configured.")
+        return self._batch_review
+
+    def _require_batch_external(self) -> BatchExternalLookup:
+        if self._batch_external is None:
+            raise RuntimeError("Batch save external lookup is not configured.")
+        return self._batch_external
+
+    def _require_batch_candidate_opener(self) -> BatchCandidateOpener:
+        if self._batch_candidate_opener is None:
+            raise RuntimeError("Batch save candidate opener is not configured.")
+        return self._batch_candidate_opener
+
     def _require_static_discovery(self) -> StaticSaveDiscovery:
         if self._static_discovery is None:
             raise RuntimeError("Static save discovery is not configured.")
@@ -1645,14 +1939,80 @@ def _library_scan_settings_dto(config: AppConfig) -> dict[str, JSONValue]:
 def _batch_save_settings_dto(config: AppConfig) -> dict[str, JSONValue]:
     return {
         "customRoots": [
-            {
-                "id": root.id,
-                "displayPath": root.display_path,
-                "enabled": root.enabled,
-                "maxDepth": root.max_depth,
-            }
-            for root in config.batch_save_custom_roots
+            _batch_save_custom_root_dto(root) for root in config.batch_save_custom_roots
         ]
+    }
+
+
+def _batch_save_custom_root_dto(root: BatchSaveCustomRoot) -> dict[str, JSONValue]:
+    return {
+        "id": root.id,
+        "displayPath": root.display_path,
+        "enabled": root.enabled,
+        "maxDepth": root.max_depth,
+    }
+
+
+def _batch_candidate_page_dto(page: BatchCandidatePage) -> dict[str, JSONValue]:
+    return {
+        "items": [_batch_candidate_dto(item) for item in page.items],
+        "total": page.total,
+    }
+
+
+def _batch_candidate_dto(candidate: PersistedBatchCandidate) -> dict[str, JSONValue]:
+    return {
+        "id": candidate.id,
+        "scopeKey": candidate.scope_key,
+        "kind": candidate.kind,
+        "displayPath": candidate.display_path,
+        "availability": candidate.availability,
+        "classification": candidate.classification,
+        "confidence": candidate.confidence,
+        "suggestedGameId": candidate.suggested_game_id,
+        "suggestedTitle": candidate.suggested_title,
+        "externalProductId": candidate.external_product_id,
+        "engineId": candidate.engine_id,
+        "strongGroupKey": candidate.strong_group_key,
+        "reviewGameId": candidate.review_game_id,
+        "reviewStatus": candidate.review_status,
+        "saveLocationId": candidate.save_location_id,
+        "sources": list(candidate.sources),
+        "evidence": list(candidate.evidence),
+        "representativeFiles": [
+            {
+                "name": item.name,
+                "size": item.size,
+                "modifiedTimeNs": item.modified_time_ns,
+            }
+            for item in candidate.representative_files
+        ],
+        "matchedFileCount": candidate.matched_file_count,
+        "representativesTruncated": candidate.representatives_truncated,
+        "alternatives": [
+            {"title": item.title, "reason": item.reason, "gameId": item.game_id}
+            for item in candidate.alternatives
+        ],
+        "lookupQuery": candidate.external_product_id or candidate.suggested_title,
+        "firstSeenAt": candidate.first_seen_at,
+        "lastSeenAt": candidate.last_seen_at,
+    }
+
+
+def _batch_scan_summary_dto(summary: BatchScanSummary) -> dict[str, JSONValue]:
+    return {
+        "sessionId": summary.session_id,
+        "status": summary.status,
+        "newCount": summary.new_count,
+        "pendingCount": summary.pending_count,
+        "recordedCount": summary.recorded_count,
+        "ignoredCount": summary.ignored_count,
+        "unavailableCount": summary.unavailable_count,
+        "groupCount": summary.group_count,
+        "inaccessibleScopeCount": summary.inaccessible_scope_count,
+        "truncatedScopeCount": summary.truncated_scope_count,
+        "totalEntries": summary.total_entries,
+        "elapsedSeconds": summary.elapsed_seconds,
     }
 
 
@@ -1860,6 +2220,70 @@ def _payload(request: object) -> dict[str, object]:
     if not isinstance(request, dict) or not all(isinstance(key, str) for key in request):
         raise InvalidRequest("Request must be a JSON object.")
     return cast(dict[str, object], request)
+
+
+def _batch_candidate_query(
+    request: object,
+    *,
+    paginated: bool,
+) -> BatchCandidateQuery:
+    payload = _payload(request)
+    filter_keys = {"status", "keyword", "confidence", "source"}
+    _only_keys(
+        payload,
+        filter_keys | ({"offset", "limit"} if paginated else set()),
+    )
+    status = _optional_query_string(payload, "status", "all")
+    keyword = _optional_query_string(payload, "keyword", "", allow_empty=True)
+    confidence = _optional_query_string(payload, "confidence", "all")
+    source = _optional_query_string(payload, "source", "all")
+    offset = payload.get("offset", 0)
+    limit = payload.get("limit", 100 if paginated else 500)
+    if type(offset) is not int or offset < 0:
+        raise InvalidRequest("offset must be a non-negative integer.")
+    if type(limit) is not int or (paginated and not 20 <= limit <= 200):
+        raise InvalidRequest("limit must be an integer from 20 to 200.")
+    return BatchCandidateQuery(
+        status=cast(Any, status),
+        keyword=keyword,
+        confidence=cast(Any, confidence),
+        source=cast(Any, source),
+        offset=offset,
+        limit=limit,
+    )
+
+
+def _optional_query_string(
+    payload: dict[str, object],
+    key: str,
+    default: str,
+    *,
+    allow_empty: bool = False,
+) -> str:
+    value = payload.get(key, default)
+    if not isinstance(value, str) or "\x00" in value:
+        raise InvalidRequest(f"{key} must be a string.")
+    if not allow_empty and not value.strip():
+        raise InvalidRequest(f"{key} must be a non-empty string.")
+    return value.strip()
+
+
+def _batch_candidate_ids(payload: dict[str, object]) -> tuple[str, ...]:
+    values = _clean_string_list(payload, "candidateIds")
+    if not values or len(values) > 500:
+        raise InvalidRequest("candidateIds must contain 1 to 500 entries.")
+    return tuple(dict.fromkeys(values))
+
+
+def _nullable_string(payload: dict[str, object], key: str) -> str | None:
+    if key not in payload:
+        raise InvalidRequest(f"{key} is required.")
+    value = payload[key]
+    if value is None:
+        return None
+    if not isinstance(value, str) or "\x00" in value:
+        raise InvalidRequest(f"{key} must be a string or null.")
+    return value
 
 
 def _game_group_dto(group: GameGroup) -> dict[str, JSONValue]:

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import ntpath
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from gameshelf.bootstrap.config import AppConfig, BatchSaveCustomRoot
@@ -23,7 +23,11 @@ _STANDARD_SCOPES = {
 class BatchScopeBuilder:
     """Resolve stable scope IDs without silently widening the scan boundary."""
 
-    def __init__(self, known_folders: KnownFolders, config: AppConfig) -> None:
+    def __init__(
+        self,
+        known_folders: KnownFolders,
+        config: AppConfig | Callable[[], AppConfig],
+    ) -> None:
         self._known_folders = known_folders
         self._config = config
 
@@ -40,7 +44,8 @@ class BatchScopeBuilder:
         if unknown_standard:
             raise ValueError(f"未知的批量存档标准范围：{unknown_standard[0]}")
 
-        custom_by_id = {item.id: item for item in self._config.batch_save_custom_roots}
+        config = self._config() if callable(self._config) else self._config
+        custom_by_id = {item.id: item for item in config.batch_save_custom_roots}
         unknown_custom = [root_id for root_id in custom_ids if root_id not in custom_by_id]
         if unknown_custom:
             raise ValueError(f"未知的批量存档自定义目录：{unknown_custom[0]}")

@@ -28,6 +28,55 @@ export type BatchSaveSettings = {
   customRoots: BatchSaveCustomRoot[]
 }
 
+export type BatchSaveCandidate = {
+  id: string
+  scopeKey: string
+  kind: SaveLocationKind
+  displayPath: string
+  availability: 'available' | 'unavailable' | 'unknown'
+  classification: 'installed' | 'missing' | 'unknown'
+  confidence: 'high' | 'medium' | 'low'
+  suggestedGameId: string | null
+  suggestedTitle: string | null
+  externalProductId: string | null
+  engineId: string | null
+  strongGroupKey: string | null
+  reviewGameId: string | null
+  reviewStatus: 'pending' | 'recorded' | 'ignored' | 'save_only'
+  saveLocationId: string | null
+  sources: string[]
+  evidence: string[]
+  representativeFiles: { name: string; size: number; modifiedTimeNs: number }[]
+  matchedFileCount: number
+  representativesTruncated: boolean
+  alternatives: { title: string; reason: string; gameId: string | null }[]
+  lookupQuery: string | null
+  firstSeenAt: string
+  lastSeenAt: string
+}
+
+export type BatchSaveCandidateFilters = {
+  status?: 'all' | 'pending' | 'installed' | 'missing' | 'unknown' | 'recorded' | 'ignored' | 'unavailable'
+  keyword?: string
+  confidence?: 'all' | 'high' | 'medium' | 'low'
+  source?: 'all' | 'recorded' | 'custom' | 'ludusavi' | 'engine' | 'bounded_scan' | 'registry'
+}
+
+export type BatchSaveScanSummary = {
+  sessionId: string
+  status: 'completed' | 'cancelled' | 'failed' | 'interrupted' | 'unavailable'
+  newCount: number
+  pendingCount: number
+  recordedCount: number
+  ignoredCount: number
+  unavailableCount: number
+  groupCount: number
+  inaccessibleScopeCount: number
+  truncatedScopeCount: number
+  totalEntries: number
+  elapsedSeconds: number
+}
+
 export type CoverCandidateSource =
   | 'vndb'
   | 'clipboard'
@@ -366,6 +415,53 @@ export interface GameShelfBridge {
   set_ui_scale(input: { uiScale: UiScaleValue }): Promise<ApiResult<{ uiScale: UiScaleValue }>>
   set_library_scan_settings(input: LibraryScanSettings): Promise<ApiResult<LibraryScanSettings>>
   set_cover_wizard_settings(input: CoverWizardSettings): Promise<ApiResult<CoverWizardSettings>>
+  add_batch_save_custom_root(input: {
+    displayPath: string
+    enabled: boolean
+    maxDepth: number
+  }): Promise<ApiResult<BatchSaveCustomRoot>>
+  update_batch_save_custom_root(input: {
+    rootId: string
+    enabled: boolean
+    maxDepth: number
+  }): Promise<ApiResult<BatchSaveCustomRoot>>
+  remove_batch_save_custom_root(input: { rootId: string }): Promise<ApiResult<{ removed: boolean }>>
+  choose_batch_save_custom_root(): Promise<ApiResult<string | null>>
+  start_batch_save_scan(input: {
+    standardScopeIds: string[]
+    customRootIds: string[]
+  }): Promise<ApiResult<{ taskId: string }>>
+  current_batch_save_task(): Promise<ApiResult<TaskSnapshot | null>>
+  list_batch_save_candidates(input: BatchSaveCandidateFilters & {
+    offset: number
+    limit: number
+  }): Promise<ApiResult<{ items: BatchSaveCandidate[]; total: number }>>
+  get_batch_save_candidate(input: { candidateId: string }): Promise<ApiResult<BatchSaveCandidate>>
+  select_batch_save_candidate_ids(input: BatchSaveCandidateFilters): Promise<ApiResult<{ candidateIds: string[] }>>
+  accept_batch_save_candidates(input: {
+    candidateIds: string[]
+    confirmRegistry: boolean
+  }): Promise<ApiResult<{ locations: SaveLocation[]; recordedCount: number; unchangedCount: number }>>
+  reassociate_batch_save_candidates(input: {
+    candidateIds: string[]
+    gameId: string
+  }): Promise<ApiResult<{ updatedCount: number }>>
+  ignore_batch_save_candidates(input: { candidateIds: string[] }): Promise<ApiResult<{ updatedCount: number }>>
+  restore_batch_save_candidates(input: { candidateIds: string[] }): Promise<ApiResult<{ updatedCount: number }>>
+  clear_unavailable_batch_save_candidates(input: { candidateIds: string[] }): Promise<ApiResult<{ updatedCount: number }>>
+  create_batch_save_only_game(input: {
+    title: string
+    version: string | null
+    engineId: string | null
+    groupIds: string[]
+    candidateIds: string[]
+    confirmRegistry: boolean
+  }): Promise<ApiResult<Game>>
+  open_batch_save_candidate(input: { candidateId: string }): Promise<ApiResult<{ opened: boolean }>>
+  open_batch_save_lookup(input: {
+    candidateId: string
+    provider: 'vndb' | 'dlsite' | '2dfan'
+  }): Promise<ApiResult<{ opened: boolean; url: string }>>
   start_cover_wizard(input: { includeExisting?: boolean }): Promise<ApiResult<CoverWizardSnapshot>>
   cover_wizard_snapshot(input: { sessionId: string }): Promise<ApiResult<CoverWizardSnapshot>>
   set_cover_wizard_include_existing(input: {

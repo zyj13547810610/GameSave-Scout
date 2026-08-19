@@ -33,6 +33,16 @@ def test_application_bootstrap_creates_only_portable_state(tmp_path: Path) -> No
             "ok": True,
             "data": None,
         }
+        assert application.api.current_batch_save_task() == {
+            "ok": True,
+            "data": None,
+        }
+        assert application.api.list_batch_save_candidates(
+            {"offset": 0, "limit": 20}
+        ) == {
+            "ok": True,
+            "data": {"items": [], "total": 0},
+        }
         application.writer.submit(
             lambda connection: connection.execute(
                 """
@@ -56,6 +66,37 @@ def test_application_bootstrap_creates_only_portable_state(tmp_path: Path) -> No
     finally:
         application.close()
         application.close()
+
+
+def test_application_recovers_interrupted_batch_save_session(tmp_path: Path) -> None:
+    paths = AppPaths.from_root(tmp_path / "便携应用")
+    first = build_application(paths)
+    first.writer.submit(
+        lambda connection: connection.execute(
+            """
+            INSERT INTO scan_sessions(
+                id, root_id, kind, status, started_at,
+                scope_json, counts_json, rules_version
+            ) VALUES (
+                'batch-session-1', NULL, 'save_discovery', 'running', 'now',
+                '{}', '{}', 'test'
+            )
+            """
+        ).rowcount
+    ).result()
+    first.close()
+
+    second = build_application(paths)
+    try:
+        with second.database.connect(readonly=True) as connection:
+            row = connection.execute(
+                "SELECT status FROM scan_sessions WHERE id = 'batch-session-1'"
+            ).fetchone()
+
+        assert row is not None
+        assert row["status"] == "interrupted"
+    finally:
+        second.close()
 
 
 def test_application_close_releases_its_logging_handler(tmp_path: Path) -> None:

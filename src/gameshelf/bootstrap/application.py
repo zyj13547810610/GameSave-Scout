@@ -36,6 +36,13 @@ from gameshelf.platform.windows.process_tree import WindowsProcessTreeTracker
 from gameshelf.platform.windows.processes import WindowsProcessLauncher
 from gameshelf.platform.windows.registry import WindowsRegistry
 from gameshelf.platform.windows.shell import WindowsShell
+from gameshelf.saves.batch_external import BatchCandidateOpener, BatchExternalLookup
+from gameshelf.saves.batch_repository import BatchSaveRepository
+from gameshelf.saves.batch_review import BatchSaveReviewService
+from gameshelf.saves.batch_rules import BatchRuleProvider
+from gameshelf.saves.batch_scanner import BatchFilesystemScanner
+from gameshelf.saves.batch_scope import BatchScopeBuilder
+from gameshelf.saves.batch_service import BatchSaveDiscoveryService
 from gameshelf.saves.custom_manifest_provider import CustomManifestProvider
 from gameshelf.saves.engine_hints import EngineSaveHintProvider
 from gameshelf.saves.guided_models import GuidedScopeOption
@@ -212,6 +219,33 @@ def build_application(
     guided_review = GuidedSaveReviewService(
         database, writer, guided_repository, save_locations
     )
+    batch_repository = BatchSaveRepository(database, writer)
+    batch_repository.recover_interrupted()
+    batch_rule_provider = BatchRuleProvider(
+        library=library,
+        save_repository=save_repository,
+        resolver=resolver,
+        ludusavi_provider=ludusavi_provider,
+        custom_provider=custom_provider,
+        engine_hints=EngineSaveHintProvider(resolver),
+        registry=registry,
+    )
+    batch_saves = BatchSaveDiscoveryService(
+        repository=batch_repository,
+        rule_provider=batch_rule_provider,
+        scope_builder=BatchScopeBuilder(known_folders, lambda: config.current),
+        scanner=BatchFilesystemScanner(),
+        library=library,
+        save_repository=save_repository,
+    )
+    batch_review = BatchSaveReviewService(
+        database,
+        writer,
+        batch_repository,
+        engine_ids=tuple(option.id for option in engine_detection.list_options()),
+    )
+    batch_external = BatchExternalLookup(batch_repository, shell)
+    batch_candidate_opener = BatchCandidateOpener(batch_repository, shell)
 
     def cover_lookup(game_id: str, variant: str) -> Path | None:
         column = "cover_original_relpath" if variant == "original" else "cover_thumb_relpath"
@@ -248,6 +282,11 @@ def build_application(
         guided_saves=guided_saves,
         guided_repository=guided_repository,
         guided_review=guided_review,
+        batch_repository=batch_repository,
+        batch_saves=batch_saves,
+        batch_review=batch_review,
+        batch_external=batch_external,
+        batch_candidate_opener=batch_candidate_opener,
         ludusavi_provider=ludusavi_provider,
         custom_provider=custom_provider,
         custom_manifest_directory=custom_manifest_directory,

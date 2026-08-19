@@ -4,7 +4,11 @@ from pathlib import Path
 import pytest
 
 from gameshelf.platform.windows.registry import WindowsRegistry
-from gameshelf.platform.windows.shell import DirectoryOpenError, WindowsShell
+from gameshelf.platform.windows.shell import (
+    DirectoryOpenError,
+    UrlOpenError,
+    WindowsShell,
+)
 
 
 def test_shell_reveals_existing_file_with_explorer_select(tmp_path: Path) -> None:
@@ -29,6 +33,40 @@ def test_shell_rejects_missing_file_before_starting_explorer(tmp_path: Path) -> 
 
     with pytest.raises(DirectoryOpenError, match="File does not exist"):
         shell.reveal_file(tmp_path / "missing.sav")
+
+
+def test_shell_opens_allowlisted_https_url() -> None:
+    opened: list[str] = []
+    shell = WindowsShell(
+        start_file=lambda path: opened.append(path),
+        spawn=lambda _command: None,
+    )
+
+    shell.open_url("https://vndb.org/v?q=Alice")
+
+    assert opened == ["https://vndb.org/v?q=Alice"]
+
+
+@pytest.mark.parametrize(
+    "url",
+    (
+        "http://vndb.org/v?q=Alice",
+        "https://evil.example/v?q=Alice",
+        "https://user:password@vndb.org/v?q=Alice",
+        "https://vndb.org.evil.example/v?q=Alice",
+    ),
+)
+def test_shell_rejects_unsafe_external_url(url: str) -> None:
+    opened: list[str] = []
+    shell = WindowsShell(
+        start_file=lambda path: opened.append(path),
+        spawn=lambda _command: None,
+    )
+
+    with pytest.raises(UrlOpenError):
+        shell.open_url(url)
+
+    assert opened == []
 
 
 class FakeWinreg:
