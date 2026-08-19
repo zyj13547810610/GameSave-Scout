@@ -25,6 +25,8 @@ from gameshelf.db.migrator import Migrator
 from gameshelf.db.writer import DbWriter
 from gameshelf.engines.rule_schema import RuleSchemaError
 from gameshelf.engines.service import EngineDetectionService
+from gameshelf.library.group_repository import GroupRepository
+from gameshelf.library.group_service import GroupService
 from gameshelf.library.launcher import GameLauncher
 from gameshelf.library.repository import LibraryRepository
 from gameshelf.library.service import LibraryService
@@ -115,6 +117,11 @@ def build_application(
     tasks = TaskRegistry(logger=logger)
     repository = LibraryRepository(database)
     library = LibraryService(repository, writer)
+    groups = GroupService(
+        connection_factory=database,
+        writer=writer,
+        repository=GroupRepository(database),
+    )
     analysis_pool = ScanAnalysisPool(lambda: config.current.scan_concurrency)
     scanner = ScanService(
         repository,
@@ -230,6 +237,7 @@ def build_application(
         schema_version=schema_version,
         config=config,
         library=library,
+        groups=groups,
         scanner=scanner,
         launcher=launcher,
         covers=covers,

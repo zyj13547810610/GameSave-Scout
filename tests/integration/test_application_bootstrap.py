@@ -33,6 +33,22 @@ def test_application_bootstrap_creates_only_portable_state(tmp_path: Path) -> No
             "ok": True,
             "data": None,
         }
+        application.writer.submit(
+            lambda connection: connection.execute(
+                """
+                INSERT INTO games(id, title, status, added_at, updated_at)
+                VALUES ('game-1', 'Game', 'save_only', 'now', 'now')
+                """
+            ).rowcount
+        ).result()
+        created_group = application.api.create_game_group({"name": "RPG"})
+        group_id = created_group["data"]["id"]
+        assigned = application.api.set_game_groups(
+            {"gameId": "game-1", "groupIds": [group_id]}
+        )
+        listed_groups = application.api.list_game_groups()
+        assert assigned["data"]["groupIds"] == [group_id]
+        assert listed_groups["data"][0]["gameCount"] == 1
         assert all(
             path == paths.data_dir or paths.data_dir in path.parents
             for path in paths.owned_paths()

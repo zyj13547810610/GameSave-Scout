@@ -33,6 +33,15 @@ from gameshelf.covers.wizard_service import (
     CoverWizardService,
 )
 from gameshelf.engines.service import EngineDetectionService
+from gameshelf.library.group_models import GameGroup, GroupMembershipMode
+from gameshelf.library.group_service import (
+    DuplicateGroupName,
+    GroupLimitReached,
+    GroupNotFoundError,
+    GroupService,
+    InvalidGroupMembership,
+    InvalidGroupName,
+)
 from gameshelf.library.launcher import (
     GameLauncher,
     InvalidLaunchConfiguration,
@@ -110,6 +119,7 @@ class BridgeApi:
         schema_version: int,
         config: ConfigService | None = None,
         library: LibraryService | None = None,
+        groups: GroupService | None = None,
         scanner: ScanService | None = None,
         launcher: GameLauncher | None = None,
         covers: CoverService | None = None,
@@ -131,6 +141,7 @@ class BridgeApi:
         self._schema_version = schema_version
         self._config = config
         self._library = library
+        self._groups = groups
         self._scanner = scanner
         self._launcher = launcher
         self._covers = covers
@@ -559,6 +570,99 @@ class BridgeApi:
     def list_games(self) -> ApiResult:
         library = self._require_library()
         return success([self._game_dto(game) for game in library.list_games()])
+
+    def list_game_groups(self) -> ApiResult:
+        return success(
+            [_game_group_dto(group) for group in self._require_groups().list_groups()]
+        )
+
+    def create_game_group(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(payload, {"name"})
+            group = self._require_groups().create_group(_string(payload, "name"))
+            return success(_game_group_dto(group))
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except InvalidGroupName as error:
+            return failure("invalid_game_group_operation", str(error))
+        except DuplicateGroupName as error:
+            return failure("duplicate_game_group", str(error))
+        except GroupLimitReached as error:
+            return failure("game_group_limit", str(error))
+
+    def rename_game_group(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(payload, {"groupId", "name"})
+            group = self._require_groups().rename_group(
+                _string(payload, "groupId"),
+                _string(payload, "name"),
+            )
+            return success(_game_group_dto(group))
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except InvalidGroupName as error:
+            return failure("invalid_game_group_operation", str(error))
+        except DuplicateGroupName as error:
+            return failure("duplicate_game_group", str(error))
+        except GroupNotFoundError:
+            return failure("game_group_not_found", "没有找到对应的游戏分组。")
+
+    def delete_game_group(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(payload, {"groupId"})
+            self._require_groups().delete_group(_string(payload, "groupId"))
+            return success({"deleted": True})
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except GroupNotFoundError:
+            return failure("game_group_not_found", "没有找到对应的游戏分组。")
+
+    def set_game_groups(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(payload, {"gameId", "groupIds"})
+            game = self._require_groups().set_game_groups(
+                _string(payload, "gameId"),
+                _clean_string_list(payload, "groupIds"),
+            )
+            return success(self._game_dto(game))
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except GroupNotFoundError:
+            return failure("game_group_not_found", "没有找到对应的游戏分组。")
+        except GameNotFoundError:
+            return failure("game_not_found", "没有找到对应的游戏。")
+
+    def update_game_group_memberships(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(payload, {"groupId", "gameIds", "mode"})
+            mode = _string(payload, "mode")
+            if mode not in {"add", "remove"}:
+                raise InvalidRequest("mode must be add or remove.")
+            result = self._require_groups().update_memberships(
+                _string(payload, "groupId"),
+                _clean_string_list(payload, "gameIds"),
+                cast(GroupMembershipMode, mode),
+            )
+            return success(
+                {
+                    "addedCount": result.added_count,
+                    "removedCount": result.removed_count,
+                    "unchangedCount": result.unchanged_count,
+                }
+            )
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except InvalidGroupMembership as error:
+            return failure("invalid_game_group_operation", str(error))
+        except GroupNotFoundError:
+            return failure("game_group_not_found", "没有找到对应的游戏分组。")
+        except GameNotFoundError:
+            return failure("game_not_found", "没有找到对应的游戏。")
 
     def remove_game_and_exclude(self, request: object) -> ApiResult:
         try:
@@ -1367,12 +1471,18 @@ class BridgeApi:
             "coverOriginalUrl": self._cover_url(game, "original"),
             "lastLaunchedAt": game.last_launched_at,
             "missingSince": game.missing_since,
+            "groupIds": list(game.group_ids),
         }
 
     def _require_library(self) -> LibraryService:
         if self._library is None:
             raise RuntimeError("Library services are not configured.")
         return self._library
+
+    def _require_groups(self) -> GroupService:
+        if self._groups is None:
+            raise RuntimeError("Game-group services are not configured.")
+        return self._groups
 
     def _require_scanner(self) -> ScanService:
         if self._scanner is None:
@@ -1807,6 +1917,16 @@ def _payload(request: object) -> dict[str, object]:
     if not isinstance(request, dict) or not all(isinstance(key, str) for key in request):
         raise InvalidRequest("Request must be a JSON object.")
     return cast(dict[str, object], request)
+
+
+def _game_group_dto(group: GameGroup) -> dict[str, JSONValue]:
+    return {
+        "id": group.id,
+        "name": group.name,
+        "gameCount": group.game_count,
+        "createdAt": group.created_at,
+        "updatedAt": group.updated_at,
+    }
 
 
 def _only_keys(payload: dict[str, object], allowed: set[str]) -> None:

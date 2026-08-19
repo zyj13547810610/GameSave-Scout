@@ -214,6 +214,20 @@ def test_set_game_metadata_returns_version_and_accepts_null(tmp_path: Path) -> N
         writer.close()
 
 
+def test_list_games_includes_group_ids(tmp_path: Path) -> None:
+    api, tasks, writer, library = _library_api(tmp_path)
+    try:
+        root = library.add_root(r"D:\Games", "children", 1, [])
+        library.create_game_for_test(root.id, "Alice", "Alice")
+
+        listed = api.list_games()
+
+        assert listed["data"][0]["groupIds"] == []
+    finally:
+        tasks.close()
+        writer.close()
+
+
 def test_set_game_metadata_rejects_incomplete_or_malformed_payloads(
     tmp_path: Path,
 ) -> None:
