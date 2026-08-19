@@ -17,6 +17,17 @@ export type LibraryScanSettings = {
   scanConcurrency: 1 | 2 | 3 | 4
 }
 
+export type BatchSaveCustomRoot = {
+  id: string
+  displayPath: string
+  enabled: boolean
+  maxDepth: number
+}
+
+export type BatchSaveSettings = {
+  customRoots: BatchSaveCustomRoot[]
+}
+
 export type CoverCandidateSource =
   | 'vndb'
   | 'clipboard'
@@ -70,6 +81,7 @@ export type BootstrapState = {
   uiScale: UiScaleValue
   coverWizardSettings: CoverWizardSettings
   libraryScanSettings: LibraryScanSettings
+  batchSaveSettings: BatchSaveSettings
   assetSessionToken?: string
 }
 

@@ -85,6 +85,7 @@ export function createMockBridge(overrides: Partial<GameShelfBridge> = {}): Game
           coverLocalScanCandidateLimit: 10,
         },
         libraryScanSettings: { startupQuickScan: true, scanConcurrency: 1 },
+        batchSaveSettings: { customRoots: [] },
       })
     },
     async set_ui_scale(input) { return ok({ uiScale: input.uiScale }) },

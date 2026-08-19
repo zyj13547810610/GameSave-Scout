@@ -17,6 +17,7 @@ describe('desktop bridge', () => {
           coverVndbCandidateLimit: 5,
           coverLocalScanCandidateLimit: 10,
         },
+        batchSaveSettings: { customRoots: [] },
       },
     })
   })

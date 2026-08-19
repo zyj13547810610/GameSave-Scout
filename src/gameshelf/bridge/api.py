@@ -179,6 +179,9 @@ class BridgeApi:
             state["coverWizardSettings"] = _cover_wizard_settings_dto(
                 self._config.current
             )
+            state["batchSaveSettings"] = _batch_save_settings_dto(
+                self._config.current
+            )
         return success(state)
 
     def set_ui_scale(self, request: object) -> ApiResult:
@@ -1707,6 +1710,20 @@ def _library_scan_settings_dto(config: AppConfig) -> dict[str, JSONValue]:
     return {
         "startupQuickScan": config.startup_quick_scan,
         "scanConcurrency": config.scan_concurrency,
+    }
+
+
+def _batch_save_settings_dto(config: AppConfig) -> dict[str, JSONValue]:
+    return {
+        "customRoots": [
+            {
+                "id": root.id,
+                "displayPath": root.display_path,
+                "enabled": root.enabled,
+                "maxDepth": root.max_depth,
+            }
+            for root in config.batch_save_custom_roots
+        ]
     }
 
 

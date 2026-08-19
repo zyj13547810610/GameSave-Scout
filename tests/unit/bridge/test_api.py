@@ -25,6 +25,7 @@ def test_bootstrap_returns_json_safe_success(tmp_path: Path) -> None:
                     "coverVndbCandidateLimit": 5,
                     "coverLocalScanCandidateLimit": 10,
                 },
+                "batchSaveSettings": {"customRoots": []},
             },
         }
     finally:

@@ -25,6 +25,7 @@ describe('App', () => {
             coverLocalScanCandidateLimit: 10,
           },
           libraryScanSettings: { startupQuickScan: false, scanConcurrency: 1 },
+          batchSaveSettings: { customRoots: [] },
         })
       },
       async list_roots() { return ok([fixtureRoot()]) },
@@ -91,6 +92,7 @@ describe('App', () => {
             coverLocalScanCandidateLimit: 10,
           },
           libraryScanSettings: { startupQuickScan: false, scanConcurrency: 1 },
+          batchSaveSettings: { customRoots: [] },
         })
       },
       async list_roots() { return ok([root]) },
@@ -343,6 +345,7 @@ describe('App', () => {
             coverVndbCandidateLimit: 5,
             coverLocalScanCandidateLimit: 10,
           },
+          batchSaveSettings: { customRoots: [] },
         })
       },
       set_ui_scale: setUiScale,

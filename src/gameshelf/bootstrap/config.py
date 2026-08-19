@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import ntpath
 import os
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -11,11 +12,15 @@ from threading import Lock
 from typing import Any
 from uuid import uuid4
 
+from gameshelf.scanning.path_keys import windows_path_key
+
 logger = logging.getLogger(__name__)
 UI_SCALE_OPTIONS = frozenset({0.8, 0.9, 1.0, 1.1, 1.2})
 COVER_VNDB_LIMIT_RANGE = range(1, 21)
 COVER_LOCAL_LIMIT_RANGE = range(1, 101)
 SCAN_CONCURRENCY_RANGE = range(1, 5)
+BATCH_SAVE_DEPTH_RANGE = range(1, 13)
+MAX_BATCH_SAVE_CUSTOM_ROOTS = 32
 
 
 class InvalidConfigError(ValueError):
@@ -34,9 +39,21 @@ class InvalidLibraryScanSettingsError(ValueError):
     """Raised when library scan settings are outside the supported limits."""
 
 
+class InvalidBatchSaveSettingsError(ValueError):
+    """Raised when batch save discovery roots are invalid."""
+
+
+@dataclass(frozen=True, slots=True)
+class BatchSaveCustomRoot:
+    id: str
+    display_path: str
+    enabled: bool
+    max_depth: int
+
+
 @dataclass(frozen=True)
 class AppConfig:
-    version: int = 4
+    version: int = 5
     language: str = "zh-CN"
     startup_quick_scan: bool = True
     scan_concurrency: int = 1
@@ -45,6 +62,7 @@ class AppConfig:
     cover_online_enabled: bool = False
     cover_vndb_candidate_limit: int = 5
     cover_local_scan_candidate_limit: int = 10
+    batch_save_custom_roots: tuple[BatchSaveCustomRoot, ...] = ()
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -57,6 +75,15 @@ class AppConfig:
             "coverOnlineEnabled": self.cover_online_enabled,
             "coverVndbCandidateLimit": self.cover_vndb_candidate_limit,
             "coverLocalScanCandidateLimit": self.cover_local_scan_candidate_limit,
+            "batchSaveCustomRoots": [
+                {
+                    "id": root.id,
+                    "displayPath": root.display_path,
+                    "enabled": root.enabled,
+                    "maxDepth": root.max_depth,
+                }
+                for root in self.batch_save_custom_roots
+            ],
         }
 
 
@@ -73,6 +100,7 @@ class JsonConfigStore:
         "coverOnlineEnabled",
         "coverVndbCandidateLimit",
         "coverLocalScanCandidateLimit",
+        "batchSaveCustomRoots",
     }
 
     def __init__(self, path: Path) -> None:
@@ -126,8 +154,11 @@ class JsonConfigStore:
         cover_online_enabled = raw.get("coverOnlineEnabled", False)
         cover_vndb_candidate_limit = raw.get("coverVndbCandidateLimit", 5)
         cover_local_scan_candidate_limit = raw.get("coverLocalScanCandidateLimit", 10)
+        batch_save_custom_roots = _parse_batch_save_custom_roots(
+            raw.get("batchSaveCustomRoots", [])
+        )
 
-        if type(version) is not int or version not in {1, 2, 3, 4}:
+        if type(version) is not int or version not in {1, 2, 3, 4, 5}:
             raise InvalidConfigError("配置文件无效：不支持的版本。")
         if not isinstance(language, str) or not language:
             raise InvalidConfigError("配置文件无效：语言必须是非空字符串。")
@@ -175,7 +206,7 @@ class JsonConfigStore:
             logger.warning("配置中的 coverLocalScanCandidateLimit 无效，已回退为 10。")
 
         config = AppConfig(
-            version=4,
+            version=5,
             language=language,
             startup_quick_scan=startup_quick_scan,
             scan_concurrency=normalized_scan_concurrency,
@@ -184,14 +215,17 @@ class JsonConfigStore:
             cover_online_enabled=normalized_online_enabled,
             cover_vndb_candidate_limit=normalized_vndb_limit,
             cover_local_scan_candidate_limit=normalized_local_limit,
+            batch_save_custom_roots=batch_save_custom_roots,
         )
         needs_save = (
-            version != 4
+            version != 5
             or raw.get("scanConcurrency") != normalized_scan_concurrency
             or raw.get("uiScale") != normalized_ui_scale
             or raw.get("coverOnlineEnabled") != normalized_online_enabled
             or raw.get("coverVndbCandidateLimit") != normalized_vndb_limit
             or raw.get("coverLocalScanCandidateLimit") != normalized_local_limit
+            or raw.get("batchSaveCustomRoots")
+            != config.to_json()["batchSaveCustomRoots"]
         )
         return config, needs_save
 
@@ -280,3 +314,153 @@ class ConfigService:
             self._store.save(updated)
             self._current = updated
             return updated
+
+    def add_batch_save_custom_root(
+        self,
+        display_path: object,
+        *,
+        enabled: object,
+        max_depth: object,
+    ) -> BatchSaveCustomRoot:
+        root = _normalize_batch_save_custom_root(
+            root_id=str(uuid4()),
+            display_path=display_path,
+            enabled=enabled,
+            max_depth=max_depth,
+            error_type=InvalidBatchSaveSettingsError,
+        )
+        with self._lock:
+            current_roots = self._current.batch_save_custom_roots
+            if len(current_roots) >= MAX_BATCH_SAVE_CUSTOM_ROOTS:
+                raise InvalidBatchSaveSettingsError("批量存档自定义目录最多保存 32 个。")
+            if any(
+                windows_path_key(item.display_path)
+                == windows_path_key(root.display_path)
+                for item in current_roots
+            ):
+                raise InvalidBatchSaveSettingsError("批量存档自定义目录不能重复。")
+            updated = replace(
+                self._current,
+                batch_save_custom_roots=(*current_roots, root),
+            )
+            self._store.save(updated)
+            self._current = updated
+            return root
+
+    def update_batch_save_custom_root(
+        self,
+        root_id: object,
+        *,
+        enabled: object,
+        max_depth: object,
+    ) -> BatchSaveCustomRoot:
+        if not isinstance(root_id, str) or not root_id.strip() or "\x00" in root_id:
+            raise InvalidBatchSaveSettingsError("批量存档自定义目录 ID 无效。")
+        with self._lock:
+            try:
+                existing = next(
+                    item
+                    for item in self._current.batch_save_custom_roots
+                    if item.id == root_id
+                )
+            except StopIteration as error:
+                raise InvalidBatchSaveSettingsError(
+                    "没有找到对应的批量存档自定义目录。"
+                ) from error
+            replacement = _normalize_batch_save_custom_root(
+                root_id=existing.id,
+                display_path=existing.display_path,
+                enabled=enabled,
+                max_depth=max_depth,
+                error_type=InvalidBatchSaveSettingsError,
+            )
+            updated = replace(
+                self._current,
+                batch_save_custom_roots=tuple(
+                    replacement if item.id == root_id else item
+                    for item in self._current.batch_save_custom_roots
+                ),
+            )
+            self._store.save(updated)
+            self._current = updated
+            return replacement
+
+    def remove_batch_save_custom_root(self, root_id: object) -> bool:
+        if not isinstance(root_id, str) or not root_id.strip() or "\x00" in root_id:
+            raise InvalidBatchSaveSettingsError("批量存档自定义目录 ID 无效。")
+        with self._lock:
+            remaining = tuple(
+                item
+                for item in self._current.batch_save_custom_roots
+                if item.id != root_id
+            )
+            if len(remaining) == len(self._current.batch_save_custom_roots):
+                raise InvalidBatchSaveSettingsError(
+                    "没有找到对应的批量存档自定义目录。"
+                )
+            updated = replace(self._current, batch_save_custom_roots=remaining)
+            self._store.save(updated)
+            self._current = updated
+            return True
+
+
+def _parse_batch_save_custom_roots(raw: object) -> tuple[BatchSaveCustomRoot, ...]:
+    if not isinstance(raw, list) or len(raw) > MAX_BATCH_SAVE_CUSTOM_ROOTS:
+        raise InvalidConfigError("配置文件无效：批量存档自定义目录必须是最多 32 项的数组。")
+    roots: list[BatchSaveCustomRoot] = []
+    ids: set[str] = set()
+    path_keys: set[str] = set()
+    for item in raw:
+        if not isinstance(item, dict) or set(item) != {
+            "id",
+            "displayPath",
+            "enabled",
+            "maxDepth",
+        }:
+            raise InvalidConfigError("配置文件无效：批量存档自定义目录字段不完整。")
+        root = _normalize_batch_save_custom_root(
+            root_id=item["id"],
+            display_path=item["displayPath"],
+            enabled=item["enabled"],
+            max_depth=item["maxDepth"],
+            error_type=InvalidConfigError,
+        )
+        path_key = windows_path_key(root.display_path)
+        if root.id in ids or path_key in path_keys:
+            raise InvalidConfigError("配置文件无效：批量存档自定义目录存在重复项。")
+        ids.add(root.id)
+        path_keys.add(path_key)
+        roots.append(root)
+    return tuple(roots)
+
+
+def _normalize_batch_save_custom_root(
+    *,
+    root_id: object,
+    display_path: object,
+    enabled: object,
+    max_depth: object,
+    error_type: type[ValueError],
+) -> BatchSaveCustomRoot:
+    if not isinstance(root_id, str) or not root_id.strip() or "\x00" in root_id:
+        raise error_type("批量存档自定义目录 ID 无效。")
+    if (
+        not isinstance(display_path, str)
+        or not display_path.strip()
+        or "\x00" in display_path
+    ):
+        raise error_type("批量存档自定义目录路径无效。")
+    clean_path = ntpath.normpath(display_path.strip())
+    drive, tail = ntpath.splitdrive(clean_path)
+    if not ntpath.isabs(clean_path) or not drive or tail in {"", "\\", "/"}:
+        raise error_type("批量存档自定义目录必须是非盘符根的绝对路径。")
+    if not isinstance(enabled, bool):
+        raise error_type("批量存档自定义目录启用状态必须是布尔值。")
+    if type(max_depth) is not int or max_depth not in BATCH_SAVE_DEPTH_RANGE:
+        raise error_type("批量存档自定义目录深度必须为 1 到 12。")
+    return BatchSaveCustomRoot(
+        id=root_id.strip(),
+        display_path=clean_path,
+        enabled=enabled,
+        max_depth=max_depth,
+    )
