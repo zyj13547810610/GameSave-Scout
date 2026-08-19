@@ -22,6 +22,7 @@ export const useBatchSaveStore = defineStore('batch-save', {
     page: [] as BatchSaveCandidate[],
     total: 0,
     selectedIds: new Set<string>(),
+    selectedCandidateDetails: {} as Record<string, BatchSaveCandidate>,
     filters: {
       status: 'all',
       keyword: '',
@@ -32,6 +33,7 @@ export const useBatchSaveStore = defineStore('batch-save', {
     } as BatchSaveFilters,
     loading: false,
     actionBusy: false,
+    actionError: '',
     error: '',
     notice: '',
     pollTimer: null as number | null,
@@ -65,6 +67,7 @@ export const useBatchSaveStore = defineStore('batch-save', {
       this.actionBusy = true
       this.error = ''
       this.notice = ''
+      this.actionError = ''
       const result = await bridge.start_batch_save_scan({ standardScopeIds, customRootIds })
       this.actionBusy = false
       if (!result.ok) return this.fail(result.error.message)
@@ -117,8 +120,11 @@ export const useBatchSaveStore = defineStore('batch-save', {
       if (!result.ok) return this.fail(result.error.message)
       this.page = result.data.items
       this.total = result.data.total
-      const visibleIds = new Set(this.page.map((item) => item.id))
-      this.selectedIds = new Set([...this.selectedIds].filter((id) => visibleIds.has(id)))
+      for (const candidate of this.page) {
+        if (this.selectedIds.has(candidate.id)) {
+          this.selectedCandidateDetails[candidate.id] = candidate
+        }
+      }
     },
     async selectCurrentFiltered(bridge: GameShelfBridge) {
       this.actionBusy = true
@@ -131,9 +137,103 @@ export const useBatchSaveStore = defineStore('batch-save', {
       this.actionBusy = false
       if (!result.ok) return this.fail(result.error.message)
       this.selectedIds = new Set(result.data.candidateIds)
+      const details = await Promise.all(result.data.candidateIds.map((candidateId) => (
+        bridge.get_batch_save_candidate({ candidateId })
+      )))
+      this.selectedCandidateDetails = Object.fromEntries(
+        details
+          .filter((item) => item.ok)
+          .map((item) => [item.data.id, item.data]),
+      )
     },
     clearSelection() {
       this.selectedIds = new Set()
+      this.selectedCandidateDetails = {}
+    },
+    toggleSelection(candidate: BatchSaveCandidate) {
+      const next = new Set(this.selectedIds)
+      const details = { ...this.selectedCandidateDetails }
+      if (next.has(candidate.id)) {
+        next.delete(candidate.id)
+        delete details[candidate.id]
+      } else {
+        next.add(candidate.id)
+        details[candidate.id] = candidate
+      }
+      this.selectedIds = next
+      this.selectedCandidateDetails = details
+    },
+    async acceptCandidates(
+      bridge: GameShelfBridge,
+      candidateIds: string[],
+      confirmRegistry: boolean,
+    ) {
+      this.actionBusy = true
+      this.actionError = ''
+      const result = await bridge.accept_batch_save_candidates({
+        candidateIds,
+        confirmRegistry,
+      })
+      this.actionBusy = false
+      if (!result.ok) {
+        this.actionError = result.error.message
+        return false
+      }
+      this.notice = `已添加 ${result.data.recordedCount} 个存档位置，${result.data.unchangedCount} 个位置未变化。`
+      await this.finishCandidateAction(bridge, candidateIds)
+      return true
+    },
+    async ignoreCandidates(bridge: GameShelfBridge, candidateIds: string[]) {
+      return this.updateCandidateStatus(
+        bridge,
+        candidateIds,
+        () => bridge.ignore_batch_save_candidates({ candidateIds }),
+        '已忽略所选候选。',
+      )
+    },
+    async restoreCandidates(bridge: GameShelfBridge, candidateIds: string[]) {
+      return this.updateCandidateStatus(
+        bridge,
+        candidateIds,
+        () => bridge.restore_batch_save_candidates({ candidateIds }),
+        '已恢复所选候选。',
+      )
+    },
+    async clearUnavailable(bridge: GameShelfBridge, candidateIds: string[]) {
+      return this.updateCandidateStatus(
+        bridge,
+        candidateIds,
+        () => bridge.clear_unavailable_batch_save_candidates({ candidateIds }),
+        '已清除不可用候选历史；磁盘文件和正式存档位置未改动。',
+      )
+    },
+    async updateCandidateStatus(
+      bridge: GameShelfBridge,
+      candidateIds: string[],
+      operation: () => ReturnType<
+        GameShelfBridge['ignore_batch_save_candidates']
+      >,
+      notice: string,
+    ) {
+      this.actionBusy = true
+      this.actionError = ''
+      const result = await operation()
+      this.actionBusy = false
+      if (!result.ok) {
+        this.actionError = result.error.message
+        return false
+      }
+      this.notice = notice
+      await this.finishCandidateAction(bridge, candidateIds)
+      return true
+    },
+    async finishCandidateAction(bridge: GameShelfBridge, candidateIds: string[]) {
+      const processed = new Set(candidateIds)
+      this.selectedIds = new Set([...this.selectedIds].filter((id) => !processed.has(id)))
+      this.selectedCandidateDetails = Object.fromEntries(
+        Object.entries(this.selectedCandidateDetails).filter(([id]) => !processed.has(id)),
+      )
+      await this.loadPage(bridge)
     },
     fail(message: string) {
       this.clearPolling()

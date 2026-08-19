@@ -426,7 +426,7 @@ function restoreGuidedSave(gameId: string) {
           </div>
           </section>
         </div>
-        <BatchSaveWorkspace v-else :bridge="bridge" />
+        <BatchSaveWorkspace v-else :bridge="bridge" @library-changed="store.load(bridge)" />
         <div v-if="showAddRoot" class="dialog-backdrop" @click.self="showAddRoot = false"><ScanRootDialog :bridge="bridge" @saved="rootSaved" @close="showAddRoot = false" /></div>
         <div v-if="editingRoot" class="dialog-backdrop" @click.self="editingRoot = null"><ScanRootDialog :bridge="bridge" :root="editingRoot" @saved="rootSaved" @close="editingRoot = null" /></div>
         <div v-if="showGroupManager" class="dialog-backdrop" @click.self="closeGroupManager">

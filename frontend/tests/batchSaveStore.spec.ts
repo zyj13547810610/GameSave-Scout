@@ -76,6 +76,24 @@ describe('batchSaveStore', () => {
     store.clearSelection()
     expect(store.selectedIds.size).toBe(0)
   })
+
+  it('keeps selection and filters when a review transaction fails', async () => {
+    const bridge = createMockBridge({
+      async accept_batch_save_candidates() {
+        return { ok: false, error: { code: 'stale', message: '候选已变化' } }
+      },
+    })
+    const store = useBatchSaveStore()
+    store.filters.keyword = 'Alice'
+    store.selectedIds = new Set(['candidate-1'])
+
+    const success = await store.acceptCandidates(bridge, ['candidate-1'], false)
+
+    expect(success).toBe(false)
+    expect([...store.selectedIds]).toEqual(['candidate-1'])
+    expect(store.filters.keyword).toBe('Alice')
+    expect(store.actionError).toBe('候选已变化')
+  })
 })
 
 function fixtureTask(overrides: Partial<TaskSnapshot> = {}): TaskSnapshot {
