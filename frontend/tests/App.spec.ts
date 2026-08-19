@@ -13,6 +13,54 @@ beforeEach(() => {
 })
 
 describe('App', () => {
+  it('switches native first-level navigation without cancelling an active scan', async () => {
+    const cancel = vi.fn(async () => ok({ cancelled: true }))
+    const bridge = createMockBridge({ cancel_task: cancel })
+    const wrapper = mount(App, {
+      global: { plugins: [createPinia()], provide: { [bridgeKey as symbol]: bridge } },
+    })
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="nav-library"]').attributes('aria-current')).toBe('page')
+    expect(wrapper.find('[data-test="root-scroll-region"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('添加游戏目录')
+    expect(wrapper.get('[data-test="nav-batch-saves"]').element.tagName).toBe('BUTTON')
+
+    await wrapper.get('[data-test="nav-batch-saves"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="nav-batch-saves"]').attributes('aria-current')).toBe('page')
+    expect(wrapper.find('[data-test="root-scroll-region"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="enter-cover-wizard"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="add-game-root"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="batch-save-workspace"]').exists()).toBe(true)
+    expect(cancel).not.toHaveBeenCalled()
+
+    await wrapper.get('[data-test="nav-library"]').trigger('click')
+    expect(wrapper.find('[data-test="root-scroll-region"]').exists()).toBe(true)
+    expect(cancel).not.toHaveBeenCalled()
+  })
+
+  it('shows an active batch scan return entry in the game library', async () => {
+    const bridge = createMockBridge({
+      async current_batch_save_task() {
+        return ok({
+          id: 'batch-task-1', kind: 'batch_save_scan', status: 'running',
+          progress: { completed: 1, total: 4 }, message: '正在扫描', result: null, error: null,
+        })
+      },
+    })
+    const wrapper = mount(App, {
+      global: { plugins: [createPinia()], provide: { [bridgeKey as symbol]: bridge } },
+    })
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="batch-save-status-bar"]').exists()).toBe(true)
+    await wrapper.get('[data-test="restore-batch-save"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-test="batch-save-workspace"]').exists()).toBe(true)
+  })
+
   it('skips startup scans when quick verification is disabled', async () => {
     const startScan = vi.fn(async () => ok({ taskId: 'task-1' }))
     const bridge = createMockBridge({

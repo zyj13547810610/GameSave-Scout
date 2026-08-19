@@ -13,6 +13,9 @@ import { filterGames } from './features/library/libraryFilters'
 import { useLibraryStore } from './features/library/libraryStore'
 import MoveSuggestionPanel from './features/library/MoveSuggestionPanel.vue'
 import UiScaleControl from './features/preferences/UiScaleControl.vue'
+import BatchSaveStatusBar from './features/saves/BatchSaveStatusBar.vue'
+import BatchSaveWorkspace from './features/saves/BatchSaveWorkspace.vue'
+import { useBatchSaveStore } from './features/saves/batchSaveStore'
 import GuidedSaveCloseDialog from './features/saves/GuidedSaveCloseDialog.vue'
 import GuidedSaveStatusBar from './features/saves/GuidedSaveStatusBar.vue'
 import { useGuidedSaveStore } from './features/saves/guidedSaveStore'
@@ -20,11 +23,13 @@ import { applyUiScale, type UiScale } from './features/preferences/uiScale'
 import ScanRootDialog from './features/scan-roots/ScanRootDialog.vue'
 import ScanRootList from './features/scan-roots/ScanRootList.vue'
 import './features/library/library.css'
+import './features/saves/batch-save.css'
 
 const bridge = inject(bridgeKey, createBridge())
 const pinia = getActivePinia() ?? createPinia()
 const store = useLibraryStore(pinia)
 const guidedStore = useGuidedSaveStore(pinia)
+const batchSaveStore = useBatchSaveStore(pinia)
 const {
   roots,
   games,
@@ -36,6 +41,7 @@ const {
   selectedGameId,
 } = storeToRefs(store)
 const state = ref<'connecting' | 'ready' | 'failed'>('connecting')
+const activeView = ref<'library' | 'batch_saves'>('library')
 const errorMessage = ref('')
 const showAddRoot = ref(false)
 const editingRoot = ref<ScanRoot | null>(null)
@@ -225,6 +231,7 @@ async function bootstrap() {
   applyUiScale(uiScale.value, document.documentElement)
   await store.load(bridge)
   await guidedStore.refreshActive(bridge)
+  await batchSaveStore.refreshCurrent(bridge)
   state.value = 'ready'
   await nextTick()
   if (libraryScanSettings.value.startupQuickScan) {
@@ -250,7 +257,21 @@ async function scan(rootId: string) {
 }
 
 onMounted(bootstrap)
-onBeforeUnmount(() => guidedStore.clearPolling())
+onBeforeUnmount(() => {
+  guidedStore.clearPolling()
+  batchSaveStore.clearPolling()
+})
+
+function changeView(view: 'library' | 'batch_saves') {
+  if (activeView.value === view) return
+  selectedGameId.value = null
+  showGroupManager.value = false
+  showBatchGroup.value = false
+  showAddRoot.value = false
+  editingRoot.value = null
+  exitBatchMode()
+  activeView.value = view
+}
 
 function openCoverWizard() {
   showGroupManager.value = false
@@ -288,6 +309,7 @@ async function closeCoverWizard() {
 }
 
 function restoreGuidedSave(gameId: string) {
+  changeView('library')
   batchMode.value = false
   selectedGameId.value = gameId
 }
@@ -295,26 +317,49 @@ function restoreGuidedSave(gameId: string) {
 
 <template>
   <main class="app-shell">
-    <header class="app-header">
-      <div><h1>GameShelf</h1><p>便携游戏库与存档管理器</p></div>
-      <div class="app-actions">
-        <div class="ui-scale-setting">
-          <UiScaleControl :model-value="uiScale" @update:model-value="changeUiScale" />
-          <p v-if="uiScaleSaveError" class="ui-scale-save-error" data-test="ui-scale-save-error" role="alert">{{ uiScaleSaveError }}</p>
+    <aside class="app-sidebar" :inert="showCoverWizard || showGroupManager || showBatchGroup">
+      <div class="app-brand"><h1>GameShelf</h1><p>便携游戏库与存档管理器</p></div>
+      <nav class="primary-navigation" aria-label="主要功能">
+        <button data-test="nav-library" type="button" :aria-current="activeView === 'library' ? 'page' : undefined" @click="changeView('library')">游戏库</button>
+        <button data-test="nav-batch-saves" type="button" :aria-current="activeView === 'batch_saves' ? 'page' : undefined" @click="changeView('batch_saves')">批量存档</button>
+      </nav>
+      <ScanRootList
+        v-if="state === 'ready' && activeView === 'library'"
+        :bridge="bridge"
+        :roots="roots"
+        :library-scan-settings="libraryScanSettings"
+        :scan-tasks="scanTasks"
+        :task-snapshots="taskSnapshots"
+        @settings-updated="libraryScanSettings = $event"
+        @scan="scan"
+        @cancel="(id) => store.cancelScan(bridge, id)"
+        @toggle="(root, enabled) => store.updateRoot(bridge, root, enabled)"
+        @edit="editingRoot = $event"
+        @remove="(id) => store.removeRoot(bridge, id)"
+        @remap="(id, path) => store.remapRoot(bridge, id, path)"
+      />
+    </aside>
+
+    <section class="app-main">
+      <header class="app-header">
+        <div class="app-actions">
+          <div class="ui-scale-setting">
+            <UiScaleControl :model-value="uiScale" @update:model-value="changeUiScale" />
+            <p v-if="uiScaleSaveError" class="ui-scale-save-error" data-test="ui-scale-save-error" role="alert">{{ uiScaleSaveError }}</p>
+          </div>
+          <button v-if="state === 'ready' && activeView === 'library'" data-test="add-game-root" type="button" @click="showAddRoot = true">＋ 添加游戏目录</button>
         </div>
-        <button v-if="state === 'ready'" type="button" @click="showAddRoot = true">＋ 添加游戏目录</button>
-      </div>
-    </header>
-    <GuidedSaveStatusBar @restore="restoreGuidedSave" />
+      </header>
+      <GuidedSaveStatusBar @restore="restoreGuidedSave" />
+      <BatchSaveStatusBar v-if="activeView === 'library'" @restore="changeView('batch_saves')" />
 
-    <section v-if="state === 'connecting'" class="empty-state" aria-live="polite"><h2>正在连接本地数据库…</h2></section>
-    <section v-else-if="state === 'failed'" class="empty-state" role="alert"><h2>无法连接本地数据库</h2><p>{{ errorMessage }}</p><button type="button" @click="bootstrap">重试</button></section>
+      <section v-if="state === 'connecting'" class="empty-state" aria-live="polite"><h2>正在连接本地数据库…</h2></section>
+      <section v-else-if="state === 'failed'" class="empty-state" role="alert"><h2>无法连接本地数据库</h2><p>{{ errorMessage }}</p><button type="button" @click="bootstrap">重试</button></section>
 
-    <template v-else>
-      <div v-if="error" class="error-banner" role="alert"><span>{{ error }}</span><button type="button" @click="store.dismissError">关闭</button></div>
-      <div class="library-layout" :inert="showCoverWizard || showGroupManager || showBatchGroup" :aria-hidden="showCoverWizard || showGroupManager || showBatchGroup ? 'true' : undefined">
-        <ScanRootList :bridge="bridge" :roots="roots" :library-scan-settings="libraryScanSettings" :scan-tasks="scanTasks" :task-snapshots="taskSnapshots" @settings-updated="libraryScanSettings = $event" @scan="scan" @cancel="(id) => store.cancelScan(bridge, id)" @toggle="(root, enabled) => store.updateRoot(bridge, root, enabled)" @edit="editingRoot = $event" @remove="(id) => store.removeRoot(bridge, id)" @remap="(id, path) => store.remapRoot(bridge, id, path)" />
-        <section class="library-content">
+      <template v-else>
+        <div v-if="error" class="error-banner" role="alert"><span>{{ error }}</span><button type="button" @click="store.dismissError">关闭</button></div>
+        <div v-if="activeView === 'library'" class="library-layout" :inert="showCoverWizard || showGroupManager || showBatchGroup" :aria-hidden="showCoverWizard || showGroupManager || showBatchGroup ? 'true' : undefined">
+          <section class="library-content">
           <div class="library-fixed-controls" data-test="library-fixed-controls">
             <div class="content-heading">
               <h2>我的游戏 <span>{{ games.length }}</span></h2>
@@ -379,33 +424,35 @@ function restoreGuidedSave(gameId: string) {
               />
             </template>
           </div>
-        </section>
-      </div>
-      <div v-if="showAddRoot" class="dialog-backdrop" @click.self="showAddRoot = false"><ScanRootDialog :bridge="bridge" @saved="rootSaved" @close="showAddRoot = false" /></div>
-      <div v-if="editingRoot" class="dialog-backdrop" @click.self="editingRoot = null"><ScanRootDialog :bridge="bridge" :root="editingRoot" @saved="rootSaved" @close="editingRoot = null" /></div>
-      <div v-if="showGroupManager" class="dialog-backdrop" @click.self="closeGroupManager">
-        <GroupManagementDialog :bridge="bridge" :groups="groups" @changed="groupsChanged" @close="closeGroupManager" />
-      </div>
-      <div v-if="showBatchGroup && !showGroupManager" class="dialog-backdrop" @click.self="closeBatchGroup">
-        <BatchGroupDialog
-          :open="showBatchGroup && !showGroupManager"
+          </section>
+        </div>
+        <BatchSaveWorkspace v-else :bridge="bridge" />
+        <div v-if="showAddRoot" class="dialog-backdrop" @click.self="showAddRoot = false"><ScanRootDialog :bridge="bridge" @saved="rootSaved" @close="showAddRoot = false" /></div>
+        <div v-if="editingRoot" class="dialog-backdrop" @click.self="editingRoot = null"><ScanRootDialog :bridge="bridge" :root="editingRoot" @saved="rootSaved" @close="editingRoot = null" /></div>
+        <div v-if="showGroupManager" class="dialog-backdrop" @click.self="closeGroupManager">
+          <GroupManagementDialog :bridge="bridge" :groups="groups" @changed="groupsChanged" @close="closeGroupManager" />
+        </div>
+        <div v-if="showBatchGroup && !showGroupManager" class="dialog-backdrop" @click.self="closeBatchGroup">
+          <BatchGroupDialog
+            :open="showBatchGroup && !showGroupManager"
+            :bridge="bridge"
+            :groups="groups"
+            :selected-game-ids="[...selectedGameIds]"
+            @applied="batchGroupsApplied"
+            @manage-groups="manageGroupsFromBatch"
+            @close="closeBatchGroup"
+          />
+        </div>
+        <GuidedSaveCloseDialog :bridge="bridge" />
+        <CoverWizardWorkspace
+          v-if="showCoverWizard"
           :bridge="bridge"
-          :groups="groups"
-          :selected-game-ids="[...selectedGameIds]"
-          @applied="batchGroupsApplied"
-          @manage-groups="manageGroupsFromBatch"
-          @close="closeBatchGroup"
+          :games="games"
+          :settings="coverWizardSettings"
+          @updated="store.updateGame"
+          @close="closeCoverWizard"
         />
-      </div>
-      <GuidedSaveCloseDialog :bridge="bridge" />
-      <CoverWizardWorkspace
-        v-if="showCoverWizard"
-        :bridge="bridge"
-        :games="games"
-        :settings="coverWizardSettings"
-        @updated="store.updateGame"
-        @close="closeCoverWizard"
-      />
-    </template>
+      </template>
+    </section>
   </main>
 </template>

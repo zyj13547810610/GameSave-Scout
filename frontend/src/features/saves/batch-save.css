@@ -1,0 +1,12 @@
+.batch-save-workspace { display: grid; min-width: 0; min-height: 0; flex: 1; align-content: start; gap: 1rem; overflow: hidden; container-type: inline-size; }
+.batch-save-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem; border-bottom: 1px solid #302c38; padding-bottom: 1rem; }
+.batch-save-heading p, .batch-save-heading h1 { margin: 0; }
+.batch-save-heading p { color: #918b9d; font-size: .78rem; }
+.batch-save-heading h1 { margin-top: .2rem; font-size: 1.5rem; }
+.batch-save-active-badge { border: 1px solid #7257d8; border-radius: 999px; padding: .25rem .65rem; color: #d8cff5; background: #292038; font-size: .75rem; }
+.batch-save-placeholder { display: grid; min-height: 12rem; place-content: center; gap: .5rem; border: 1px dashed #494451; border-radius: .85rem; padding: 1.5rem; color: #aaa3b7; text-align: center; }
+.batch-save-placeholder p { margin: 0; }
+.batch-save-notice { color: #bde5c8; }
+.batch-save-status-bar { display: flex; flex: none; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; margin: 0 0 1rem; border: 1px solid #5a477b; border-radius: .75rem; padding: .75rem 1rem; background: #211a2e; }
+.batch-save-status-bar div { display: grid; min-width: 0; gap: .2rem; }
+.batch-save-status-bar span { color: #aaa3b7; font-size: .78rem; }
