@@ -1,5 +1,6 @@
 from io import BytesIO
 from pathlib import Path
+from threading import Event
 
 from PIL import Image
 
@@ -81,6 +82,52 @@ def test_start_scan_rejects_a_disabled_root_before_submitting_task(
         writer.close()
 
 
+def test_start_scan_rejects_when_batch_disk_scan_group_is_active(
+    tmp_path: Path,
+) -> None:
+    api, tasks, writer, _ = _library_api(tmp_path)
+    game_root = tmp_path / "games"
+    game_root.mkdir()
+    entered = Event()
+    release = Event()
+
+    def batch_scan(_context: object) -> None:
+        entered.set()
+        release.wait(2)
+
+    try:
+        root = api.add_root(
+            {
+                "displayPath": str(game_root),
+                "scanMode": "children",
+                "maxDepth": 1,
+                "exclusions": [],
+            }
+        )["data"]
+        batch_task = tasks.submit(
+            "batch_save_scan",
+            batch_scan,
+            exclusive_group="disk_scan",
+        )
+        assert entered.wait(1)
+
+        result = api.start_scan({"rootId": root["id"], "kind": "full"})
+
+        assert result == {
+            "ok": False,
+            "error": {
+                "code": "disk_scan_active",
+                "message": "已有磁盘扫描正在运行，请等待完成或先取消。",
+            },
+        }
+        release.set()
+        tasks.wait(batch_task, timeout=2)
+    finally:
+        release.set()
+        tasks.close()
+        writer.close()
+
+
 def test_start_game_reanalysis_returns_task_id_and_updated_game(tmp_path: Path) -> None:
     api, tasks, writer, library = _library_api(tmp_path)
     game_root = tmp_path / "games"
@@ -116,9 +163,11 @@ def test_start_game_reanalysis_rejects_bad_or_unavailable_games(
         root = library.add_root(str(game_root), "children", 1, [])
         game = library.create_game_for_test(root.id, "Alice", "Alice")
         writer.submit(
-            lambda connection: connection.execute(
-                "UPDATE games SET status = 'missing' WHERE id = ?", (game.id,)
-            ).rowcount
+            lambda connection: (
+                connection.execute(
+                    "UPDATE games SET status = 'missing' WHERE id = ?", (game.id,)
+                ).rowcount
+            )
         ).result()
 
         malformed = (
@@ -151,9 +200,7 @@ def test_manual_executable_must_remain_inside_game_directory(tmp_path: Path) -> 
         root = library.add_root(str(game_root), "children", 1, [])
         game = library.create_game_for_test(root.id, "Alice", "Alice")
 
-        result = api.set_game_executable(
-            {"gameId": game.id, "selectedPath": str(outside)}
-        )
+        result = api.set_game_executable({"gameId": game.id, "selectedPath": str(outside)})
 
         assert result["ok"] is False
         assert result["error"]["code"] == "invalid_executable"
@@ -200,9 +247,7 @@ def test_set_game_metadata_returns_version_and_accepts_null(tmp_path: Path) -> N
         updated = api.set_game_metadata(
             {"gameId": game.id, "title": "  Alice  ", "version": "  v1.0  "}
         )
-        cleared = api.set_game_metadata(
-            {"gameId": game.id, "title": "Alice", "version": None}
-        )
+        cleared = api.set_game_metadata({"gameId": game.id, "title": "Alice", "version": None})
 
         assert updated["ok"] is True
         assert updated["data"]["title"] == "Alice"
@@ -332,9 +377,7 @@ def test_batch_remove_returns_summary_and_cleanup_warning_without_paths(
         assert isinstance(covers, CoverService)
         installed_root = library.add_root(r"D:\Games", "children", 1, [])
         missing_root = library.add_root(r"E:\OldGames", "children", 1, [])
-        installed = library.create_game_for_test(
-            installed_root.id, "GameA", "GameA"
-        )
+        installed = library.create_game_for_test(installed_root.id, "GameA", "GameA")
         missing = library.create_game_for_test(missing_root.id, "GameB", "GameB")
         cover = covers.import_clipboard_png(installed.id, _png())
         library.remove_root(missing_root.id)
@@ -362,9 +405,7 @@ def test_batch_remove_returns_summary_and_cleanup_warning_without_paths(
                 "installedCount": 1,
                 "missingCount": 1,
                 "updatedRootCount": 1,
-                "cleanupWarnings": [
-                    "有 2 个受管封面文件未能清理，可稍后查看日志。"
-                ],
+                "cleanupWarnings": ["有 2 个受管封面文件未能清理，可稍后查看日志。"],
             },
         }
         assert cleanup_calls == [(cover.original_relpath, cover.thumb_relpath)]
@@ -413,9 +454,7 @@ def test_batch_remove_status_change_rolls_back_and_skips_cover_cleanup(
 def test_batch_remove_rejects_non_removable_status_in_payload(tmp_path: Path) -> None:
     api, tasks, writer, _ = _library_api(tmp_path)
     try:
-        result = api.remove_games(
-            {"items": [{"gameId": "game-1", "expectedStatus": "save_only"}]}
-        )
+        result = api.remove_games({"items": [{"gameId": "game-1", "expectedStatus": "save_only"}]})
 
         assert result["ok"] is False
         assert result["error"]["code"] == "invalid_request"
@@ -438,9 +477,7 @@ def _library_api(
     library = LibraryService(repository, writer)
     covers = CoverService(paths, repository, writer)
     scanner = ScanService(repository, writer)
-    launcher = GameLauncher(
-        repository, writer, WindowsProcessLauncher(), WindowsShell()
-    )
+    launcher = GameLauncher(repository, writer, WindowsProcessLauncher(), WindowsShell())
     api = BridgeApi(
         paths,
         tasks,

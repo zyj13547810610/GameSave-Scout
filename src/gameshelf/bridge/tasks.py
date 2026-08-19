@@ -11,6 +11,7 @@ from typing import Any, Literal
 from uuid import uuid4
 
 type TaskStatus = Literal["queued", "running", "completed", "cancelled", "failed"]
+type TaskCancelReason = Literal["user", "shutdown"]
 type TaskOperation = Callable[["TaskContext"], Any]
 type TaskDetailValue = str | int | float | bool | None
 type TaskDetails = dict[str, TaskDetailValue]
@@ -18,6 +19,18 @@ type TaskDetails = dict[str, TaskDetailValue]
 
 class TaskCancelled(RuntimeError):
     """Internal control flow for cooperative task cancellation."""
+
+    def __init__(self, reason: TaskCancelReason) -> None:
+        super().__init__("任务已取消。")
+        self.reason = reason
+
+
+class ActiveTaskConflict(RuntimeError):
+    """Raised when an active task already owns an exclusive resource group."""
+
+    def __init__(self, group: str) -> None:
+        super().__init__(f"互斥任务组正在使用中：{group}")
+        self.group = group
 
 
 @dataclass(frozen=True)
@@ -37,8 +50,10 @@ class TaskContext:
         self,
         cancel_event: Event,
         reporter: Callable[[int, int | None, str, TaskDetails], None],
+        cancel_reason: Callable[[], TaskCancelReason | None] | None = None,
     ) -> None:
         self._cancel_event = cancel_event
+        self._cancel_reason = cancel_reason or (lambda: None)
         self._reporter = reporter
 
     def report(
@@ -55,7 +70,7 @@ class TaskContext:
 
     def raise_if_cancelled(self) -> None:
         if self._cancel_event.is_set():
-            raise TaskCancelled("任务已取消。")
+            raise TaskCancelled(self._cancel_reason() or "user")
 
 
 class TaskRegistry:
@@ -71,16 +86,33 @@ class TaskRegistry:
         self._lock = RLock()
         self._snapshots: dict[str, TaskSnapshot] = {}
         self._cancel_events: dict[str, Event] = {}
+        self._cancel_reasons: dict[str, TaskCancelReason] = {}
         self._workers: dict[str, Future[None]] = {}
+        self._active_exclusive_groups: dict[str, str] = {}
+        self._task_exclusive_groups: dict[str, str] = {}
         self._closed = False
         self._logger = logger or logging.getLogger(__name__)
 
-    def submit(self, kind: str, operation: TaskOperation) -> str:
+    def submit(
+        self,
+        kind: str,
+        operation: TaskOperation,
+        exclusive_group: str | None = None,
+    ) -> str:
+        if exclusive_group is not None and (
+            not isinstance(exclusive_group, str)
+            or not exclusive_group.strip()
+            or "\x00" in exclusive_group
+        ):
+            raise ValueError("互斥任务组必须是非空字符串。")
+        normalized_group = None if exclusive_group is None else exclusive_group.strip()
         task_id = str(uuid4())
         cancel_event = Event()
         with self._lock:
             if self._closed:
                 raise RuntimeError("后台任务注册表已经关闭。")
+            if normalized_group is not None and normalized_group in self._active_exclusive_groups:
+                raise ActiveTaskConflict(normalized_group)
             self._snapshots[task_id] = TaskSnapshot(
                 id=task_id,
                 kind=kind,
@@ -89,7 +121,23 @@ class TaskRegistry:
                 message="",
             )
             self._cancel_events[task_id] = cancel_event
-            worker = self._executor.submit(self._run, task_id, operation, cancel_event)
+            if normalized_group is not None:
+                self._active_exclusive_groups[normalized_group] = task_id
+                self._task_exclusive_groups[task_id] = normalized_group
+            try:
+                worker = self._executor.submit(
+                    self._run,
+                    task_id,
+                    operation,
+                    cancel_event,
+                )
+            except Exception:
+                self._snapshots.pop(task_id, None)
+                self._cancel_events.pop(task_id, None)
+                if normalized_group is not None:
+                    self._active_exclusive_groups.pop(normalized_group, None)
+                    self._task_exclusive_groups.pop(task_id, None)
+                raise
             self._workers[task_id] = worker
         return task_id
 
@@ -98,7 +146,22 @@ class TaskRegistry:
             snapshot = self._snapshots.get(task_id)
             if snapshot is None:
                 raise KeyError(task_id)
-            return snapshot
+            return _copy_snapshot(snapshot)
+
+    def latest_snapshot(
+        self,
+        kind: str,
+        *,
+        active_only: bool = False,
+    ) -> TaskSnapshot | None:
+        with self._lock:
+            for snapshot in reversed(tuple(self._snapshots.values())):
+                if snapshot.kind != kind:
+                    continue
+                if active_only and snapshot.status not in {"queued", "running"}:
+                    continue
+                return _copy_snapshot(snapshot)
+        return None
 
     def wait(self, task_id: str, *, timeout: float | None = None) -> TaskSnapshot:
         with self._lock:
@@ -116,6 +179,7 @@ class TaskRegistry:
                 return False
             if snapshot.status not in {"queued", "running"}:
                 return False
+            self._cancel_reasons[task_id] = "user"
             cancel_event.set()
             return True
 
@@ -126,6 +190,7 @@ class TaskRegistry:
             self._closed = True
             for task_id, snapshot in self._snapshots.items():
                 if snapshot.status in {"queued", "running"}:
+                    self._cancel_reasons.setdefault(task_id, "shutdown")
                     self._cancel_events[task_id].set()
         self._executor.shutdown(wait=True, cancel_futures=False)
 
@@ -136,6 +201,7 @@ class TaskRegistry:
             lambda completed, total, message, details: self._report(
                 task_id, completed, total, message, details
             ),
+            cancel_reason=lambda: self._cancellation_reason(task_id),
         )
         try:
             context.raise_if_cancelled()
@@ -158,6 +224,8 @@ class TaskRegistry:
             )
         else:
             self._update(task_id, status="completed", result=result)
+        finally:
+            self._release_exclusive_group(task_id)
 
     def _report(
         self,
@@ -177,3 +245,22 @@ class TaskRegistry:
     def _update(self, task_id: str, **changes: Any) -> None:
         with self._lock:
             self._snapshots[task_id] = replace(self._snapshots[task_id], **changes)
+
+    def _cancellation_reason(self, task_id: str) -> TaskCancelReason | None:
+        with self._lock:
+            return self._cancel_reasons.get(task_id)
+
+    def _release_exclusive_group(self, task_id: str) -> None:
+        with self._lock:
+            group = self._task_exclusive_groups.pop(task_id, None)
+            if group is not None and self._active_exclusive_groups.get(group) == task_id:
+                self._active_exclusive_groups.pop(group, None)
+
+
+def _copy_snapshot(snapshot: TaskSnapshot) -> TaskSnapshot:
+    return replace(
+        snapshot,
+        progress=dict(snapshot.progress),
+        details=dict(snapshot.details),
+        error=None if snapshot.error is None else dict(snapshot.error),
+    )

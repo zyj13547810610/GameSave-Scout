@@ -304,6 +304,19 @@ class BatchSaveRepository:
 
         return self._writer.submit(operation).result()
 
+    def update_rules_version(self, session_id: str, rules_version: str) -> None:
+        if not isinstance(rules_version, str) or not rules_version or "\x00" in rules_version:
+            raise ValueError("批量存档规则版本无效。")
+
+        def operation(connection: sqlite3.Connection) -> None:
+            _require_running_session(connection, session_id)
+            connection.execute(
+                "UPDATE scan_sessions SET rules_version = ? WHERE id = ?",
+                (rules_version, session_id),
+            )
+
+        self._writer.submit(operation).result()
+
     def finish_session(
         self,
         session_id: str,
@@ -385,6 +398,44 @@ class BatchSaveRepository:
             return cursor.rowcount
 
         return self._writer.submit(operation).result()
+
+    def session_counts(self, session_id: str) -> dict[str, int]:
+        with self._factory.connect(readonly=True) as connection:
+            session = connection.execute(
+                """
+                SELECT started_at
+                FROM scan_sessions
+                WHERE id = ? AND kind = 'save_discovery'
+                """,
+                (session_id,),
+            ).fetchone()
+            if session is None:
+                raise BatchSessionNotFoundError(session_id)
+            row = connection.execute(
+                """
+                SELECT
+                    COUNT(*) AS observed,
+                    SUM(CASE WHEN c.first_seen_at >= ? THEN 1 ELSE 0 END) AS new_count,
+                    SUM(CASE WHEN c.review_status = 'pending' THEN 1 ELSE 0 END) AS pending_count,
+                    SUM(CASE WHEN c.review_status = 'recorded' THEN 1 ELSE 0 END) AS recorded_count,
+                    SUM(CASE WHEN c.review_status = 'ignored' THEN 1 ELSE 0 END) AS ignored_count,
+                    SUM(CASE WHEN c.availability = 'unavailable' THEN 1 ELSE 0 END)
+                        AS unavailable_count
+                FROM save_scan_observations AS o
+                JOIN save_scan_candidates AS c ON c.id = o.candidate_id
+                WHERE o.session_id = ?
+                """,
+                (session["started_at"], session_id),
+            ).fetchone()
+        assert row is not None
+        return {
+            "observed": int(row["observed"] or 0),
+            "new": int(row["new_count"] or 0),
+            "pending": int(row["pending_count"] or 0),
+            "recorded": int(row["recorded_count"] or 0),
+            "ignored": int(row["ignored_count"] or 0),
+            "unavailable": int(row["unavailable_count"] or 0),
+        }
 
     def list_candidates(self, query: BatchCandidateQuery) -> BatchCandidatePage:
         where_sql, parameters = _query_filters(query)

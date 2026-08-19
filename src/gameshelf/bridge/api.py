@@ -17,7 +17,12 @@ from gameshelf.bootstrap.config import (
 )
 from gameshelf.bootstrap.paths import AppPaths
 from gameshelf.bridge.contracts import ApiResult, JSONValue, failure, success
-from gameshelf.bridge.tasks import TaskContext, TaskRegistry, TaskSnapshot
+from gameshelf.bridge.tasks import (
+    ActiveTaskConflict,
+    TaskContext,
+    TaskRegistry,
+    TaskSnapshot,
+)
 from gameshelf.covers.candidates import (
     CoverCandidate,
     CoverWizardSnapshot,
@@ -173,15 +178,9 @@ class BridgeApi:
         if self._asset_session_token is not None:
             state["assetSessionToken"] = self._asset_session_token
         if self._config is not None:
-            state["libraryScanSettings"] = _library_scan_settings_dto(
-                self._config.current
-            )
-            state["coverWizardSettings"] = _cover_wizard_settings_dto(
-                self._config.current
-            )
-            state["batchSaveSettings"] = _batch_save_settings_dto(
-                self._config.current
-            )
+            state["libraryScanSettings"] = _library_scan_settings_dto(self._config.current)
+            state["coverWizardSettings"] = _cover_wizard_settings_dto(self._config.current)
+            state["batchSaveSettings"] = _batch_save_settings_dto(self._config.current)
         return success(state)
 
     def set_ui_scale(self, request: object) -> ApiResult:
@@ -232,9 +231,7 @@ class BridgeApi:
             config = self._require_config().set_cover_wizard_settings(
                 online_enabled=_boolean(payload, "coverOnlineEnabled"),
                 vndb_candidate_limit=_integer(payload, "coverVndbCandidateLimit"),
-                local_scan_candidate_limit=_integer(
-                    payload, "coverLocalScanCandidateLimit"
-                ),
+                local_scan_candidate_limit=_integer(payload, "coverLocalScanCandidateLimit"),
             )
             return success(_cover_wizard_settings_dto(config))
         except InvalidRequest as error:
@@ -264,9 +261,7 @@ class BridgeApi:
         try:
             payload = _payload(request)
             _only_keys(payload, {"sessionId"})
-            snapshot = self._require_cover_wizard().snapshot(
-                _string(payload, "sessionId")
-            )
+            snapshot = self._require_cover_wizard().snapshot(_string(payload, "sessionId"))
             return success(_cover_wizard_snapshot_dto(snapshot))
         except InvalidRequest as error:
             return failure("invalid_request", str(error))
@@ -296,10 +291,7 @@ class BridgeApi:
                 session_id, _string(payload, "gameId")
             )
             return success(
-                [
-                    self._cover_candidate_dto(session_id, candidate)
-                    for candidate in candidates
-                ]
+                [self._cover_candidate_dto(session_id, candidate) for candidate in candidates]
             )
         except InvalidRequest as error:
             return failure("invalid_request", str(error))
@@ -367,13 +359,9 @@ class BridgeApi:
             def operation(context: TaskContext) -> dict[str, JSONValue]:
                 if not self._require_config().current.cover_online_enabled:
                     raise RuntimeError("VNDB 已关闭。")
-                snapshot = wizard.collect_vndb(
-                    session_id, game_ids, limit, context
-                )
+                snapshot = wizard.collect_vndb(session_id, game_ids, limit, context)
                 failed = sum(
-                    item.status == "failed"
-                    for item in snapshot.queue
-                    if item.game_id in game_ids
+                    item.status == "failed" for item in snapshot.queue if item.game_id in game_ids
                 )
                 return {
                     "sessionId": session_id,
@@ -381,9 +369,7 @@ class BridgeApi:
                     "failedCount": failed,
                 }
 
-            return success(
-                {"taskId": self._tasks.submit("cover_vndb_search", operation)}
-            )
+            return success({"taskId": self._tasks.submit("cover_vndb_search", operation)})
         except InvalidRequest as error:
             return failure("invalid_request", str(error))
         except CoverWizardNotFoundError as error:
@@ -403,9 +389,7 @@ class BridgeApi:
             wizard = self._require_cover_wizard()
 
             def operation(context: TaskContext) -> dict[str, JSONValue]:
-                summary = wizard.collect_shallow(
-                    session_id, game_id, limit, context
-                )
+                summary = wizard.collect_shallow(session_id, game_id, limit, context)
                 candidate_count = len(summary.candidates)
                 message = (
                     "浅层扫描完成，未找到候选封面。"
@@ -419,9 +403,7 @@ class BridgeApi:
                     "failedCount": summary.skipped,
                 }
 
-            return success(
-                {"taskId": self._tasks.submit("cover_shallow_scan", operation)}
-            )
+            return success({"taskId": self._tasks.submit("cover_shallow_scan", operation)})
         except InvalidRequest as error:
             return failure("invalid_request", str(error))
         except CoverWizardNotFoundError as error:
@@ -438,22 +420,16 @@ class BridgeApi:
             wizard = self._require_cover_wizard()
 
             def operation(context: TaskContext) -> dict[str, JSONValue]:
-                summaries = wizard.collect_directory(
-                    session_id, directory, context
-                )
+                summaries = wizard.collect_directory(session_id, directory, context)
                 return {
                     "sessionId": session_id,
                     "completedCount": sum(
                         len(summary.candidates) for summary in summaries.values()
                     ),
-                    "failedCount": sum(
-                        summary.skipped for summary in summaries.values()
-                    ),
+                    "failedCount": sum(summary.skipped for summary in summaries.values()),
                 }
 
-            return success(
-                {"taskId": self._tasks.submit("cover_directory_import", operation)}
-            )
+            return success({"taskId": self._tasks.submit("cover_directory_import", operation)})
         except InvalidRequest as error:
             return failure("invalid_request", str(error))
         except CoverWizardNotFoundError as error:
@@ -471,9 +447,7 @@ class BridgeApi:
             return success(
                 {
                     "game": self._game_dto(game),
-                    "snapshot": _cover_wizard_snapshot_dto(
-                        wizard.snapshot(session_id)
-                    ),
+                    "snapshot": _cover_wizard_snapshot_dto(wizard.snapshot(session_id)),
                 }
             )
         except InvalidRequest as error:
@@ -575,9 +549,7 @@ class BridgeApi:
         return success([self._game_dto(game) for game in library.list_games()])
 
     def list_game_groups(self) -> ApiResult:
-        return success(
-            [_game_group_dto(group) for group in self._require_groups().list_groups()]
-        )
+        return success([_game_group_dto(group) for group in self._require_groups().list_groups()])
 
     def create_game_group(self, request: object) -> ApiResult:
         try:
@@ -702,9 +674,7 @@ class BridgeApi:
     def remove_games(self, request: object) -> ApiResult:
         try:
             payload = _payload(request)
-            result = self._require_library().remove_games(
-                _game_removal_requests(payload)
-            )
+            result = self._require_library().remove_games(_game_removal_requests(payload))
             cleanup_warning_count = (
                 self._covers.cleanup_managed_files(result.managed_cover_relpaths)
                 if self._covers is not None
@@ -739,11 +709,7 @@ class BridgeApi:
             if kind not in {"quick", "full"}:
                 raise InvalidRequest("kind must be 'quick' or 'full'.")
             root = next(
-                (
-                    item
-                    for item in self._require_library().list_roots()
-                    if item.id == root_id
-                ),
+                (item for item in self._require_library().list_roots() if item.id == root_id),
                 None,
             )
             if root is None:
@@ -756,6 +722,7 @@ class BridgeApi:
                 lambda context: _scan_summary_dto(
                     scanner.scan_root(root_id, cast(Any, kind), context)
                 ),
+                exclusive_group="disk_scan",
             )
             return success({"taskId": task_id})
         except InvalidRequest as error:
@@ -764,6 +731,11 @@ class BridgeApi:
             return failure("root_not_found", "没有找到对应的游戏目录。")
         except RootDisabledError as error:
             return failure("root_disabled", str(error))
+        except ActiveTaskConflict:
+            return failure(
+                "disk_scan_active",
+                "已有磁盘扫描正在运行，请等待完成或先取消。",
+            )
 
     def start_game_reanalysis(self, request: object) -> ApiResult:
         try:
@@ -774,11 +746,7 @@ class BridgeApi:
             game = library.get_game(game_id)
             if game is None:
                 raise GameNotFoundError(game_id)
-            if (
-                game.status != "installed"
-                or game.scan_root_id is None
-                or game.relative_dir is None
-            ):
+            if game.status != "installed" or game.scan_root_id is None or game.relative_dir is None:
                 raise GameReanalysisError("只有安装目录可用的已安装游戏可以重新检测。")
             install_dir = library.install_directory(game_id)
             if not install_dir.is_dir():
@@ -786,9 +754,7 @@ class BridgeApi:
             scanner = self._require_scanner()
             task_id = self._tasks.submit(
                 "game_reanalysis",
-                lambda context: self._game_dto(
-                    scanner.reanalyze_game(game_id, context)
-                ),
+                lambda context: self._game_dto(scanner.reanalyze_game(game_id, context)),
             )
             return success({"taskId": task_id})
         except InvalidRequest as error:
@@ -916,9 +882,7 @@ class BridgeApi:
 
     def launch_game(self, request: object) -> ApiResult:
         try:
-            receipt = self._require_launcher().launch(
-                _string(_payload(request), "gameId")
-            )
+            receipt = self._require_launcher().launch(_string(_payload(request), "gameId"))
             return success(
                 {
                     "gameId": receipt.game_id,
@@ -947,9 +911,7 @@ class BridgeApi:
         try:
             payload = _payload(request)
             game_id = _string(payload, "gameId")
-            self._require_covers().import_file(
-                game_id, Path(_string(payload, "selectedPath"))
-            )
+            self._require_covers().import_file(game_id, Path(_string(payload, "selectedPath")))
             return success(self._game_dto(self._require_game(game_id)))
         except (InvalidRequest, InvalidCoverImage) as error:
             return failure("invalid_cover", str(error))
@@ -988,9 +950,7 @@ class BridgeApi:
 
     def open_install_directory(self, request: object) -> ApiResult:
         try:
-            self._require_launcher().open_install_directory(
-                _string(_payload(request), "gameId")
-            )
+            self._require_launcher().open_install_directory(_string(_payload(request), "gameId"))
             return success({"opened": True})
         except InvalidRequest as error:
             return failure("invalid_request", str(error))
@@ -1068,9 +1028,7 @@ class BridgeApi:
 
     def open_save_location(self, request: object) -> ApiResult:
         try:
-            self._require_save_locations().open_location(
-                _string(_payload(request), "locationId")
-            )
+            self._require_save_locations().open_location(_string(_payload(request), "locationId"))
             return success({"opened": True})
         except InvalidRequest as error:
             return failure("invalid_request", str(error))
@@ -1141,17 +1099,13 @@ class BridgeApi:
     def start_guided_save_detection(self, request: object) -> ApiResult:
         try:
             payload = _payload(request)
-            _only_keys(
-                payload, {"gameId", "selectedScopeIds", "additionalDirectories"}
-            )
+            _only_keys(payload, {"gameId", "selectedScopeIds", "additionalDirectories"})
             game_id = _string(payload, "gameId")
             selected = tuple(_clean_string_list(payload, "selectedScopeIds"))
             additional = tuple(_clean_string_list(payload, "additionalDirectories"))
             if not selected and not additional:
                 return failure("guided_scope_empty", "至少选择一个监控范围。")
-            session = self._require_guided_saves().start(
-                game_id, selected, additional
-            )
+            session = self._require_guided_saves().start(game_id, selected, additional)
             return success(self._guided_session_dto(session))
         except InvalidRequest as error:
             return failure("invalid_request", str(error))
@@ -1179,9 +1133,7 @@ class BridgeApi:
         try:
             payload = _payload(request)
             _only_keys(payload, {"sessionId"})
-            session = self._require_guided_saves().status(
-                _string(payload, "sessionId")
-            )
+            session = self._require_guided_saves().status(_string(payload, "sessionId"))
             return success(self._guided_session_dto(session))
         except InvalidRequest as error:
             return failure("invalid_request", str(error))
@@ -1232,9 +1184,7 @@ class BridgeApi:
     def accept_guided_save_discoveries(self, request: object) -> ApiResult:
         try:
             payload = _payload(request)
-            _only_keys(
-                payload, {"sessionId", "discoveryIds", "confirmRegistry"}
-            )
+            _only_keys(payload, {"sessionId", "discoveryIds", "confirmRegistry"})
             locations = self._require_guided_review().accept(
                 _string(payload, "sessionId"),
                 tuple(_clean_string_list(payload, "discoveryIds")),
@@ -1246,9 +1196,7 @@ class BridgeApi:
         except GameNotFoundError:
             return failure("game_not_found", "没有找到对应的游戏。")
         except InvalidSaveLocation:
-            return failure(
-                "guided_discovery_invalid", "引导式存档候选已经失效，请刷新后重试。"
-            )
+            return failure("guided_discovery_invalid", "引导式存档候选已经失效，请刷新后重试。")
         except GuidedReviewError as error:
             return _guided_review_failure(error)
         except OSError:
@@ -1258,18 +1206,14 @@ class BridgeApi:
         try:
             payload = _payload(request)
             _only_keys(payload, {"sessionId"})
-            discarded = self._require_guided_review().discard(
-                _string(payload, "sessionId")
-            )
+            discarded = self._require_guided_review().discard(_string(payload, "sessionId"))
             return success({"discarded": discarded})
         except InvalidRequest as error:
             return failure("invalid_request", str(error))
         except GuidedSessionNotFoundError:
             return failure("guided_session_not_found", "找不到引导式寻找会话。")
         except InvalidGuidedSessionState:
-            return failure(
-                "guided_session_not_reviewable", "该引导式寻找会话尚不能审核。"
-            )
+            return failure("guided_session_not_reviewable", "该引导式寻找会话尚不能审核。")
         except GuidedReviewError as error:
             return _guided_review_failure(error)
 
@@ -1278,9 +1222,7 @@ class BridgeApi:
             payload = _payload(request)
             _only_keys(payload, {"resolution"})
             resolution = _string(payload, "resolution")
-            self._require_guided_saves().resolve_close(
-                cast(CloseResolution, resolution)
-            )
+            self._require_guided_saves().resolve_close(cast(CloseResolution, resolution))
             return success({"resolved": True})
         except InvalidRequest as error:
             return failure("invalid_request", str(error))
@@ -1307,9 +1249,7 @@ class BridgeApi:
         except GuidedSaveError as error:
             return _guided_service_failure(error)
         except InvalidGuidedSessionState:
-            return failure(
-                "guided_session_not_active", "该引导式寻找会话当前不能执行此操作。"
-            )
+            return failure("guided_session_not_active", "该引导式寻找会话当前不能执行此操作。")
         except OSError:
             return failure("guided_operation_failed", "引导式寻找操作失败。")
 
@@ -1513,10 +1453,7 @@ class BridgeApi:
         preview_url = (
             None
             if self._asset_session_token is None
-            else (
-                f"/session/{self._asset_session_token}/candidate/"
-                f"{session_id}/{candidate.id}"
-            )
+            else (f"/session/{self._asset_session_token}/candidate/{session_id}/{candidate.id}")
         )
         return {
             "id": candidate.id,
@@ -1621,12 +1558,8 @@ class BridgeApi:
         detected_id = game.detected_engine_id
         experimental = False
         if self._engine_detection is not None:
-            experimental = self._engine_detection.is_experimental(
-                detected_id
-            ) or any(
-                self._engine_detection.is_experimental(
-                    item.code.removeprefix("candidate:")
-                )
+            experimental = self._engine_detection.is_experimental(detected_id) or any(
+                self._engine_detection.is_experimental(item.code.removeprefix("candidate:"))
                 for item in candidate_evidence
             )
         return {
@@ -1646,9 +1579,7 @@ class BridgeApi:
             raise GameNotFoundError(game_id)
         return game
 
-    def _guided_session_dto(
-        self, session: GuidedSaveSession
-    ) -> dict[str, JSONValue]:
+    def _guided_session_dto(self, session: GuidedSaveSession) -> dict[str, JSONValue]:
         game = self._require_game(session.game_id)
         error: dict[str, JSONValue] | None = None
         if session.error_code is not None:
@@ -1674,9 +1605,7 @@ class BridgeApi:
         }
 
     def _cover_url(self, game: Game, variant: str) -> str | None:
-        relative = (
-            game.cover_thumb_relpath if variant == "thumb" else game.cover_original_relpath
-        )
+        relative = game.cover_thumb_relpath if variant == "thumb" else game.cover_original_relpath
         if relative is None or self._asset_session_token is None:
             return None
         return (
@@ -1795,8 +1724,7 @@ def _save_suggestion_dto(suggestion: SaveLocationSuggestion) -> dict[str, JSONVa
         "confidence": suggestion.confidence,
         "evidence": list(suggestion.evidence),
         "sourceEvidence": [
-            {"source": item.source, "detail": item.detail}
-            for item in suggestion.source_evidence
+            {"source": item.source, "detail": item.detail} for item in suggestion.source_evidence
         ],
         "preselected": suggestion.preselected,
         "category": suggestion.category,
@@ -1830,9 +1758,7 @@ def _guided_preview_dto(preview: GuidedSavePreview) -> dict[str, JSONValue]:
             }
             for target in preview.registry_targets
         ],
-        "privacyNotice": (
-            "只读取文件路径、大小和修改时间等元数据，不读取或修改存档内容。"
-        ),
+        "privacyNotice": ("只读取文件路径、大小和修改时间等元数据，不读取或修改存档内容。"),
     }
 
 
@@ -1973,9 +1899,7 @@ def _boolean(payload: dict[str, object], key: str) -> bool:
     return value
 
 
-def _optional_boolean(
-    payload: dict[str, object], key: str, *, default: bool
-) -> bool:
+def _optional_boolean(payload: dict[str, object], key: str, *, default: bool) -> bool:
     value = payload.get(key, default)
     if not isinstance(value, bool):
         raise InvalidRequest(f"{key} must be a boolean.")
@@ -2008,18 +1932,14 @@ def _game_removal_requests(
         )
     requests: list[GameRemovalRequest] = []
     for raw_item in value:
-        if not isinstance(raw_item, dict) or not all(
-            isinstance(key, str) for key in raw_item
-        ):
+        if not isinstance(raw_item, dict) or not all(isinstance(key, str) for key in raw_item):
             raise InvalidRequest("Each items entry must be a JSON object.")
         item = cast(dict[str, object], raw_item)
         status = _string(item, "expectedStatus")
         if status not in {"installed", "missing"}:
             raise InvalidRequest("expectedStatus must be 'installed' or 'missing'.")
         requests.append(
-            GameRemovalRequest(
-                _string(item, "gameId"), cast(RemovableGameStatus, status)
-            )
+            GameRemovalRequest(_string(item, "gameId"), cast(RemovableGameStatus, status))
         )
     return tuple(requests)
 

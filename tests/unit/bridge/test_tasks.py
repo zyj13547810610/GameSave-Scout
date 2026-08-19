@@ -1,7 +1,13 @@
 import logging
 from threading import Event
 
-from gameshelf.bridge.tasks import TaskRegistry
+import pytest
+
+from gameshelf.bridge.tasks import (
+    ActiveTaskConflict,
+    TaskCancelled,
+    TaskRegistry,
+)
 
 
 def test_task_reports_progress_and_result() -> None:
@@ -77,3 +83,90 @@ def test_task_failure_logs_internal_exception(caplog) -> None:
 
     assert "secret internal detail" in caplog.text
     assert "secret" not in str(snapshot)
+
+
+def test_exclusive_groups_block_only_active_tasks_in_the_same_group() -> None:
+    entered = Event()
+    release = Event()
+
+    def blocked(_context: object) -> None:
+        entered.set()
+        release.wait(2)
+
+    registry = TaskRegistry(max_workers=2)
+    first = registry.submit("library", blocked, exclusive_group="disk_scan")
+    assert entered.wait(1)
+    with pytest.raises(ActiveTaskConflict) as captured:
+        registry.submit("batch", blocked, exclusive_group="disk_scan")
+    assert captured.value.group == "disk_scan"
+
+    other = registry.submit("other", lambda _context: 1, exclusive_group="network")
+    assert registry.wait(other, timeout=2).status == "completed"
+    release.set()
+    assert registry.wait(first, timeout=2).status == "completed"
+
+    replacement = registry.submit(
+        "batch",
+        lambda _context: 2,
+        exclusive_group="disk_scan",
+    )
+    assert registry.wait(replacement, timeout=2).result == 2
+    registry.close()
+
+
+def test_cancellation_reason_distinguishes_user_and_shutdown() -> None:
+    entered = Event()
+    release = Event()
+    reasons: list[str] = []
+
+    def blocked(context: object) -> None:
+        entered.set()
+        release.wait(2)
+        try:
+            context.raise_if_cancelled()
+        except TaskCancelled as error:
+            reasons.append(error.reason)
+            raise
+
+    registry = TaskRegistry(max_workers=1)
+    task_id = registry.submit("user", blocked)
+    assert entered.wait(1)
+    assert registry.cancel(task_id) is True
+    release.set()
+    assert registry.wait(task_id, timeout=2).status == "cancelled"
+    assert reasons == ["user"]
+    registry.close()
+
+    entered.clear()
+
+    def shutdown_blocked(context: object) -> None:
+        entered.set()
+        Event().wait(0.1)
+        try:
+            context.raise_if_cancelled()
+        except TaskCancelled as error:
+            reasons.append(error.reason)
+            raise
+
+    registry = TaskRegistry(max_workers=1)
+    registry.submit("shutdown", shutdown_blocked)
+    assert entered.wait(1)
+    registry.close()
+    assert reasons == ["user", "shutdown"]
+
+
+def test_latest_snapshot_returns_a_copy_and_can_filter_active_tasks() -> None:
+    registry = TaskRegistry(max_workers=1)
+    first = registry.submit("scan", lambda _context: "first")
+    registry.wait(first, timeout=2)
+    second = registry.submit("scan", lambda _context: "second")
+    registry.wait(second, timeout=2)
+
+    latest = registry.latest_snapshot("scan")
+
+    assert latest is not None
+    assert latest.id == second
+    assert registry.latest_snapshot("scan", active_only=True) is None
+    latest.progress["completed"] = 999
+    assert registry.get_snapshot(second).progress["completed"] != 999
+    registry.close()
