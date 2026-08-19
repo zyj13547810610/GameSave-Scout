@@ -18,7 +18,9 @@ V1_TABLES = {
 }
 
 
-def test_migrator_creates_v2_schema_with_version_fields_and_wal(tmp_path: Path) -> None:
+def test_migrator_creates_v3_schema_with_groups_version_fields_and_wal(
+    tmp_path: Path,
+) -> None:
     factory = ConnectionFactory(tmp_path / "data" / "library.db")
 
     version = Migrator(factory, tmp_path / "backups").migrate()
@@ -39,8 +41,9 @@ def test_migrator_creates_v2_schema_with_version_fields_and_wal(tmp_path: Path) 
             for row in connection.execute("PRAGMA table_info(game_analysis_cache)")
         }
 
-    assert version == user_version == 2
+    assert version == user_version == 3
     assert tables >= V1_TABLES
+    assert {"game_groups", "game_group_memberships"} <= tables
     assert {"version", "detected_version", "version_is_manual"} <= game_columns
     assert cache_columns == {
         "game_id",
@@ -82,35 +85,35 @@ def test_new_database_cascades_game_analysis_cache_with_its_game(
     assert remaining == 0
 
 
-def test_migrator_upgrades_v1_without_splitting_existing_titles(
-    tmp_path: Path,
+@pytest.mark.parametrize("version", [1, 2])
+def test_migrator_rejects_legacy_schema_without_modifying_database(
+    tmp_path: Path, version: int
 ) -> None:
     factory = ConnectionFactory(tmp_path / "library.db")
     migrator = Migrator(factory, tmp_path / "backups")
     with factory.connect() as connection:
-        connection.executescript(migrator.migration_sql(1))
+        for target_version in range(1, version + 1):
+            connection.executescript(migrator.migration_sql(target_version))
         connection.execute(
             "INSERT INTO games (id, title, detected_title, status, added_at, updated_at) "
             "VALUES (?, ?, ?, 'save_only', ?, ?)",
             ("game-1", "AoiChan.v1.0.8", "AoiChan.v1.0.8", "now", "now"),
         )
         connection.commit()
+    database_before = factory.database_file.read_bytes()
 
-    result = migrator.migrate()
+    with pytest.raises(MigrationError, match="手动移动或删除.*library.db") as captured:
+        migrator.migrate()
 
     with factory.connect(readonly=True) as connection:
         row = connection.execute(
-            "SELECT title, version, detected_version, version_is_manual "
-            "FROM games WHERE id = 'game-1'"
+            "SELECT title FROM games WHERE id = 'game-1'"
         ).fetchone()
-    backups = list((tmp_path / "backups").glob("library-before-v2-*.db"))
 
-    assert result == 2
+    assert captured.value.backup_file is None
+    assert factory.database_file.read_bytes() == database_before
     assert row["title"] == "AoiChan.v1.0.8"
-    assert row["version"] is None
-    assert row["detected_version"] is None
-    assert row["version_is_manual"] == 0
-    assert len(backups) == 1
+    assert not (tmp_path / "backups").exists()
 
 
 def test_v1_guided_save_schema_has_single_active_slot_and_review_fields(
@@ -158,37 +161,39 @@ def test_readonly_connection_uses_rows_and_rejects_writes(tmp_path: Path) -> Non
             connection.execute("CREATE TABLE forbidden(value TEXT)")
 
 
-def test_migrator_backs_up_existing_database_before_upgrade(tmp_path: Path) -> None:
-    factory = ConnectionFactory(tmp_path / "library.db")
-    with factory.connect() as connection:
-        connection.execute("CREATE TABLE legacy(value TEXT)")
-        connection.execute("INSERT INTO legacy VALUES ('kept')")
-        connection.commit()
-
-    Migrator(factory, tmp_path / "backups").migrate()
-
-    backups = list((tmp_path / "backups").glob("library-before-v2-*.db"))
-    assert len(backups) == 1
-    backup_factory = ConnectionFactory(backups[0])
-    with backup_factory.connect(readonly=True) as connection:
-        assert connection.execute("SELECT value FROM legacy").fetchone()[0] == "kept"
-
-
-def test_failed_migration_preserves_original_and_does_not_advance_version(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_migrator_rejects_version_zero_database_with_user_tables(
+    tmp_path: Path,
 ) -> None:
     factory = ConnectionFactory(tmp_path / "library.db")
     with factory.connect() as connection:
         connection.execute("CREATE TABLE legacy(value TEXT)")
         connection.execute("INSERT INTO legacy VALUES ('kept')")
         connection.commit()
+    database_before = factory.database_file.read_bytes()
+
+    with pytest.raises(MigrationError, match="手动移动或删除.*library.db") as captured:
+        Migrator(factory, tmp_path / "backups").migrate()
+
+    assert captured.value.backup_file is None
+    assert factory.database_file.read_bytes() == database_before
+    assert not (tmp_path / "backups").exists()
+    with factory.connect(readonly=True) as connection:
+        assert connection.execute("SELECT value FROM legacy").fetchone()[0] == "kept"
+
+
+def test_failed_blank_database_creation_does_not_advance_version(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    factory = ConnectionFactory(tmp_path / "library.db")
     monkeypatch.setattr(Migrator, "migration_sql", lambda *_: "INVALID SQL")
 
     with pytest.raises(MigrationError) as captured:
         Migrator(factory, tmp_path / "backups").migrate()
 
-    assert captured.value.backup_file is not None
-    assert captured.value.backup_file.exists()
+    assert captured.value.backup_file is None
     with factory.connect() as connection:
         assert connection.execute("PRAGMA user_version").fetchone()[0] == 0
-        assert connection.execute("SELECT value FROM legacy").fetchone()[0] == "kept"
+        assert connection.execute(
+            "SELECT COUNT(*) FROM sqlite_master "
+            "WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+        ).fetchone()[0] == 0
