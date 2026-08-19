@@ -280,6 +280,32 @@ def test_set_game_metadata_atomically_normalizes_and_protects_both_fields(
     assert (row["title_is_manual"], row["version_is_manual"]) == (1, 1)
 
 
+def test_set_game_metadata_returns_existing_group_memberships(
+    library_service: LibraryService,
+) -> None:
+    root = library_service.add_root(r"D:\Games", "children", 1, [])
+    game = library_service.create_game_for_test(root.id, "Alice", "Alice")
+    with library_service._repository.factory.connect() as connection:  # noqa: SLF001
+        connection.execute(
+            """
+            INSERT INTO game_groups(id, name, normalized_name, created_at, updated_at)
+            VALUES ('group-rpg', 'RPG', 'rpg', 'now', 'now')
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO game_group_memberships(game_id, group_id, created_at)
+            VALUES (?, 'group-rpg', 'now')
+            """,
+            (game.id,),
+        )
+        connection.commit()
+
+    updated = library_service.set_game_metadata(game.id, "Alice 2", "v2")
+
+    assert updated.group_ids == ("group-rpg",)
+
+
 def test_set_game_metadata_rejects_empty_title_without_changing_either_field(
     library_service: LibraryService,
 ) -> None:

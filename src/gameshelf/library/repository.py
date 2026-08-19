@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Sequence
 from types import MappingProxyType
 from typing import Any, cast
 
@@ -45,7 +46,7 @@ class LibraryRepository:
             rows = connection.execute(
                 "SELECT * FROM games ORDER BY title COLLATE NOCASE, id"
             ).fetchall()
-        return tuple(game_from_row(row) for row in rows)
+            return games_from_rows(connection, rows)
 
     def list_games_for_root(self, root_id: str) -> tuple[Game, ...]:
         with self._factory.connect(readonly=True) as connection:
@@ -57,21 +58,21 @@ class LibraryRepository:
                 """,
                 (root_id,),
             ).fetchall()
-        return tuple(game_from_row(row) for row in rows)
+            return games_from_rows(connection, rows)
 
     def get_game(self, game_id: str) -> Game | None:
         with self._factory.connect(readonly=True) as connection:
             row = connection.execute(
                 "SELECT * FROM games WHERE id = ?", (game_id,)
             ).fetchone()
-        return None if row is None else game_from_row(row)
+            return None if row is None else game_from_row_with_groups(connection, row)
 
     def get_game_by_install_path_key(self, path_key: str) -> Game | None:
         with self._factory.connect(readonly=True) as connection:
             row = connection.execute(
                 "SELECT * FROM games WHERE install_path_key = ?", (path_key,)
             ).fetchone()
-        return None if row is None else game_from_row(row)
+            return None if row is None else game_from_row_with_groups(connection, row)
 
 
 def scan_root_from_row(row: sqlite3.Row) -> ScanRoot:
@@ -90,7 +91,58 @@ def scan_root_from_row(row: sqlite3.Row) -> ScanRoot:
     )
 
 
-def game_from_row(row: sqlite3.Row) -> Game:
+def group_ids_by_game(
+    connection: sqlite3.Connection,
+    game_ids: Sequence[str],
+) -> dict[str, tuple[str, ...]]:
+    unique_ids = tuple(dict.fromkeys(game_ids))
+    if not unique_ids:
+        return {}
+    placeholders = ", ".join("?" for _ in unique_ids)
+    rows = connection.execute(
+        f"""
+        SELECT membership.game_id, membership.group_id
+        FROM game_group_memberships AS membership
+        JOIN game_groups AS group_row ON group_row.id = membership.group_id
+        WHERE membership.game_id IN ({placeholders})
+        ORDER BY membership.game_id, group_row.created_at, group_row.id
+        """,  # noqa: S608
+        unique_ids,
+    ).fetchall()
+    collected: dict[str, list[str]] = {game_id: [] for game_id in unique_ids}
+    for row in rows:
+        collected[str(row["game_id"])].append(str(row["group_id"]))
+    return {game_id: tuple(group_ids) for game_id, group_ids in collected.items()}
+
+
+def games_from_rows(
+    connection: sqlite3.Connection,
+    rows: Sequence[sqlite3.Row],
+) -> tuple[Game, ...]:
+    ordered_rows = tuple(rows)
+    groups = group_ids_by_game(
+        connection,
+        tuple(str(row["id"]) for row in ordered_rows),
+    )
+    return tuple(
+        game_from_row(row, group_ids=groups[str(row["id"])]) for row in ordered_rows
+    )
+
+
+def game_from_row_with_groups(
+    connection: sqlite3.Connection,
+    row: sqlite3.Row,
+) -> Game:
+    game_id = str(row["id"])
+    groups = group_ids_by_game(connection, (game_id,))
+    return game_from_row(row, group_ids=groups[game_id])
+
+
+def game_from_row(
+    row: sqlite3.Row,
+    *,
+    group_ids: tuple[str, ...] = (),
+) -> Game:
     environment = _json_object(row["environment_json"])
     return Game(
         id=str(row["id"]),
@@ -128,6 +180,7 @@ def game_from_row(row: sqlite3.Row) -> Game:
         version=row["version"],
         detected_version=row["detected_version"],
         detected_main_exe_relpath=row["detected_main_exe_relpath"],
+        group_ids=group_ids,
     )
 
 

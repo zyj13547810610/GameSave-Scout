@@ -19,7 +19,7 @@ from gameshelf.bridge.tasks import TaskCancelled, TaskContext
 from gameshelf.db.writer import DbWriter
 from gameshelf.engines.service import EngineDetectionService
 from gameshelf.library.models import Game, ScanRoot
-from gameshelf.library.repository import LibraryRepository, game_from_row
+from gameshelf.library.repository import LibraryRepository, game_from_row_with_groups
 from gameshelf.library.service import RootNotFoundError
 from gameshelf.library.title_parser import split_title_and_version
 from gameshelf.scanning.analysis import AnalyzedCandidate, GameAnalyzer
@@ -624,7 +624,7 @@ class ScanService:
                 "SELECT * FROM games WHERE id = ?", (existing_game_id,)
             ).fetchone()
             assert row is not None
-            return game_from_row(row)
+            return game_from_row_with_groups(connection, row)
 
         return self._writer.submit(operation).result()
 
@@ -720,7 +720,7 @@ class ScanService:
                 "SELECT * FROM games WHERE id = ?", (game_id,)
             ).fetchone()
             assert row is not None
-            return game_from_row(row)
+            return game_from_row_with_groups(connection, row)
 
         result = self._writer.submit(operation).result()
         context.report(1, 1, "重新检测完成。")

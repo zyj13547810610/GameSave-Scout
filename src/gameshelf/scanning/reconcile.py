@@ -11,7 +11,7 @@ from pathlib import PurePosixPath
 from uuid import uuid4
 
 from gameshelf.library.models import Game, ScanRoot
-from gameshelf.library.repository import game_from_row, scan_root_from_row
+from gameshelf.library.repository import games_from_rows, scan_root_from_row
 from gameshelf.scanning.analysis_cache import (
     PendingAnalysisCache,
     delete_analysis_cache,
@@ -250,17 +250,23 @@ def reconcile_session(
         ),
     )
 
-    games: list[Game] = []
-    for game_id in observed_game_ids:
-        row = connection.execute("SELECT * FROM games WHERE id = ?", (game_id,)).fetchone()
-        assert row is not None
-        games.append(game_from_row(row))
+    if observed_game_ids:
+        placeholders = ", ".join("?" for _ in observed_game_ids)
+        rows = connection.execute(
+            f"SELECT * FROM games WHERE id IN ({placeholders})",  # noqa: S608
+            observed_game_ids,
+        ).fetchall()
+        rows_by_id = {str(row["id"]): row for row in rows}
+        ordered_rows = tuple(rows_by_id[game_id] for game_id in observed_game_ids)
+        games = games_from_rows(connection, ordered_rows)
+    else:
+        games = ()
     connection.execute("DELETE FROM scan_observations WHERE session_id = ?", (session_id,))
     return ReconcileResult(
         added=added,
         updated=updated,
         missing=missing,
-        games=tuple(games),
+        games=games,
         move_suggestions=tuple(suggestions),
     )
 

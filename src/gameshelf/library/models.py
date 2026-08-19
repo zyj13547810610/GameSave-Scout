@@ -60,6 +60,7 @@ class Game:
     version: str | None = None
     detected_version: str | None = None
     detected_main_exe_relpath: str | None = None
+    group_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

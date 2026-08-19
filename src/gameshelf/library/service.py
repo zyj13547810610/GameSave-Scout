@@ -21,7 +21,7 @@ from gameshelf.library.models import (
 )
 from gameshelf.library.repository import (
     LibraryRepository,
-    game_from_row,
+    game_from_row_with_groups,
     scan_root_from_row,
 )
 from gameshelf.scanning.path_keys import (
@@ -514,7 +514,7 @@ class LibraryService:
                 "SELECT * FROM games WHERE id = ?", (game_id,)
             ).fetchone()
             assert row is not None
-            return game_from_row(row)
+            return game_from_row_with_groups(connection, row)
 
         return self._writer.submit(operation).result()
 
@@ -546,7 +546,7 @@ class LibraryService:
                 "SELECT * FROM games WHERE id = ?", (game_id,)
             ).fetchone()
             assert row is not None
-            return game_from_row(row)
+            return game_from_row_with_groups(connection, row)
 
         return self._writer.submit(operation).result()
 

@@ -555,6 +555,23 @@ def test_reanalyze_game_ignores_cache_and_preserves_manual_fields(
     assert cache.executable_relpath == "Manual.exe"
 
 
+def test_rescan_and_reanalysis_return_existing_group_memberships(
+    scan_harness: "ScanHarness",
+) -> None:
+    root = scan_harness.add_root(mode="children")
+    scan_harness.mkdir("GameA", exes=["Game.exe"])
+    game = scan_harness.scan(root.id, "full").games[0]
+    _assign_group(scan_harness.factory, game.id, "group-rpg")
+
+    rescanned = scan_harness.scan(root.id, "full").games[0]
+    reanalyzed = scan_harness.scanner.reanalyze_game(
+        game.id, TaskContext(Event(), lambda *_: None)
+    )
+
+    assert rescanned.group_ids == ("group-rpg",)
+    assert reanalyzed.group_ids == ("group-rpg",)
+
+
 def test_failed_or_cancelled_reanalysis_preserves_game_and_cache(
     scan_harness: "ScanHarness",
 ) -> None:
@@ -687,6 +704,7 @@ def test_confirmed_move_preserves_original_game_id_and_removes_temporary_candida
     original_root = scan_harness.add_root(mode="children")
     scan_harness.mkdir("GameA", exes=["Game.exe"])
     original = scan_harness.scan(original_root.id, "full").games[0]
+    _assign_group(scan_harness.factory, original.id, "group-rpg")
     assert AnalysisCacheRepository(scan_harness.factory).get(original.id) is not None
     scan_harness.remove_dir("GameA")
     scan_harness.scan(original_root.id, "full")
@@ -710,6 +728,7 @@ def test_confirmed_move_preserves_original_game_id_and_removes_temporary_candida
     assert confirmed.scan_root_id == moved_root.id
     assert confirmed.status == "installed"
     assert confirmed.exe_arch == "x64"
+    assert confirmed.group_ids == ("group-rpg",)
     assert scan_harness.games() == (confirmed,)
     assert AnalysisCacheRepository(scan_harness.factory).get(confirmed.id) is None
 
@@ -871,6 +890,29 @@ def test_confirmed_move_keeps_ambiguous_candidates_despite_unrelated_diagnostic(
         "candidate:renpy",
         "detector_error",
     ]
+
+
+def _assign_group(
+    factory: ConnectionFactory,
+    game_id: str,
+    group_id: str,
+) -> None:
+    with factory.connect() as connection:
+        connection.execute(
+            """
+            INSERT INTO game_groups(id, name, normalized_name, created_at, updated_at)
+            VALUES (?, ?, ?, 'now', 'now')
+            """,
+            (group_id, group_id, group_id),
+        )
+        connection.execute(
+            """
+            INSERT INTO game_group_memberships(game_id, group_id, created_at)
+            VALUES (?, ?, 'now')
+            """,
+            (game_id, group_id),
+        )
+        connection.commit()
 
 
 @dataclass
