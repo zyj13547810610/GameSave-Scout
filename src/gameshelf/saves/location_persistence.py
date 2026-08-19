@@ -27,11 +27,25 @@ class PreparedSaveLocation:
     evidence: tuple[str, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class SaveLocationUpsertResult:
+    location: SaveLocation
+    created: bool
+
+
 def upsert_confirmed_location(
     connection: sqlite3.Connection,
     prepared: PreparedSaveLocation,
 ) -> SaveLocation:
     """Return an existing equivalent location or insert one in the caller transaction."""
+    return upsert_confirmed_location_result(connection, prepared).location
+
+
+def upsert_confirmed_location_result(
+    connection: sqlite3.Connection,
+    prepared: PreparedSaveLocation,
+) -> SaveLocationUpsertResult:
+    """Return both the confirmed location and whether this transaction inserted it."""
     existing = connection.execute(
         """
         SELECT * FROM save_locations
@@ -40,7 +54,7 @@ def upsert_confirmed_location(
         (prepared.game_id, prepared.kind, prepared.path_key),
     ).fetchone()
     if existing is not None:
-        return save_location_from_row(existing)
+        return SaveLocationUpsertResult(save_location_from_row(existing), False)
 
     location_id = str(uuid4())
     connection.execute(
@@ -62,8 +76,6 @@ def upsert_confirmed_location(
             json.dumps(prepared.evidence, ensure_ascii=False, separators=(",", ":")),
         ),
     )
-    row = connection.execute(
-        "SELECT * FROM save_locations WHERE id = ?", (location_id,)
-    ).fetchone()
+    row = connection.execute("SELECT * FROM save_locations WHERE id = ?", (location_id,)).fetchone()
     assert row is not None
-    return save_location_from_row(row)
+    return SaveLocationUpsertResult(save_location_from_row(row), True)
