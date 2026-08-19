@@ -144,6 +144,19 @@ describe('App', () => {
     wrapper.unmount()
   })
 
+  it('uses a compact two-row toolbar before 120% scale can hide its last control', () => {
+    const stackRule = Array.from(document.styleSheets)
+      .flatMap((sheet) => Array.from(sheet.cssRules))
+      .find((rule) => rule.cssText.startsWith('@container (max-width: 44rem)'))
+
+    expect(stackRule).toBeDefined()
+    if (!stackRule) return
+    expect(stackRule.cssText).toContain('.library-toolbar')
+    expect(stackRule.cssText).toContain('grid-template-columns: repeat(3, minmax(0, 1fr))')
+    expect(stackRule.cssText).toContain('.library-toolbar input[type="search"]')
+    expect(stackRule.cssText).toContain('grid-column: span 2')
+  })
+
   it('keeps library controls outside the independently scrollable game content', async () => {
     const bridge = createMockBridge({
       async list_games() { return ok([fixtureGame()]) },
