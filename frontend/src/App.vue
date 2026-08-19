@@ -2,8 +2,9 @@
 import { createPinia, getActivePinia, storeToRefs } from 'pinia'
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { bridgeKey, createBridge } from './api/bridge'
-import type { CoverWizardSettings, Game, LibraryScanSettings, RemovableGameStatus, ScanRoot } from './api/contracts'
+import type { CoverWizardSettings, Game, GroupMembershipUpdateResult, LibraryScanSettings, RemovableGameStatus, ScanRoot } from './api/contracts'
 import CoverWizardWorkspace from './features/covers/CoverWizardWorkspace.vue'
+import BatchGroupDialog from './features/library/BatchGroupDialog.vue'
 import BatchManagementBar from './features/library/BatchManagementBar.vue'
 import GameGrid from './features/library/GameGrid.vue'
 import GroupManagementDialog from './features/library/GroupManagementDialog.vue'
@@ -45,6 +46,9 @@ const batchMode = ref(false)
 const batchBusy = ref(false)
 const batchError = ref('')
 const batchNotice = ref('')
+const showBatchGroup = ref(false)
+const batchGroupReturnFocus = ref<HTMLElement | null>(null)
+const resumeBatchGroupAfterManagement = ref(false)
 const showCoverWizard = ref(false)
 const showGroupManager = ref(false)
 const groupManagerReturnFocus = ref<HTMLElement | null>(null)
@@ -67,11 +71,12 @@ const filteredGames = computed(() => filterGames(games.value, {
   group: store.groupFilter,
 }))
 const engines = computed(() => [...new Set(games.value.map((game) => game.engineId).filter((value): value is string => Boolean(value)))].sort())
-const removableGames = computed(() => games.value.filter(isRemovableGame))
-const selectedBatchGames = computed(() => removableGames.value.filter((game) => selectedGameIds.value.has(game.id)))
-const selectedInstalledCount = computed(() => selectedBatchGames.value.filter((game) => game.status === 'installed').length)
-const selectedMissingCount = computed(() => selectedBatchGames.value.filter((game) => game.status === 'missing').length)
-const visibleRemovableGames = computed(() => filteredGames.value.filter(isRemovableGame))
+const selectedGames = computed(() => games.value.filter((game) => selectedGameIds.value.has(game.id)))
+const selectedRemovableGames = computed(() => selectedGames.value.filter(isRemovableGame))
+const selectedInstalledCount = computed(() => selectedGames.value.filter((game) => game.status === 'installed').length)
+const selectedMissingCount = computed(() => selectedGames.value.filter((game) => game.status === 'missing').length)
+const selectedSaveOnlyCount = computed(() => selectedGames.value.filter((game) => game.status === 'save_only').length)
+const canRemoveSelected = computed(() => selectedGames.value.length > 0 && selectedSaveOnlyCount.value === 0)
 
 function resetGameContentScroll() {
   if (gameContentScroll.value) gameContentScroll.value.scrollTop = 0
@@ -115,11 +120,11 @@ function exitBatchMode() {
   batchMode.value = false
   batchBusy.value = false
   batchError.value = ''
+  showBatchGroup.value = false
   selectedGameIds.value = new Set()
 }
 
 function toggleBatchGame(game: Game) {
-  if (!isRemovableGame(game)) return
   const next = new Set(selectedGameIds.value)
   if (next.has(game.id)) next.delete(game.id)
   else next.add(game.id)
@@ -128,7 +133,7 @@ function toggleBatchGame(game: Game) {
 
 function selectVisibleGames() {
   const next = new Set(selectedGameIds.value)
-  for (const game of visibleRemovableGames.value) next.add(game.id)
+  for (const game of filteredGames.value) next.add(game.id)
   selectedGameIds.value = next
 }
 
@@ -137,8 +142,8 @@ function clearBatchSelection() {
 }
 
 async function removeSelectedGames() {
-  const selected = selectedBatchGames.value
-  if (selected.length === 0 || batchBusy.value) return
+  const selected = selectedRemovableGames.value
+  if (!canRemoveSelected.value || batchBusy.value) return
   const installedCount = selectedInstalledCount.value
   const missingCount = selectedMissingCount.value
   const confirmed = window.confirm(
@@ -174,6 +179,36 @@ async function removeSelectedGames() {
   if (result.data.cleanupWarnings.length) {
     batchNotice.value += ` ${result.data.cleanupWarnings.join(' ')}`
   }
+}
+
+function openBatchGroup(event: MouseEvent) {
+  if (selectedGames.value.length === 0 || batchBusy.value) return
+  batchGroupReturnFocus.value = event.currentTarget as HTMLElement
+  batchError.value = ''
+  showBatchGroup.value = true
+}
+
+async function closeBatchGroup() {
+  showBatchGroup.value = false
+  await nextTick()
+  batchGroupReturnFocus.value?.focus()
+}
+
+async function batchGroupsApplied(result: GroupMembershipUpdateResult) {
+  const selectedSnapshot = new Set(selectedGameIds.value)
+  showBatchGroup.value = false
+  batchBusy.value = true
+  await store.load(bridge)
+  const existingIds = new Set(games.value.map((game) => game.id))
+  selectedGameIds.value = new Set([...selectedSnapshot].filter((gameId) => existingIds.has(gameId)))
+  batchBusy.value = false
+  batchNotice.value = `分组调整完成：已加入 ${result.addedCount}，已移出 ${result.removedCount}，未变化 ${result.unchangedCount}。`
+}
+
+function manageGroupsFromBatch() {
+  resumeBatchGroupAfterManagement.value = true
+  groupManagerReturnFocus.value = null
+  showGroupManager.value = true
 }
 
 async function bootstrap() {
@@ -232,6 +267,11 @@ function openGroupManager(event: MouseEvent) {
 async function closeGroupManager() {
   showGroupManager.value = false
   await nextTick()
+  if (resumeBatchGroupAfterManagement.value) {
+    resumeBatchGroupAfterManagement.value = false
+    document.querySelector<HTMLElement>('[data-test="manage-groups-from-batch"]')?.focus()
+    return
+  }
   groupManagerReturnFocus.value?.focus()
 }
 
@@ -272,28 +312,31 @@ function restoreGuidedSave(gameId: string) {
 
     <template v-else>
       <div v-if="error" class="error-banner" role="alert"><span>{{ error }}</span><button type="button" @click="store.dismissError">关闭</button></div>
-      <div class="library-layout" :inert="showCoverWizard || showGroupManager" :aria-hidden="showCoverWizard || showGroupManager ? 'true' : undefined">
+      <div class="library-layout" :inert="showCoverWizard || showGroupManager || showBatchGroup" :aria-hidden="showCoverWizard || showGroupManager || showBatchGroup ? 'true' : undefined">
         <ScanRootList :bridge="bridge" :roots="roots" :library-scan-settings="libraryScanSettings" :scan-tasks="scanTasks" :task-snapshots="taskSnapshots" @settings-updated="libraryScanSettings = $event" @scan="scan" @cancel="(id) => store.cancelScan(bridge, id)" @toggle="(root, enabled) => store.updateRoot(bridge, root, enabled)" @edit="editingRoot = $event" @remove="(id) => store.removeRoot(bridge, id)" @remap="(id, path) => store.remapRoot(bridge, id, path)" />
         <section class="library-content">
           <div class="library-fixed-controls" data-test="library-fixed-controls">
             <div class="content-heading">
               <h2>我的游戏 <span>{{ games.length }}</span></h2>
               <div class="compact-actions">
-                <button v-if="!batchMode && removableGames.length" data-test="enter-batch-mode" class="secondary" type="button" @click="enterBatchMode">批量管理</button>
+                <button v-if="!batchMode && games.length" data-test="enter-batch-mode" class="secondary" type="button" @click="enterBatchMode">批量管理</button>
                 <button ref="coverWizardEntry" data-test="enter-cover-wizard" class="secondary" type="button" @click="openCoverWizard">批量封面</button>
               </div>
             </div>
             <div v-if="batchNotice" data-test="batch-result" class="batch-result" role="status">{{ batchNotice }}</div>
             <BatchManagementBar
               v-if="batchMode"
-              :selected-count="selectedBatchGames.length"
+              :selected-count="selectedGames.length"
               :installed-count="selectedInstalledCount"
               :missing-count="selectedMissingCount"
+              :save-only-count="selectedSaveOnlyCount"
               :busy="batchBusy"
-              :can-select-visible="visibleRemovableGames.length > 0"
+              :can-select-visible="filteredGames.length > 0"
+              :can-remove="canRemoveSelected"
               @select-visible="selectVisibleGames"
               @clear="clearBatchSelection"
               @exit="exitBatchMode"
+              @group="openBatchGroup"
               @remove="removeSelectedGames"
             />
             <p v-if="batchError" class="inline-error" role="alert">{{ batchError }}</p>
@@ -335,6 +378,17 @@ function restoreGuidedSave(gameId: string) {
       <div v-if="editingRoot" class="dialog-backdrop" @click.self="editingRoot = null"><ScanRootDialog :bridge="bridge" :root="editingRoot" @saved="rootSaved" @close="editingRoot = null" /></div>
       <div v-if="showGroupManager" class="dialog-backdrop" @click.self="closeGroupManager">
         <GroupManagementDialog :bridge="bridge" :groups="groups" @changed="groupsChanged" @close="closeGroupManager" />
+      </div>
+      <div v-if="showBatchGroup && !showGroupManager" class="dialog-backdrop" @click.self="closeBatchGroup">
+        <BatchGroupDialog
+          :open="showBatchGroup && !showGroupManager"
+          :bridge="bridge"
+          :groups="groups"
+          :selected-game-ids="[...selectedGameIds]"
+          @applied="batchGroupsApplied"
+          @manage-groups="manageGroupsFromBatch"
+          @close="closeBatchGroup"
+        />
       </div>
       <GuidedSaveCloseDialog :bridge="bridge" />
       <CoverWizardWorkspace

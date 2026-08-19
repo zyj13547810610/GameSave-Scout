@@ -31,7 +31,7 @@ let opener: HTMLElement | null = null
 
 function activate(game: Game, event: Event) {
   if (props.batchMode) {
-    if (game.status !== 'save_only') emit('toggleSelection', game)
+    emit('toggleSelection', game)
     return
   }
   opener = event.currentTarget as HTMLElement

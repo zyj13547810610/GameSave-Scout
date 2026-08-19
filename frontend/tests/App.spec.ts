@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../src/App.vue'
 import { bridgeKey } from '../src/api/bridge'
 import type { ApiResult, Game, GameShelfBridge, UiScaleValue } from '../src/api/contracts'
-import { createMockBridge, fixtureGame, fixtureGuidedSession, fixtureRoot, ok } from '../src/api/mockBridge'
+import { createMockBridge, fixtureGame, fixtureGroup, fixtureGuidedSession, fixtureRoot, ok } from '../src/api/mockBridge'
 import '../src/styles/base.css'
 
 beforeEach(() => {
@@ -486,9 +486,14 @@ describe('App', () => {
     await wrapper.get('[data-test="game-card-save-1"]').trigger('click')
 
     expect(wrapper.find('[data-test="game-detail-drawer"]').exists()).toBe(false)
-    expect(wrapper.get('[data-test="game-card-save-1"]').attributes('disabled')).toBeDefined()
-    expect(wrapper.get('[data-test="batch-counts"]').text()).toContain('已选择 1 个')
+    expect(wrapper.get('[data-test="game-card-save-1"]').attributes('disabled')).toBeUndefined()
+    expect(wrapper.get('[data-test="batch-counts"]').text()).toContain('已选择 2 个')
     expect(wrapper.get('[data-test="batch-counts"]').text()).toContain('已安装 1')
+    expect(wrapper.get('[data-test="batch-counts"]').text()).toContain('仅存档 1')
+    expect(wrapper.get('[data-test="batch-delete"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('[data-test="batch-group"]').attributes('disabled')).toBeUndefined()
+
+    await wrapper.get('[data-test="game-card-save-1"]').trigger('click')
 
     await wrapper.get('select[aria-label="状态筛选"]').setValue('missing')
     await wrapper.get('[data-test="select-visible-games"]').trigger('click')
@@ -513,6 +518,81 @@ describe('App', () => {
     expect(wrapper.get('[data-test="batch-result"]').text()).toContain(
       '有 1 个受管封面文件未能清理',
     )
+  })
+
+  it('keeps batch mode and remaining selections after a group update', async () => {
+    const initialGames = [
+      fixtureGame({ id: 'installed-1', status: 'installed' }),
+      fixtureGame({ id: 'save-1', status: 'save_only' }),
+    ]
+    let listCalls = 0
+    const update = vi.fn(async () => ok({ addedCount: 1, removedCount: 0, unchangedCount: 1 }))
+    const bridge = createMockBridge({
+      async list_games() {
+        listCalls += 1
+        return ok(listCalls === 1 ? initialGames : [initialGames[1]])
+      },
+      async list_game_groups() { return ok([fixtureGroup({ id: 'group-rpg', name: 'RPG' })]) },
+      update_game_group_memberships: update,
+    })
+    const wrapper = mount(App, {
+      global: {
+        plugins: [createPinia()],
+        provide: { [bridgeKey as symbol]: bridge },
+      },
+    })
+    await flushPromises()
+
+    await wrapper.get('[data-test="enter-batch-mode"]').trigger('click')
+    await wrapper.get('[data-test="game-card-installed-1"]').trigger('click')
+    await wrapper.get('[data-test="game-card-save-1"]').trigger('click')
+    await wrapper.get('[data-test="batch-group"]').trigger('click')
+    await wrapper.get('[data-test="batch-group-select"]').setValue('group-rpg')
+    await wrapper.get('[data-test="batch-group-form"]').trigger('submit')
+    await flushPromises()
+
+    expect(update).toHaveBeenCalledWith({
+      groupId: 'group-rpg',
+      gameIds: ['installed-1', 'save-1'],
+      mode: 'add',
+    })
+    expect(wrapper.find('[data-test="batch-group-dialog"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="batch-management-bar"]').exists()).toBe(true)
+    expect(wrapper.get('[data-test="batch-counts"]').text()).toContain('已选择 1 个')
+    expect(wrapper.get('[data-test="batch-counts"]').text()).toContain('仅存档 1')
+    expect(wrapper.get('[data-test="game-card-save-1"]').attributes('aria-pressed')).toBe('true')
+    expect(wrapper.get('[data-test="batch-result"]').text()).toContain('已加入 1，已移出 0，未变化 1')
+  })
+
+  it('keeps the batch group dialog and selection after an update failure', async () => {
+    const bridge = createMockBridge({
+      async list_games() { return ok([fixtureGame({ id: 'save-1', status: 'save_only' })]) },
+      async list_game_groups() { return ok([fixtureGroup({ id: 'group-rpg' })]) },
+      async update_game_group_memberships() {
+        return { ok: false, error: { code: 'failed', message: '批量调整失败' } }
+      },
+    })
+    const wrapper = mount(App, {
+      global: {
+        plugins: [createPinia()],
+        provide: { [bridgeKey as symbol]: bridge },
+      },
+    })
+    await flushPromises()
+
+    await wrapper.get('[data-test="enter-batch-mode"]').trigger('click')
+    await wrapper.get('[data-test="game-card-save-1"]').trigger('click')
+    await wrapper.get('[data-test="batch-group"]').trigger('click')
+    await wrapper.get('[data-test="batch-group-select"]').setValue('group-rpg')
+    await wrapper.get('[data-test="batch-group-mode-remove"]').setValue(true)
+    await wrapper.get('[data-test="batch-group-form"]').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="batch-group-dialog"]').exists()).toBe(true)
+    expect(wrapper.get('[role="alert"]').text()).toContain('批量调整失败')
+    expect((wrapper.get('[data-test="batch-group-select"]').element as HTMLSelectElement).value).toBe('group-rpg')
+    expect((wrapper.get('[data-test="batch-group-mode-remove"]').element as HTMLInputElement).checked).toBe(true)
+    expect(wrapper.get('[data-test="game-card-save-1"]').attributes('aria-pressed')).toBe('true')
   })
 
   it('cancels batch mode and refreshes when a selected game status changed', async () => {

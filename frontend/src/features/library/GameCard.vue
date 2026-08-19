@@ -20,9 +20,8 @@ const labels = { installed: '已安装', missing: '本体失效', save_only: '�
   <button
     :data-test="`game-card-${game.id}`"
     class="cover-card"
-    :class="{ 'batch-selected': selected, 'batch-disabled': batchMode && game.status === 'save_only' }"
+    :class="{ 'batch-selected': selected }"
     type="button"
-    :disabled="batchMode && game.status === 'save_only'"
     :aria-pressed="batchMode ? selected : undefined"
     @click="$emit('open', $event)"
   >
