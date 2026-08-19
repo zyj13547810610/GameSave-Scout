@@ -286,3 +286,26 @@ def _safe_iterdir(directory: Path) -> tuple[Path, ...]:
         return tuple(directory.iterdir())
     except OSError:
         return ()
+
+
+def load_engine_metadata(game: Game, install_dir: Path) -> Mapping[str, str]:
+    """Read the small, engine-owned metadata files used by save hints."""
+
+    if game.engine_id != "unity":
+        return {}
+    candidates: list[Path] = []
+    if game.main_exe_relpath:
+        candidates.append(
+            install_dir / f"{Path(game.main_exe_relpath).stem}_Data" / "app.info"
+        )
+    candidates.extend(sorted(install_dir.glob("*_Data/app.info")))
+    for candidate in dict.fromkeys(candidates):
+        if not candidate.is_file():
+            continue
+        try:
+            lines = [line.strip() for line in read_text_limit(candidate).splitlines()]
+        except OSError:
+            continue
+        if len(lines) >= 2 and lines[0] and lines[1]:
+            return {"companyName": lines[0], "productName": lines[1]}
+    return {}

@@ -11,6 +11,7 @@ import pytest
 from gameshelf.db.connection import ConnectionFactory
 from gameshelf.db.migrator import Migrator
 from gameshelf.db.writer import DbWriter
+from gameshelf.library.models import Game
 from gameshelf.library.repository import LibraryRepository
 from gameshelf.library.service import LibraryService
 from gameshelf.platform.windows.known_folders import KnownFolders
@@ -18,7 +19,7 @@ from gameshelf.saves.custom_manifest_provider import (
     CustomManifestLoadResult,
     LoadedCustomManifest,
 )
-from gameshelf.saves.engine_hints import EngineSaveHintProvider
+from gameshelf.saves.engine_hints import EngineSaveHintProvider, load_engine_metadata
 from gameshelf.saves.ludusavi_index import LudusaviIndex
 from gameshelf.saves.ludusavi_index_builder import build_ludusavi_index
 from gameshelf.saves.ludusavi_parser import parse_manifest
@@ -242,3 +243,47 @@ def test_invalidate_ludusavi_reloads_index_on_next_explicit_search(
 
     assert provider.session_calls == 2
     assert static_harness.discovery._official_matcher is not first_matcher
+
+
+def test_public_engine_metadata_loader_reads_unity_app_info(tmp_path: Path) -> None:
+    game = _unity_game()
+    install_dir = tmp_path / "UnityGame"
+    metadata = install_dir / "UnityGame_Data" / "app.info"
+    metadata.parent.mkdir(parents=True)
+    metadata.write_text("Studio\nProduct\n", encoding="utf-8")
+
+    assert load_engine_metadata(game, install_dir) == {
+        "companyName": "Studio",
+        "productName": "Product",
+    }
+
+
+def _unity_game() -> Game:
+    return Game(
+        id="unity-game",
+        scan_root_id="root-1",
+        relative_dir="UnityGame",
+        install_path_key=r"d:\games\unitygame",
+        title="UnityGame",
+        detected_title="UnityGame",
+        status="installed",
+        detected_engine_id="unity",
+        detected_engine_variant=None,
+        engine_id="unity",
+        engine_variant=None,
+        engine_is_manual=False,
+        engine_confidence=1.0,
+        engine_evidence=(),
+        engine_rules_version="test",
+        main_exe_relpath="UnityGame.exe",
+        main_exe_is_manual=False,
+        working_dir_relpath=None,
+        launch_args=(),
+        environment={},
+        exe_arch="unknown",
+        cover_original_relpath=None,
+        cover_thumb_relpath=None,
+        cover_revision=0,
+        last_launched_at=None,
+        missing_since=None,
+    )

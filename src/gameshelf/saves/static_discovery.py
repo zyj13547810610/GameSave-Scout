@@ -10,11 +10,10 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Protocol
 
-from gameshelf.engines.bounded_reader import read_text_limit
 from gameshelf.library.models import Game
 from gameshelf.library.service import GameNotFoundError, LibraryService
 from gameshelf.saves.custom_manifest_provider import CustomManifestLoadResult
-from gameshelf.saves.engine_hints import EngineSaveHintProvider
+from gameshelf.saves.engine_hints import EngineSaveHintProvider, load_engine_metadata
 from gameshelf.saves.ludusavi_index import InvalidLudusaviIndex, LudusaviIndex
 from gameshelf.saves.ludusavi_index_matcher import IndexedLudusaviMatcher
 from gameshelf.saves.ludusavi_matcher import LudusaviMatcher
@@ -65,7 +64,7 @@ class StaticSaveDiscovery:
         self._ludusavi_provider = ludusavi_provider
         self._custom_provider = custom_provider
         self._engine_hints = engine_hints
-        self._engine_metadata_loader = engine_metadata_loader or _load_engine_metadata
+        self._engine_metadata_loader = engine_metadata_loader or load_engine_metadata
         self._engine_is_experimental = engine_is_experimental or (lambda _engine: False)
         self._official_matcher: IndexedLudusaviMatcher | None = None
 
@@ -292,24 +291,3 @@ def _canonical_kind(kind: str, path_template: str) -> str:
     if kind == "glob" and any(character in path_template for character in "*?["):
         return "glob"
     return "path"
-
-
-def _load_engine_metadata(game: Game, install_dir: Path) -> Mapping[str, str]:
-    if game.engine_id != "unity":
-        return {}
-    candidates: list[Path] = []
-    if game.main_exe_relpath:
-        candidates.append(
-            install_dir / f"{Path(game.main_exe_relpath).stem}_Data" / "app.info"
-        )
-    candidates.extend(sorted(install_dir.glob("*_Data/app.info")))
-    for candidate in dict.fromkeys(candidates):
-        if not candidate.is_file():
-            continue
-        try:
-            lines = [line.strip() for line in read_text_limit(candidate).splitlines()]
-        except OSError:
-            continue
-        if len(lines) >= 2 and lines[0] and lines[1]:
-            return {"companyName": lines[0], "productName": lines[1]}
-    return {}

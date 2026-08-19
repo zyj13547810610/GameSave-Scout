@@ -26,6 +26,13 @@ class SaveLocationRepository:
             ).fetchall()
         return tuple(save_location_from_row(row) for row in rows)
 
+    def list_all(self) -> tuple[SaveLocation, ...]:
+        with self._factory.connect(readonly=True) as connection:
+            rows = connection.execute(
+                "SELECT * FROM save_locations ORDER BY rowid"
+            ).fetchall()
+        return tuple(save_location_from_row(row) for row in rows)
+
     def get(self, location_id: str) -> SaveLocation | None:
         with self._factory.connect(readonly=True) as connection:
             row = connection.execute(

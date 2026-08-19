@@ -27,11 +27,13 @@ def test_repository_round_trips_immutable_save_location(tmp_path: Path) -> None:
             """
         )
 
-    loaded = SaveLocationRepository(factory).list_for_game("game-1")[0]
+    repository = SaveLocationRepository(factory)
+    loaded = repository.list_for_game("game-1")[0]
 
     assert loaded.path_template == r"<home>\Saves"
     assert loaded.evidence == ("用户手动添加",)
     assert loaded.exists is None
+    assert repository.list_all() == (loaded,)
     with pytest.raises(FrozenInstanceError):
         loaded.enabled = False  # type: ignore[misc]
 

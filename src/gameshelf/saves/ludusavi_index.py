@@ -267,12 +267,7 @@ class LudusaviIndex:
                 ).fetchall()
         except (OSError, sqlite3.Error) as error:
             raise InvalidLudusaviIndex("无法读取 Ludusavi 字面路径规则。") from error
-        return tuple(
-            rule
-            for row in rows
-            if _is_literal_pattern(str(row[4]))
-            for rule in (_indexed_path_rule(row),)
-        )
+        return tuple(_indexed_path_rule(row) for row in rows)
 
     def find_path_rules(
         self,
@@ -410,12 +405,6 @@ def _normalize_relative_path(value: object) -> str:
 
 def _segment_key(value: str) -> str:
     return windows_path_key(value)
-
-
-def _is_literal_pattern(value: str) -> bool:
-    return not any(character in value for character in "*?[") and not _EMBEDDED_TOKEN.search(
-        value
-    )
 
 
 def _windows_glob_match(pattern: str, relative_path: str) -> bool:
