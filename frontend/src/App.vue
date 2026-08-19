@@ -316,6 +316,7 @@ function restoreGuidedSave(gameId: string) {
               <GameGrid
                 v-else
                 :games="filteredGames"
+                :groups="groups"
                 :bridge="bridge"
                 :batch-mode="batchMode"
                 :selected-game-ids="selectedGameIds"
@@ -324,6 +325,7 @@ function restoreGuidedSave(gameId: string) {
                 @toggle-selection="toggleBatchGame"
                 @updated="store.updateGame"
                 @removed="gameRemoved"
+                @manage-groups="openGroupManager"
               />
             </template>
           </div>

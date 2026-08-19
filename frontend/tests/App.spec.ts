@@ -279,6 +279,34 @@ describe('App', () => {
     wrapper.unmount()
   })
 
+  it('opens group management from the detail drawer and restores that button focus', async () => {
+    const bridge = createMockBridge({
+      async list_games() { return ok([fixtureGame()]) },
+      async list_game_groups() { return ok([]) },
+    })
+    const wrapper = mount(App, {
+      attachTo: document.body,
+      global: {
+        plugins: [createPinia()],
+        provide: { [bridgeKey as symbol]: bridge },
+      },
+    })
+    await flushPromises()
+    await wrapper.get('[data-test="game-card-game-1"]').trigger('click')
+    await flushPromises()
+    const entry = wrapper.get('[data-test="manage-groups-from-detail"]')
+
+    await entry.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-test="group-management-dialog"]').exists()).toBe(true)
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="group-management-dialog"]').exists()).toBe(false)
+    expect(document.activeElement).toBe(entry.element)
+    wrapper.unmount()
+  })
+
   it('connects before rendering the empty-library message', async () => {
     const wrapper = mount(App, { global: { plugins: [createPinia()] } })
     expect(wrapper.get('h1').text()).toBe('GameShelf')

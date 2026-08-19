@@ -1,13 +1,23 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
-import type { Game, GameShelfBridge } from '../../api/contracts'
+import type { Game, GameGroup, GameShelfBridge } from '../../api/contracts'
 import CoverActions from '../covers/CoverActions.vue'
 import EngineSection from '../engines/EngineSection.vue'
 import SaveLocationList from '../saves/SaveLocationList.vue'
 import GameSettingsPanel from './GameSettingsPanel.vue'
+import GameGroupSection from './GameGroupSection.vue'
 
-const props = defineProps<{ game: Game; bridge: GameShelfBridge }>()
-const emit = defineEmits<{ close: []; updated: [game: Game]; removed: [gameId: string] }>()
+const props = withDefaults(defineProps<{
+  game: Game
+  bridge: GameShelfBridge
+  groups?: GameGroup[]
+}>(), { groups: () => [] })
+const emit = defineEmits<{
+  close: []
+  updated: [game: Game]
+  removed: [gameId: string]
+  manageGroups: [event: MouseEvent]
+}>()
 const drawer = ref<HTMLElement | null>(null)
 const quickBusy = ref(false)
 const quickMessage = ref('')
@@ -146,6 +156,13 @@ onBeforeUnmount(() => {
         <CoverActions :game-id="game.id" :has-cover="Boolean(game.coverOriginalUrl)" :bridge="bridge" @updated="$emit('updated', $event)" />
       </section>
       <GameSettingsPanel :game="game" :bridge="bridge" @updated="$emit('updated', $event)" />
+      <GameGroupSection
+        :game="game"
+        :groups="groups"
+        :bridge="bridge"
+        @updated="$emit('updated', $event)"
+        @manage-groups="$emit('manageGroups', $event)"
+      />
       <SaveLocationList :game-id="game.id" :bridge="bridge" />
       <EngineSection :game="game" :bridge="bridge" @updated="$emit('updated', $event)" />
       <details v-if="game.status !== 'save_only'" data-test="record-section" class="detail-section record-danger-zone">

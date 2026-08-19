@@ -57,6 +57,7 @@ describe('GameDetailDrawer', () => {
       '[data-test="detail-overview"]',
       '[data-test="detail-cover-actions"]',
       '[data-test="game-settings-section"]',
+      '[data-test="game-groups-section"]',
       '[data-test="save-locations-section"]',
       '[data-test="engine-section"]',
       '[data-test="record-section"]',
@@ -68,6 +69,7 @@ describe('GameDetailDrawer', () => {
         .toBe(Node.DOCUMENT_POSITION_FOLLOWING)
     }
     expect(wrapper.get('[data-test="game-settings-section"]').attributes()).toHaveProperty('open')
+    expect(wrapper.get('[data-test="game-groups-section"]').attributes()).toHaveProperty('open')
     expect(wrapper.get('[data-test="save-locations-section"]').attributes()).toHaveProperty('open')
     expect(wrapper.get('[data-test="engine-section"]').attributes()).not.toHaveProperty('open')
     expect(wrapper.get('[data-test="record-section"]').attributes()).not.toHaveProperty('open')

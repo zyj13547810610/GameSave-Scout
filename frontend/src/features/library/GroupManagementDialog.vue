@@ -72,14 +72,17 @@ async function deleteGroup(group: GameGroup) {
 }
 
 function onKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape' && !busyAction.value) emit('close')
+  if (event.key === 'Escape' && !busyAction.value) {
+    event.stopImmediatePropagation()
+    emit('close')
+  }
 }
 
 onMounted(() => {
-  window.addEventListener('keydown', onKeydown)
+  window.addEventListener('keydown', onKeydown, { capture: true })
   void nextTick(() => createInput.value?.focus())
 })
-onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
+onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown, { capture: true }))
 </script>
 
 <template>

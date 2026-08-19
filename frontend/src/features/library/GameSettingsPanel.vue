@@ -177,6 +177,8 @@ function isGameTaskResult(value: unknown, gameId: string): value is Game {
     && nullableString(game.coverOriginalUrl)
     && nullableString(game.lastLaunchedAt)
     && nullableString(game.missingSince)
+    && Array.isArray(game.groupIds)
+    && game.groupIds.every((groupId) => typeof groupId === 'string')
 }
 
 function nullableString(value: unknown): value is string | null {

@@ -200,6 +200,31 @@ describe('GameSettingsPanel', () => {
     expect(wrapper.get('[data-test="reanalysis-error"]').text()).toContain('无效结果')
   })
 
+  it('rejects a completed task result with malformed group ids', async () => {
+    const invalid = { ...fixtureGame(), groupIds: ['group-rpg', 1] }
+    const wrapper = mount(GameSettingsPanel, {
+      props: {
+        game: fixtureGame(),
+        bridge: createMockBridge({
+          async start_game_reanalysis() { return ok({ taskId: 'reanalyze-1' }) },
+          async task_snapshot() {
+            return ok({
+              id: 'reanalyze-1', kind: 'game_reanalysis', status: 'completed',
+              progress: { completed: 1, total: 1 }, message: '完成', details: {},
+              result: invalid, error: null,
+            })
+          },
+        }),
+      },
+    })
+
+    await wrapper.get('[data-test="reanalyze-game"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.emitted('updated')).toBeUndefined()
+    expect(wrapper.get('[data-test="reanalysis-error"]').text()).toContain('无效结果')
+  })
+
   it('cancels an active reanalysis task', async () => {
     vi.useFakeTimers()
     const cancel = vi.fn(async () => ok({ cancelled: true }))

@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, nextTick, watch } from 'vue'
-import type { Game, GameShelfBridge } from '../../api/contracts'
+import type { Game, GameGroup, GameShelfBridge } from '../../api/contracts'
 import GameCard from './GameCard.vue'
 import GameDetailDrawer from './GameDetailDrawer.vue'
 
 const props = withDefaults(defineProps<{
   games: Game[]
   bridge: GameShelfBridge
+  groups?: GameGroup[]
   batchMode?: boolean
   selectedGameIds?: Set<string>
   selectedGameId?: string | null
@@ -14,11 +15,13 @@ const props = withDefaults(defineProps<{
   batchMode: false,
   selectedGameIds: () => new Set<string>(),
   selectedGameId: null,
+  groups: () => [],
 })
 const emit = defineEmits<{
   updated: [game: Game]
   removed: [gameId: string]
   toggleSelection: [game: Game]
+  manageGroups: [event: MouseEvent]
   'update:selectedGameId': [gameId: string | null]
 }>()
 const selected = computed(
@@ -67,5 +70,14 @@ watch(() => props.batchMode, (enabled) => {
       @open="activate(game, $event)"
     />
   </div>
-  <GameDetailDrawer v-if="selected" :game="selected" :bridge="bridge" @close="close" @updated="updated" @removed="removed" />
+  <GameDetailDrawer
+    v-if="selected"
+    :game="selected"
+    :groups="groups"
+    :bridge="bridge"
+    @close="close"
+    @updated="updated"
+    @removed="removed"
+    @manage-groups="$emit('manageGroups', $event)"
+  />
 </template>
