@@ -13,6 +13,26 @@ beforeEach(() => {
 })
 
 describe('App', () => {
+  it('keeps first-level navigation in a fixed sidebar beside the flexible workspace', async () => {
+    const wrapper = mount(App, {
+      attachTo: document.body,
+      global: { plugins: [createPinia()], provide: { [bridgeKey as symbol]: createMockBridge() } },
+    })
+    await flushPromises()
+
+    const shell = wrapper.get('.app-shell')
+    const sidebar = wrapper.get('.app-sidebar')
+    const navigation = wrapper.get('.primary-navigation')
+    const libraryLayout = wrapper.get('.library-layout')
+
+    expect(navigation.element.parentElement).toBe(sidebar.element)
+    expect(getComputedStyle(shell.element).display).toBe('grid')
+    expect(getComputedStyle(shell.element).gridTemplateColumns).toBe('15.625rem minmax(0, 1fr)')
+    expect(getComputedStyle(navigation.element).gridTemplateColumns).toBe('repeat(2, minmax(0, 1fr))')
+    expect(getComputedStyle(libraryLayout.element).display).toBe('flex')
+    wrapper.unmount()
+  })
+
   it('switches native first-level navigation without cancelling an active scan', async () => {
     const cancel = vi.fn(async () => ok({ cancelled: true }))
     const bridge = createMockBridge({ cancel_task: cancel })

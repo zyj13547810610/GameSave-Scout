@@ -73,6 +73,18 @@ class _Custom:
         return self.result
 
 
+class _BrokenLudusavi:
+    @contextmanager
+    def index_session(self) -> Iterator[LudusaviIndex]:
+        raise OSError("索引损坏")
+        yield  # pragma: no cover
+
+
+class _BrokenCustom:
+    def load_all(self) -> CustomManifestLoadResult:
+        raise ValueError("清单损坏")
+
+
 @dataclass
 class _Registry:
     existing: set[str]
@@ -214,6 +226,28 @@ Alice:
     assert any(item.display_path == str(unity_directory) for item in catalog.candidates)
     assert any(item.kind == "registry" for item in catalog.candidates)
     assert any(item.relative_pattern == r"External\*.sav" for item in catalog.reverse_path_rules)
+    assert catalog.rules_version
+
+
+def test_batch_rule_provider_degrades_when_official_and_custom_rules_are_broken(
+    tmp_path: Path,
+) -> None:
+    resolver = PathTemplateResolver(_folders(tmp_path))
+    provider = BatchRuleProvider(
+        library=_Library((), {}),
+        save_repository=_SaveLocations(()),
+        resolver=resolver,
+        ludusavi_provider=_BrokenLudusavi(),
+        custom_provider=_BrokenCustom(),
+        engine_hints=EngineSaveHintProvider(resolver),
+        registry=_Registry(set(), []),
+    )
+
+    catalog = provider.collect(BatchRuleContext(("<winDocuments>",)))
+
+    assert catalog.candidates == ()
+    assert any("自定义存档清单" in warning for warning in catalog.warnings)
+    assert any("Ludusavi" in warning for warning in catalog.warnings)
     assert catalog.rules_version
 
 

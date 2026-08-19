@@ -110,16 +110,6 @@ label {
   font-size: .8125rem;
 }
 
-.app-shell {
-  display: flex;
-  width: 100%;
-  height: 100dvh;
-  min-height: 0;
-  flex-direction: column;
-  overflow: hidden;
-  padding: 1.5rem;
-}
-
 .app-shell h1 {
   margin: 0;
   font-size: 1.5rem;
@@ -191,14 +181,6 @@ label {
   margin: .25rem 0 0;
   color: #8d899a;
   font-size: .8125rem;
-}
-
-.library-layout {
-  display: grid;
-  min-height: 0;
-  flex: 1;
-  grid-template-columns: 15.625rem minmax(0, 1fr);
-  gap: 1.25rem;
 }
 
 .library-content {
@@ -534,10 +516,6 @@ label {
   .app-actions {
     width: 100%;
     justify-content: flex-start;
-  }
-
-  .library-layout {
-    grid-template-columns: 13.125rem minmax(0, 1fr);
   }
 
   .game-settings-panel {

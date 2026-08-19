@@ -2,6 +2,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from threading import Event
 from threading import enumerate as enumerate_threads
+from types import MappingProxyType
 from urllib.request import urlopen
 
 import pytest
@@ -11,6 +12,7 @@ from gameshelf.bootstrap.paths import AppPaths
 from gameshelf.bootstrap.resources import ResourcePaths
 from gameshelf.bridge.tasks import TaskContext
 from gameshelf.engines.rule_schema import RuleSchemaError
+from gameshelf.saves.batch_rules import BatchRuleCatalog
 
 
 def test_application_bootstrap_creates_only_portable_state(tmp_path: Path) -> None:
@@ -97,6 +99,58 @@ def test_application_recovers_interrupted_batch_save_session(tmp_path: Path) -> 
         assert row["status"] == "interrupted"
     finally:
         second.close()
+
+
+class _EmptyBatchRules:
+    def collect(self, _context: object) -> BatchRuleCatalog:
+        return BatchRuleCatalog(
+            candidates=(),
+            identities_by_path=MappingProxyType({}),
+            reverse_path_rules=(),
+            warnings=(),
+            rules_version="shutdown-test",
+        )
+
+
+class _BlockingBatchScanner:
+    def __init__(self) -> None:
+        self.entered = Event()
+
+    def scan(self, _scopes: object, _catalog: object, context: TaskContext) -> None:
+        self.entered.set()
+        while True:
+            context.raise_if_cancelled()
+            self.entered.wait(0.01)
+
+
+def test_application_close_interrupts_active_batch_scan_before_writer_close(
+    tmp_path: Path,
+) -> None:
+    application = build_application(AppPaths.from_root(tmp_path / "便携应用"))
+    scanner = _BlockingBatchScanner()
+    batch_saves = application.api._batch_saves
+    assert batch_saves is not None
+    batch_saves._rule_provider = _EmptyBatchRules()
+    batch_saves._scanner = scanner
+
+    started = application.api.start_batch_save_scan(
+        {"standardScopeIds": ["documents"], "customRootIds": []}
+    )
+    assert started["ok"] is True
+    assert scanner.entered.wait(2)
+
+    application.close()
+
+    with application.database.connect(readonly=True) as connection:
+        row = connection.execute(
+            """
+            SELECT status FROM scan_sessions
+            WHERE kind = 'save_discovery'
+            ORDER BY rowid DESC LIMIT 1
+            """
+        ).fetchone()
+    assert row is not None
+    assert row["status"] == "interrupted"
 
 
 def test_application_close_releases_its_logging_handler(tmp_path: Path) -> None:

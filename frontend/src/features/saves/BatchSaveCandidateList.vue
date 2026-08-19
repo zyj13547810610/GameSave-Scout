@@ -69,7 +69,7 @@ async function lookup(candidate: BatchSaveCandidate, provider: 'vndb' | 'dlsite'
 }
 
 const classificationLabel = (candidate: BatchSaveCandidate) => ({
-  installed: '已安装游戏', missing: '可能的孤立存档', unknown: '未知游戏',
+  installed: '已安装游戏', missing: '可能的孤立存档', unknown: '未关联游戏',
 }[candidate.classification])
 const reviewLabel = (candidate: BatchSaveCandidate) => ({
   pending: '待处理', recorded: '已记录', ignored: '已忽略', save_only: '仅存档卡片',

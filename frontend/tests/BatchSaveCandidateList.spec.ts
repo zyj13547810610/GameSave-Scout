@@ -21,6 +21,7 @@ describe('BatchSaveCandidateList', () => {
     expect(wrapper.text()).toContain(candidate.displayPath)
     expect(wrapper.text()).toContain('slot1.sav')
     expect(wrapper.text()).toContain('Alice 2')
+    expect(wrapper.text()).toContain('未关联游戏')
     expect(lookup).not.toHaveBeenCalled()
 
     await wrapper.get('[data-test="lookup-vndb-candidate-1"]').trigger('click')
