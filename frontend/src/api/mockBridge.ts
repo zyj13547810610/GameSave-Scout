@@ -1,4 +1,4 @@
-import type { ApiResult, CoverWizardSnapshot, Game, GameShelfBridge, GuidedSaveSession, ScanRoot } from './contracts'
+import type { ApiResult, CoverWizardSnapshot, Game, GameGroup, GameShelfBridge, GuidedSaveSession, ScanRoot } from './contracts'
 
 export function ok<T>(data: T): ApiResult<T> {
   return { ok: true, data }
@@ -47,15 +47,38 @@ export function fixtureGame(overrides: Partial<Game> = {}): Game {
     coverOriginalUrl: null,
     lastLaunchedAt: null,
     missingSince: null,
+    groupIds: [],
+    ...overrides,
+  }
+}
+
+export function fixtureGroup(overrides: Partial<GameGroup> = {}): GameGroup {
+  return {
+    id: 'group-1',
+    name: 'RPG',
+    gameCount: 0,
+    createdAt: '2026-08-19T00:00:00Z',
+    updatedAt: '2026-08-19T00:00:00Z',
     ...overrides,
   }
 }
 
 export function createMockBridge(overrides: Partial<GameShelfBridge> = {}): GameShelfBridge {
+  let nextGroupId = 1
+  let groups: GameGroup[] = []
+  const memberships = new Map<string, Set<string>>()
+
+  function groupsWithCounts(): GameGroup[] {
+    return groups.map((group) => ({
+      ...group,
+      gameCount: [...memberships.values()].filter((ids) => ids.has(group.id)).length,
+    }))
+  }
+
   const bridge: GameShelfBridge = {
     async bootstrap() {
       return ok({
-        appName: 'GameShelf', schemaVersion: 2, portable: true, uiScale: 1,
+        appName: 'GameShelf', schemaVersion: 3, portable: true, uiScale: 1,
         coverWizardSettings: {
           coverOnlineEnabled: false,
           coverVndbCandidateLimit: 5,
@@ -97,6 +120,56 @@ export function createMockBridge(overrides: Partial<GameShelfBridge> = {}): Game
     async remove_root() { return ok({ removed: true }) },
     async remap_root(input) { return ok(fixtureRoot({ id: input.rootId, displayPath: input.displayPath })) },
     async list_games() { return ok([]) },
+    async list_game_groups() { return ok(groupsWithCounts()) },
+    async create_game_group(input) {
+      const now = new Date().toISOString()
+      const group = fixtureGroup({
+        id: `group-${nextGroupId++}`,
+        name: input.name.trim(),
+        createdAt: now,
+        updatedAt: now,
+      })
+      groups = [...groups, group]
+      return ok(group)
+    },
+    async rename_game_group(input) {
+      const current = groups.find((group) => group.id === input.groupId)
+      if (!current) {
+        return { ok: false, error: { code: 'game_group_not_found', message: '没有找到对应的游戏分组。' } }
+      }
+      const renamed = { ...current, name: input.name.trim(), updatedAt: new Date().toISOString() }
+      groups = groups.map((group) => group.id === input.groupId ? renamed : group)
+      return ok(renamed)
+    },
+    async delete_game_group(input) {
+      groups = groups.filter((group) => group.id !== input.groupId)
+      for (const ids of memberships.values()) ids.delete(input.groupId)
+      return ok({ deleted: true })
+    },
+    async set_game_groups(input) {
+      memberships.set(input.gameId, new Set(input.groupIds))
+      return ok(fixtureGame({ id: input.gameId, groupIds: [...input.groupIds] }))
+    },
+    async update_game_group_memberships(input) {
+      let addedCount = 0
+      let removedCount = 0
+      let unchangedCount = 0
+      for (const gameId of [...new Set(input.gameIds)]) {
+        const current = memberships.get(gameId) ?? new Set<string>()
+        const hasGroup = current.has(input.groupId)
+        if (input.mode === 'add' && !hasGroup) {
+          current.add(input.groupId)
+          addedCount += 1
+        } else if (input.mode === 'remove' && hasGroup) {
+          current.delete(input.groupId)
+          removedCount += 1
+        } else {
+          unchangedCount += 1
+        }
+        memberships.set(gameId, current)
+      }
+      return ok({ addedCount, removedCount, unchangedCount })
+    },
     async remove_game_and_exclude() { return ok({ removed: true }) },
     async delete_missing_game() { return ok({ removed: true }) },
     async remove_games(input) {

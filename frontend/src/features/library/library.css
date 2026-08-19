@@ -1,5 +1,19 @@
-.library-toolbar { display: grid; grid-template-columns: minmax(11.25rem, 1fr) 9.375rem 10rem; gap: .625rem; margin-bottom: 1rem; }
+.library-toolbar { display: grid; grid-template-columns: minmax(11.25rem, 1fr) repeat(3, minmax(8rem, 10rem)) auto; gap: .625rem; margin-bottom: 1rem; }
 .library-toolbar select { border: 1px solid #393641; border-radius: .5rem; padding: .5625rem; color: #eceaf2; background: #17151e; }
+.library-toolbar button { white-space: nowrap; }
+.group-management-dialog { display: grid; overflow: hidden; width: min(44rem, calc(100vw - 2rem)); max-width: 44rem; max-height: min(46rem, calc(100dvh - 2rem)); grid-template-rows: auto auto auto minmax(0, 1fr) auto; gap: 1rem; }
+.group-management-dialog .section-heading { margin: 0; }
+.group-management-dialog .section-heading h2, .group-management-dialog .section-heading p { margin: 0; }
+.group-management-dialog .section-heading p { margin-top: .25rem; color: #918b9d; font-size: .78rem; }
+.group-create-form { display: grid; gap: .45rem; }
+.group-create-form > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .55rem; }
+.group-create-form label, .group-create-form small { color: #aaa3b7; }
+.group-create-form input, .group-name-field input { width: 100%; min-width: 0; border: 1px solid #393641; border-radius: .5rem; padding: .6rem; color: #eceaf2; background: #17151e; }
+.group-management-list { display: grid; min-height: 0; grid-auto-rows: max-content; gap: .55rem; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-gutter: stable; }
+.group-management-row { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr) auto; gap: .65rem; align-items: center; border: 1px solid #393641; border-radius: .65rem; padding: .7rem; background: #131119; }
+.group-name-field { display: grid; min-width: 0; gap: .3rem; }
+.group-name-field small { color: #918b9d; }
+.group-row-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
 .content-heading { margin-bottom: 1rem; }
 .content-heading h2 { margin: 0; }
 .cover-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr)); gap: 1rem; }
@@ -145,6 +159,7 @@
 @container (max-width: 33rem) { .library-toolbar { grid-template-columns: 1fr; } }
 @media (max-width: 700px) {
   .library-toolbar, .game-metadata-fields { grid-template-columns: 1fr; }
+  .group-create-form > div, .group-management-row { grid-template-columns: 1fr; }
   .detail-title-row { align-items: stretch; flex-direction: column; }
   .detail-version-badge { align-self: center; }
 }

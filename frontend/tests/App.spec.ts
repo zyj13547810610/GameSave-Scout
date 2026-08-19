@@ -237,6 +237,48 @@ describe('App', () => {
     wrapper.unmount()
   })
 
+  it('wires the group filter and restores focus after closing group management', async () => {
+    const bridge = createMockBridge({
+      async list_games() {
+        return ok([
+          fixtureGame({ id: 'grouped', title: 'Grouped', groupIds: ['group-rpg'] }),
+          fixtureGame({ id: 'plain', title: 'Plain', groupIds: [] }),
+        ])
+      },
+      async list_game_groups() {
+        return ok([{
+          id: 'group-rpg', name: 'RPG', gameCount: 1,
+          createdAt: 'now', updatedAt: 'now',
+        }])
+      },
+    })
+    const wrapper = mount(App, {
+      attachTo: document.body,
+      global: {
+        plugins: [createPinia()],
+        provide: { [bridgeKey as symbol]: bridge },
+      },
+    })
+    await flushPromises()
+
+    await wrapper.get('select[aria-label="分组筛选"]').setValue('ungrouped')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Plain')
+    expect(wrapper.text()).not.toContain('Grouped')
+
+    const entry = wrapper.get('[data-test="manage-groups"]')
+    await entry.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-test="group-management-dialog"]').exists()).toBe(true)
+    expect(wrapper.get('.library-layout').attributes('inert')).toBeDefined()
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+    expect(wrapper.find('[data-test="group-management-dialog"]').exists()).toBe(false)
+    expect(document.activeElement).toBe(entry.element)
+    wrapper.unmount()
+  })
+
   it('connects before rendering the empty-library message', async () => {
     const wrapper = mount(App, { global: { plugins: [createPinia()] } })
     expect(wrapper.get('h1').text()).toBe('GameShelf')

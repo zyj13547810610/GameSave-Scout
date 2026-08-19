@@ -6,6 +6,7 @@ import type { CoverWizardSettings, Game, LibraryScanSettings, RemovableGameStatu
 import CoverWizardWorkspace from './features/covers/CoverWizardWorkspace.vue'
 import BatchManagementBar from './features/library/BatchManagementBar.vue'
 import GameGrid from './features/library/GameGrid.vue'
+import GroupManagementDialog from './features/library/GroupManagementDialog.vue'
 import LibraryToolbar from './features/library/LibraryToolbar.vue'
 import { filterGames } from './features/library/libraryFilters'
 import { useLibraryStore } from './features/library/libraryStore'
@@ -26,6 +27,7 @@ const guidedStore = useGuidedSaveStore(pinia)
 const {
   roots,
   games,
+  groups,
   error,
   scanTasks,
   taskSnapshots,
@@ -44,6 +46,8 @@ const batchBusy = ref(false)
 const batchError = ref('')
 const batchNotice = ref('')
 const showCoverWizard = ref(false)
+const showGroupManager = ref(false)
+const groupManagerReturnFocus = ref<HTMLElement | null>(null)
 const coverWizardEntry = ref<HTMLButtonElement | null>(null)
 const gameContentScroll = ref<HTMLElement | null>(null)
 const coverWizardSettings = ref<CoverWizardSettings>({
@@ -60,6 +64,7 @@ const filteredGames = computed(() => filterGames(games.value, {
   query: store.query,
   status: store.statusFilter,
   engine: store.engineFilter,
+  group: store.groupFilter,
 }))
 const engines = computed(() => [...new Set(games.value.map((game) => game.engineId).filter((value): value is string => Boolean(value)))].sort())
 const removableGames = computed(() => games.value.filter(isRemovableGame))
@@ -73,7 +78,12 @@ function resetGameContentScroll() {
 }
 
 watch(
-  [() => store.query, () => store.statusFilter, () => store.engineFilter],
+  [
+    () => store.query,
+    () => store.statusFilter,
+    () => store.engineFilter,
+    () => store.groupFilter,
+  ],
   resetGameContentScroll,
 )
 
@@ -208,9 +218,25 @@ onMounted(bootstrap)
 onBeforeUnmount(() => guidedStore.clearPolling())
 
 function openCoverWizard() {
+  showGroupManager.value = false
   exitBatchMode()
   selectedGameId.value = null
   showCoverWizard.value = true
+}
+
+function openGroupManager(event: MouseEvent) {
+  groupManagerReturnFocus.value = event.currentTarget as HTMLElement
+  showGroupManager.value = true
+}
+
+async function closeGroupManager() {
+  showGroupManager.value = false
+  await nextTick()
+  groupManagerReturnFocus.value?.focus()
+}
+
+async function groupsChanged() {
+  await store.load(bridge)
 }
 
 async function closeCoverWizard() {
@@ -246,7 +272,7 @@ function restoreGuidedSave(gameId: string) {
 
     <template v-else>
       <div v-if="error" class="error-banner" role="alert"><span>{{ error }}</span><button type="button" @click="store.dismissError">关闭</button></div>
-      <div class="library-layout" :inert="showCoverWizard" :aria-hidden="showCoverWizard ? 'true' : undefined">
+      <div class="library-layout" :inert="showCoverWizard || showGroupManager" :aria-hidden="showCoverWizard || showGroupManager ? 'true' : undefined">
         <ScanRootList :bridge="bridge" :roots="roots" :library-scan-settings="libraryScanSettings" :scan-tasks="scanTasks" :task-snapshots="taskSnapshots" @settings-updated="libraryScanSettings = $event" @scan="scan" @cancel="(id) => store.cancelScan(bridge, id)" @toggle="(root, enabled) => store.updateRoot(bridge, root, enabled)" @edit="editingRoot = $event" @remove="(id) => store.removeRoot(bridge, id)" @remap="(id, path) => store.remapRoot(bridge, id, path)" />
         <section class="library-content">
           <div class="library-fixed-controls" data-test="library-fixed-controls">
@@ -271,7 +297,16 @@ function restoreGuidedSave(gameId: string) {
               @remove="removeSelectedGames"
             />
             <p v-if="batchError" class="inline-error" role="alert">{{ batchError }}</p>
-            <LibraryToolbar v-if="games.length" v-model:query="store.query" v-model:status="store.statusFilter" v-model:engine="store.engineFilter" :engines="engines" />
+            <LibraryToolbar
+              v-if="games.length"
+              v-model:query="store.query"
+              v-model:status="store.statusFilter"
+              v-model:engine="store.engineFilter"
+              v-model:group="store.groupFilter"
+              :engines="engines"
+              :groups="groups"
+              @manage-groups="openGroupManager"
+            />
           </div>
           <div ref="gameContentScroll" class="library-scroll-region" data-test="library-scroll-region" tabindex="0" aria-label="游戏列表">
             <MoveSuggestionPanel :suggestions="moveSuggestions" :games="games" @confirm="store.confirmMove(bridge, $event)" />
@@ -296,6 +331,9 @@ function restoreGuidedSave(gameId: string) {
       </div>
       <div v-if="showAddRoot" class="dialog-backdrop" @click.self="showAddRoot = false"><ScanRootDialog :bridge="bridge" @saved="rootSaved" @close="showAddRoot = false" /></div>
       <div v-if="editingRoot" class="dialog-backdrop" @click.self="editingRoot = null"><ScanRootDialog :bridge="bridge" :root="editingRoot" @saved="rootSaved" @close="editingRoot = null" /></div>
+      <div v-if="showGroupManager" class="dialog-backdrop" @click.self="closeGroupManager">
+        <GroupManagementDialog :bridge="bridge" :groups="groups" @changed="groupsChanged" @close="closeGroupManager" />
+      </div>
       <GuidedSaveCloseDialog :bridge="bridge" />
       <CoverWizardWorkspace
         v-if="showCoverWizard"

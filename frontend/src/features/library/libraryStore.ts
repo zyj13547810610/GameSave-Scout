@@ -1,10 +1,11 @@
 import { defineStore } from 'pinia'
-import type { Game, GameShelfBridge, MoveSuggestion, RootInput, ScanResult, ScanRoot, TaskSnapshot } from '../../api/contracts'
+import type { Game, GameGroup, GameShelfBridge, GroupFilter, MoveSuggestion, RootInput, ScanResult, ScanRoot, TaskSnapshot } from '../../api/contracts'
 
 export const useLibraryStore = defineStore('library', {
   state: () => ({
     roots: [] as ScanRoot[],
     games: [] as Game[],
+    groups: [] as GameGroup[],
     loading: false,
     error: '' as string,
     scanTasks: {} as Record<string, string>,
@@ -14,17 +15,31 @@ export const useLibraryStore = defineStore('library', {
     query: '',
     statusFilter: 'all' as 'all' | Game['status'],
     engineFilter: 'all' as string,
+    groupFilter: 'all' as GroupFilter,
   }),
   actions: {
     async load(bridge: GameShelfBridge) {
       this.loading = true
       this.error = ''
-      const [roots, games] = await Promise.all([bridge.list_roots(), bridge.list_games()])
+      const [roots, games, groups] = await Promise.all([
+        bridge.list_roots(),
+        bridge.list_games(),
+        bridge.list_game_groups(),
+      ])
       this.loading = false
       if (!roots.ok) return this.fail(roots.error.message)
       if (!games.ok) return this.fail(games.error.message)
+      if (!groups.ok) return this.fail(groups.error.message)
       this.roots = roots.data
       this.games = games.data
+      this.groups = groups.data
+      if (
+        this.groupFilter !== 'all'
+        && this.groupFilter !== 'ungrouped'
+        && !this.groups.some((group) => group.id === this.groupFilter)
+      ) {
+        this.groupFilter = 'all'
+      }
     },
     async addRoot(bridge: GameShelfBridge, input: RootInput) {
       const result = await bridge.add_root(input)

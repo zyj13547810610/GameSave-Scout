@@ -1,6 +1,21 @@
 <script setup lang="ts">
-defineProps<{ query: string; status: string; engine: string; engines: string[] }>()
-defineEmits<{ 'update:query': [value: string]; 'update:status': [value: string]; 'update:engine': [value: string] }>()
+import type { GameGroup } from '../../api/contracts'
+
+defineProps<{
+  query: string
+  status: string
+  engine: string
+  group: string
+  engines: string[]
+  groups: GameGroup[]
+}>()
+defineEmits<{
+  'update:query': [value: string]
+  'update:status': [value: string]
+  'update:engine': [value: string]
+  'update:group': [value: string]
+  manageGroups: [event: MouseEvent]
+}>()
 </script>
 
 <template>
@@ -12,5 +27,11 @@ defineEmits<{ 'update:query': [value: string]; 'update:status': [value: string];
     <select :value="engine" aria-label="引擎筛选" @change="$emit('update:engine', ($event.target as HTMLSelectElement).value)">
       <option value="all">全部引擎</option><option v-for="item in engines" :key="item" :value="item">{{ item }}</option>
     </select>
+    <select :value="group" aria-label="分组筛选" @change="$emit('update:group', ($event.target as HTMLSelectElement).value)">
+      <option value="all">全部分组</option>
+      <option value="ungrouped">未分组</option>
+      <option v-for="item in groups" :key="item.id" :value="item.id">{{ item.name }}</option>
+    </select>
+    <button data-test="manage-groups" class="secondary" type="button" @click="$emit('manageGroups', $event)">管理分组</button>
   </div>
 </template>

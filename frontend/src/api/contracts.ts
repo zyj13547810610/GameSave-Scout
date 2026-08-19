@@ -143,6 +143,23 @@ export type Game = {
   coverOriginalUrl: string | null
   lastLaunchedAt: string | null
   missingSince: string | null
+  groupIds: string[]
+}
+
+export type GameGroup = {
+  id: string
+  name: string
+  gameCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export type GroupFilter = 'all' | 'ungrouped' | string
+
+export type GroupMembershipUpdateResult = {
+  addedCount: number
+  removedCount: number
+  unchangedCount: number
 }
 
 export type RemovableGameStatus = 'installed' | 'missing'
@@ -381,6 +398,16 @@ export interface GameShelfBridge {
   remove_root(input: { rootId: string }): Promise<ApiResult<{ removed: boolean }>>
   remap_root(input: { rootId: string; displayPath: string }): Promise<ApiResult<ScanRoot>>
   list_games(): Promise<ApiResult<Game[]>>
+  list_game_groups(): Promise<ApiResult<GameGroup[]>>
+  create_game_group(input: { name: string }): Promise<ApiResult<GameGroup>>
+  rename_game_group(input: { groupId: string; name: string }): Promise<ApiResult<GameGroup>>
+  delete_game_group(input: { groupId: string }): Promise<ApiResult<{ deleted: boolean }>>
+  set_game_groups(input: { gameId: string; groupIds: string[] }): Promise<ApiResult<Game>>
+  update_game_group_memberships(input: {
+    groupId: string
+    gameIds: string[]
+    mode: 'add' | 'remove'
+  }): Promise<ApiResult<GroupMembershipUpdateResult>>
   remove_game_and_exclude(input: { gameId: string }): Promise<ApiResult<{ removed: boolean }>>
   delete_missing_game(input: { gameId: string }): Promise<ApiResult<{ removed: boolean }>>
   remove_games(input: {
