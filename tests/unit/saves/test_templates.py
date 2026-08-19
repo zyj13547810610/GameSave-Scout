@@ -46,12 +46,10 @@ def test_game_relative_path_round_trips(resolver: PathTemplateResolver) -> None:
     [
         r"<game>\..\OtherGame",
         r"<unknown>\x",
-        r"C:\absolute\path",
-        r"\\server\share\save",
         r"<home>\folder\<winDir>",
     ],
 )
-def test_expand_rejects_escape_unknown_token_and_non_template_paths(
+def test_expand_rejects_escape_unknown_and_mixed_tokens(
     template: str,
     resolver: PathTemplateResolver,
 ) -> None:
@@ -67,6 +65,42 @@ def test_expand_requires_game_directory_for_game_token(resolver: PathTemplateRes
 def test_collapse_rejects_path_outside_portable_roots(resolver: PathTemplateResolver) -> None:
     with pytest.raises(InvalidPathTemplate, match="便携"):
         resolver.collapse(Path(r"E:\Unmapped\save.dat"), None)
+
+
+def test_collapse_for_storage_allows_explicit_absolute_path(
+    resolver: PathTemplateResolver,
+) -> None:
+    template = resolver.collapse_for_storage(
+        Path("E:/Unmapped/Folder/../save.dat"),
+        None,
+        allow_absolute=True,
+    )
+
+    assert template == r"E:\Unmapped\save.dat"
+    assert resolver.expand(template, None) == Path(r"E:\Unmapped\save.dat")
+
+
+def test_collapse_for_storage_keeps_default_portable_boundary(
+    resolver: PathTemplateResolver,
+) -> None:
+    with pytest.raises(InvalidPathTemplate, match="便携"):
+        resolver.collapse_for_storage(Path(r"E:\Unmapped\save.dat"), None)
+
+
+@pytest.mark.parametrize(
+    "template",
+    [
+        "E:\\Unmapped\\bad\x00path",
+        r"E:\Unmapped\<home>\save.dat",
+        r"relative\save.dat",
+    ],
+)
+def test_expand_rejects_unsafe_absolute_storage_templates(
+    template: str,
+    resolver: PathTemplateResolver,
+) -> None:
+    with pytest.raises(InvalidPathTemplate):
+        resolver.expand(template, None)
 
 
 @pytest.mark.parametrize(

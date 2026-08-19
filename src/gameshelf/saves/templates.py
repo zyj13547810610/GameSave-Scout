@@ -47,7 +47,35 @@ class PathTemplateResolver:
         relative = ntpath.relpath(raw_path, os.fspath(root))
         return token if relative == "." else f"{token}\\{relative}"
 
+    def collapse_for_storage(
+        self,
+        path: Path,
+        game_dir: Path | None,
+        *,
+        allow_absolute: bool = False,
+    ) -> str:
+        try:
+            return self.collapse(path, game_dir)
+        except InvalidPathTemplate:
+            if not allow_absolute:
+                raise
+
+        raw_path = os.fspath(path)
+        if "\x00" in raw_path or not ntpath.isabs(raw_path):
+            raise InvalidPathTemplate(f"只允许保存绝对路径：{path}")
+        normalized = ntpath.normpath(raw_path)
+        if "<" in normalized or ">" in normalized:
+            raise InvalidPathTemplate("绝对存档路径不能混合路径模板令牌。")
+        return normalized
+
     def expand(self, template: str, game_dir: Path | None) -> Path:
+        if not template or "\x00" in template:
+            raise InvalidPathTemplate(f"无效的存档路径模板：{template}")
+        if ntpath.isabs(template):
+            if "<" in template or ">" in template:
+                raise InvalidPathTemplate("绝对存档路径不能混合路径模板令牌。")
+            return Path(ntpath.normpath(template))
+
         match = _TEMPLATE_PATTERN.fullmatch(template)
         if match is None:
             raise InvalidPathTemplate(f"无效的存档路径模板：{template}")
