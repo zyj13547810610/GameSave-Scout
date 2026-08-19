@@ -24,6 +24,7 @@ describe('GroupManagementDialog', () => {
     expect(createGroup).toHaveBeenCalledWith({ name: 'RPG' })
     expect(wrapper.emitted('changed')).toHaveLength(1)
     expect((wrapper.get('[data-test="new-group-name"]').element as HTMLInputElement).value).toBe('')
+    wrapper.unmount()
   })
 
   it('renames and confirms deletion without deleting a game', async () => {
@@ -51,6 +52,7 @@ describe('GroupManagementDialog', () => {
     expect(deleteGroup).toHaveBeenCalledWith({ groupId: 'group-rpg' })
     expect(wrapper.emitted('changed')).toHaveLength(2)
     confirm.mockRestore()
+    wrapper.unmount()
   })
 
   it('keeps the create value and dialog context after a request failure', async () => {
@@ -75,6 +77,7 @@ describe('GroupManagementDialog', () => {
     expect(wrapper.get('[role="alert"]').text()).toContain('已经存在同名分组')
     expect((wrapper.get('[data-test="new-group-name"]').element as HTMLInputElement).value).toBe('RPG')
     expect(wrapper.find('[data-test="group-management-dialog"]').exists()).toBe(true)
+    wrapper.unmount()
   })
 
   it('disables creation at the group limit and closes with Escape', async () => {
