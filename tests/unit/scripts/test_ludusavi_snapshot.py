@@ -43,9 +43,16 @@ def test_bundled_ludusavi_index_matches_manifest_metadata() -> None:
         manifest_sha256=metadata["sha256"],
     )
 
-    assert index.metadata.schema_version == 1
+    assert index.metadata.schema_version == 2
     assert index.metadata.game_count > 50_000
     assert index.metadata.name_count > index.metadata.game_count
+    assert index.metadata.path_rule_count > 0
+    expedition_matches = index.find_path_rules(
+        "<winLocalAppData>",
+        r"Sandfall\Saved\SaveGames\7656119\slot.sav",
+        "file",
+    )
+    assert expedition_matches[0].canonical_name == "Clair Obscur: Expedition 33"
 
 
 def test_gitattributes_marks_bundled_index_as_binary() -> None:
@@ -76,6 +83,7 @@ def test_rebuild_index_from_snapshot_changes_only_index(tmp_path: Path) -> None:
     assert (directory / "LICENSE").read_bytes() == license_bytes
     index = LudusaviIndex.open(result, manifest_sha256=digest)
     assert index.load_games({1})[1].canonical_name == "Alice"
+    assert index.metadata.path_rule_count == 0
 
 
 def test_rebuild_index_rejects_manifest_digest_mismatch(tmp_path: Path) -> None:

@@ -47,7 +47,7 @@ def test_index_flattens_aliases_and_round_trips_windows_rules(tmp_path: Path) ->
     )
     index = LudusaviIndex.open(path, manifest_sha256=MANIFEST_SHA256)
 
-    assert metadata.schema_version == 1
+    assert metadata.schema_version == 2
     assert metadata.manifest_sha256 == MANIFEST_SHA256
     assert metadata.game_count == 1
     assert metadata.name_count == 3
@@ -61,6 +61,79 @@ def test_index_flattens_aliases_and_round_trips_windows_rules(tmp_path: Path) ->
     assert games[1].install_dirs == ("Expedition 33",)
     assert games[1].files[0].tags == frozenset({"save"})
     assert games[1].files[0].conditions[0].store == "steam"
+
+
+def test_index_builds_windows_path_reverse_lookup(tmp_path: Path) -> None:
+    manifest = parse_manifest(
+        StringIO(
+            r'''
+Summer Pockets:
+  files:
+    <winAppData>/RenPy/SummerPocket-*/**/*.save: {tags: [save]}
+    <winAppData>/*/SummerPocket/config.json: {tags: [config]}
+  registry:
+    HKEY_CURRENT_USER/Software/Key/SummerPockets: {tags: [save]}
+Summer Pockets REFLECTION BLUE:
+  alias: Summer Pockets
+Shared Alpha:
+  files:
+    <winDocuments>/Shared/save.dat: {tags: [save]}
+Shared Beta:
+  files:
+    <winDocuments>/Shared/save.dat: {tags: [save]}
+Unsupported Context:
+  files:
+    <base>/save: {tags: [save]}
+    <xdgData>/game/save: {tags: [save]}
+  registry:
+    HKEY_CLASSES_ROOT/Software/Game: {tags: [save]}
+'''
+        )
+    )
+    path = tmp_path / "manifest-index.sqlite"
+
+    metadata = build_ludusavi_index(
+        path,
+        manifest,
+        manifest_sha256=MANIFEST_SHA256,
+    )
+    index = LudusaviIndex.open(path, manifest_sha256=MANIFEST_SHA256)
+
+    assert metadata.path_rule_count == 5
+    matches = index.find_path_rules(
+        "<winAppData>",
+        r"RenPy\SummerPocket-123\save01.save",
+        "file",
+    )
+    assert [item.canonical_name for item in matches] == ["Summer Pockets"]
+    assert matches[0].specificity > 0
+    assert matches[0].first_segment_key == "renpy"
+    assert matches[0].tags == frozenset({"save"})
+
+    shared = index.find_path_rules(
+        "<winDocuments>",
+        r"Shared\save.dat",
+        "file",
+    )
+    assert [item.canonical_name for item in shared] == [
+        "Shared Alpha",
+        "Shared Beta",
+    ]
+    assert [item.canonical_name for item in index.load_literal_path_rules(
+        {"<winDocuments>"}
+    )] == ["Shared Alpha", "Shared Beta"]
+
+    registry = index.find_path_rules(
+        "HKCU",
+        r"Software\Key\SummerPockets",
+        "registry",
+    )
+    assert [item.canonical_name for item in registry] == ["Summer Pockets"]
+    assert index.find_path_rules(
+        "<winAppData>",
+        r"Studio\SummerPocket\config.json",
+        "file",
+    )[0].first_segment_key == ""
 
 
 def test_index_rejects_wrong_manifest_digest(tmp_path: Path) -> None:
@@ -136,6 +209,12 @@ def _dump_rows(path: Path) -> tuple[tuple[object, ...], ...]:
             "locations",
             "SELECT game_id, location_order, kind, path, tags_json, conditions_json "
             "FROM locations ORDER BY game_id, location_order",
+        ),
+        (
+            "path_rules",
+            "SELECT game_id, location_order, kind, root_token, relative_pattern, "
+            "first_segment_key, specificity, tags_json, conditions_json "
+            "FROM path_rules ORDER BY game_id, location_order",
         ),
     )
     with sqlite3.connect(path) as connection:

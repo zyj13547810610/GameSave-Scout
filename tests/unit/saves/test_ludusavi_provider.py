@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import sqlite3
 import urllib.error
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -232,6 +233,36 @@ def test_index_session_rebuilds_missing_active_index_once(
 
     assert first_digest == second_digest == hashlib.sha256(OLD_MANIFEST).hexdigest()
     assert calls == 1
+
+
+def test_index_session_rebuilds_old_index_format_on_demand(
+    provider: tuple[LudusaviProvider, FakeHttp],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, _ = provider
+    service.ensure_initial_snapshot()
+    connection = sqlite3.connect(service.active_index)
+    try:
+        connection.execute("PRAGMA user_version = 1")
+        connection.commit()
+    finally:
+        connection.close()
+    (service.resource_dir / "manifest-index.sqlite").unlink()
+    real_build = provider_module.build_ludusavi_index
+    builds = 0
+
+    def counted_build(*args: object, **kwargs: object) -> object:
+        nonlocal builds
+        builds += 1
+        return real_build(*args, **kwargs)
+
+    monkeypatch.setattr(provider_module, "build_ludusavi_index", counted_build)
+
+    with service.index_session() as index:
+        assert index.metadata.schema_version == 2
+        assert index.metadata.path_rule_count == 0
+
+    assert builds == 1
 
 
 def test_concurrent_index_sessions_rebuild_once(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import re
 import sqlite3
@@ -17,8 +18,9 @@ from gameshelf.saves.ludusavi_models import (
     ManifestGame,
     ManifestLocationRule,
 )
+from gameshelf.scanning.path_keys import windows_path_key
 
-INDEX_SCHEMA_VERSION = 1
+INDEX_SCHEMA_VERSION = 2
 _SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 _EXPECTED_COLUMNS = {
     "index_metadata": ("key", "value"),
@@ -38,9 +40,21 @@ _EXPECTED_COLUMNS = {
         "tags_json",
         "conditions_json",
     ),
+    "path_rules": (
+        "game_id",
+        "location_order",
+        "kind",
+        "root_token",
+        "relative_pattern",
+        "first_segment_key",
+        "specificity",
+        "tags_json",
+        "conditions_json",
+    ),
 }
 
 type IndexedNameSource = Literal["canonical", "install_dir", "alias"]
+type IndexedPathRuleKind = Literal["file", "registry"]
 
 
 class InvalidLudusaviIndex(ValueError):
@@ -53,6 +67,7 @@ class LudusaviIndexMetadata:
     manifest_sha256: str
     game_count: int
     name_count: int
+    path_rule_count: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,6 +77,19 @@ class IndexedName:
     normalized_name: str
     source: IndexedNameSource
     candidate_order: int
+
+
+@dataclass(frozen=True, slots=True)
+class IndexedPathRule:
+    game_id: int
+    canonical_name: str
+    kind: IndexedPathRuleKind
+    root_token: str
+    relative_pattern: str
+    first_segment_key: str
+    specificity: int
+    tags: frozenset[str]
+    conditions: tuple[ManifestCondition, ...]
 
 
 class LudusaviIndex:
@@ -91,9 +119,16 @@ class LudusaviIndex:
                     int,
                     connection.execute("SELECT COUNT(*) FROM names").fetchone()[0],
                 )
+                actual_path_rule_count = cast(
+                    int,
+                    connection.execute("SELECT COUNT(*) FROM path_rules").fetchone()[
+                        0
+                    ],
+                )
                 if (
                     metadata.game_count != actual_game_count
                     or metadata.name_count != actual_name_count
+                    or metadata.path_rule_count != actual_path_rule_count
                 ):
                     raise InvalidLudusaviIndex("Ludusavi 索引条目计数不一致。")
         except InvalidLudusaviIndex:
@@ -211,6 +246,68 @@ class LudusaviIndex:
         }
         return MappingProxyType(games)
 
+    def load_literal_path_rules(
+        self,
+        root_tokens: Collection[str],
+    ) -> tuple[IndexedPathRule, ...]:
+        requested = tuple(sorted({_normalize_root_token(value) for value in root_tokens}))
+        if not requested:
+            return ()
+        placeholders = ", ".join("?" for _ in requested)
+        try:
+            with closing(_connect_read_only(self._path)) as connection:
+                rows = connection.execute(
+                    "SELECT p.game_id, g.canonical_name, p.kind, p.root_token, "
+                    "p.relative_pattern, p.first_segment_key, p.specificity, "
+                    "p.tags_json, p.conditions_json "
+                    "FROM path_rules AS p JOIN games AS g ON g.id = p.game_id "
+                    f"WHERE p.root_token IN ({placeholders}) "
+                    "ORDER BY p.game_id, p.location_order",
+                    requested,
+                ).fetchall()
+        except (OSError, sqlite3.Error) as error:
+            raise InvalidLudusaviIndex("无法读取 Ludusavi 字面路径规则。") from error
+        return tuple(
+            rule
+            for row in rows
+            if _is_literal_pattern(str(row[4]))
+            for rule in (_indexed_path_rule(row),)
+        )
+
+    def find_path_rules(
+        self,
+        root_token: str,
+        relative_path: str,
+        kind: IndexedPathRuleKind,
+    ) -> tuple[IndexedPathRule, ...]:
+        canonical_root = _normalize_root_token(root_token)
+        if kind not in {"file", "registry"}:
+            raise InvalidLudusaviIndex("Ludusavi 反向查询位置类型无效。")
+        clean_relative = _normalize_relative_path(relative_path)
+        first_segment = clean_relative.partition("\\")[0]
+        first_segment_key = _segment_key(first_segment)
+        try:
+            with closing(_connect_read_only(self._path)) as connection:
+                rows = connection.execute(
+                    "SELECT p.game_id, g.canonical_name, p.kind, p.root_token, "
+                    "p.relative_pattern, p.first_segment_key, p.specificity, "
+                    "p.tags_json, p.conditions_json "
+                    "FROM path_rules AS p JOIN games AS g ON g.id = p.game_id "
+                    "WHERE p.root_token = ? AND p.kind = ? "
+                    "AND (p.first_segment_key = ? OR p.first_segment_key = '') "
+                    "ORDER BY p.specificity DESC, g.canonical_name COLLATE NOCASE, "
+                    "p.game_id, p.location_order",
+                    (canonical_root, kind, first_segment_key),
+                ).fetchall()
+        except (OSError, sqlite3.Error) as error:
+            raise InvalidLudusaviIndex("无法查询 Ludusavi 反向路径规则。") from error
+        return tuple(
+            rule
+            for row in rows
+            if _windows_glob_match(str(row[4]), clean_relative)
+            for rule in (_indexed_path_rule(row),)
+        )
+
 
 def _connect_read_only(path: Path) -> sqlite3.Connection:
     connection = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)
@@ -235,12 +332,19 @@ def _validate_schema(connection: sqlite3.Connection) -> None:
 def _read_index_metadata(connection: sqlite3.Connection) -> LudusaviIndexMetadata:
     rows = connection.execute("SELECT key, value FROM index_metadata").fetchall()
     data = {row[0]: row[1] for row in rows}
-    if set(data) != {"schema_version", "manifest_sha256", "game_count", "name_count"}:
+    if set(data) != {
+        "schema_version",
+        "manifest_sha256",
+        "game_count",
+        "name_count",
+        "path_rule_count",
+    }:
         raise InvalidLudusaviIndex("Ludusavi 索引元数据字段无效。")
     try:
         schema_version = int(data["schema_version"])
         game_count = int(data["game_count"])
         name_count = int(data["name_count"])
+        path_rule_count = int(data["path_rule_count"])
     except (TypeError, ValueError) as error:
         raise InvalidLudusaviIndex("Ludusavi 索引元数据数值无效。") from error
     manifest_sha256 = data["manifest_sha256"]
@@ -250,13 +354,113 @@ def _read_index_metadata(connection: sqlite3.Connection) -> LudusaviIndexMetadat
         manifest_sha256
     ):
         raise InvalidLudusaviIndex("Ludusavi 索引源摘要格式无效。")
-    if game_count < 0 or name_count < 0:
+    if game_count < 0 or name_count < 0 or path_rule_count < 0:
         raise InvalidLudusaviIndex("Ludusavi 索引条目计数无效。")
     return LudusaviIndexMetadata(
         schema_version=schema_version,
         manifest_sha256=manifest_sha256,
         game_count=game_count,
         name_count=name_count,
+        path_rule_count=path_rule_count,
+    )
+
+
+_ROOT_TOKENS = {
+    "<home>",
+    "<winAppData>",
+    "<winLocalAppData>",
+    "<winLocalAppDataLow>",
+    "<winDocuments>",
+    "<winSavedGames>",
+    "<winProgramData>",
+    "<winPublic>",
+    "<winDir>",
+    "HKEY_CURRENT_USER",
+    "HKEY_LOCAL_MACHINE",
+}
+_ROOT_TOKENS_BY_KEY = {value.casefold(): value for value in _ROOT_TOKENS}
+_ROOT_TOKENS_BY_KEY.update(
+    {
+        "hkcu": "HKEY_CURRENT_USER",
+        "hklm": "HKEY_LOCAL_MACHINE",
+    }
+)
+_EMBEDDED_TOKEN = re.compile(r"<[^<>\\/]+>")
+
+
+def _normalize_root_token(value: object) -> str:
+    if not isinstance(value, str) or not value or "\x00" in value:
+        raise InvalidLudusaviIndex("Ludusavi 反向查询根令牌无效。")
+    try:
+        return _ROOT_TOKENS_BY_KEY[value.casefold()]
+    except KeyError as error:
+        raise InvalidLudusaviIndex("Ludusavi 反向查询根令牌不受支持。") from error
+
+
+def _normalize_relative_path(value: object) -> str:
+    if not isinstance(value, str) or "\x00" in value:
+        raise InvalidLudusaviIndex("Ludusavi 反向查询相对路径无效。")
+    clean = value.replace("/", "\\").strip("\\")
+    if not clean or any(part in {"", ".", ".."} for part in clean.split("\\")):
+        raise InvalidLudusaviIndex("Ludusavi 反向查询相对路径无效。")
+    if re.match(r"^[A-Za-z]:", clean):
+        raise InvalidLudusaviIndex("Ludusavi 反向查询只接受相对路径。")
+    return clean
+
+
+def _segment_key(value: str) -> str:
+    return windows_path_key(value)
+
+
+def _is_literal_pattern(value: str) -> bool:
+    return not any(character in value for character in "*?[") and not _EMBEDDED_TOKEN.search(
+        value
+    )
+
+
+def _windows_glob_match(pattern: str, relative_path: str) -> bool:
+    pattern_parts = pattern.replace("/", "\\").strip("\\").split("\\")
+    path_parts = relative_path.replace("/", "\\").strip("\\").split("\\")
+    memo: dict[tuple[int, int], bool] = {}
+
+    def matches(pattern_index: int, path_index: int) -> bool:
+        key = (pattern_index, path_index)
+        if key in memo:
+            return memo[key]
+        if pattern_index == len(pattern_parts):
+            result = path_index == len(path_parts)
+        elif pattern_parts[pattern_index] == "**":
+            result = matches(pattern_index + 1, path_index) or (
+                path_index < len(path_parts) and matches(pattern_index, path_index + 1)
+            )
+        elif path_index == len(path_parts):
+            result = False
+        else:
+            segment_pattern = _EMBEDDED_TOKEN.sub("?*", pattern_parts[pattern_index])
+            result = fnmatch.fnmatchcase(
+                path_parts[path_index].casefold(),
+                segment_pattern.casefold(),
+            ) and matches(pattern_index + 1, path_index + 1)
+        memo[key] = result
+        return result
+
+    return matches(0, 0)
+
+
+def _indexed_path_rule(row: tuple[object, ...]) -> IndexedPathRule:
+    kind_value = _non_empty_string(row[2], "反向规则位置类型")
+    if kind_value not in {"file", "registry"}:
+        raise InvalidLudusaviIndex("Ludusavi 反向规则位置类型无效。")
+    return IndexedPathRule(
+        game_id=_positive_int(row[0], "反向规则游戏 ID"),
+        canonical_name=_non_empty_string(row[1], "反向规则游戏名"),
+        kind=cast(IndexedPathRuleKind, kind_value),
+        root_token=_normalize_root_token(row[3]),
+        relative_pattern=_string(row[4], "反向规则相对路径"),
+        first_segment_key=_string(row[5], "反向规则首段"),
+        specificity=_non_negative_int(row[6], "反向规则特异度"),
+        tags=_decode_tags(row[7]),
+        conditions=_decode_conditions(row[8]),
     )
 
 
@@ -315,5 +519,11 @@ def _non_negative_int(value: object, label: str) -> int:
 
 def _non_empty_string(value: object, label: str) -> str:
     if not isinstance(value, str) or not value:
+        raise InvalidLudusaviIndex(f"Ludusavi 索引{label}无效。")
+    return value
+
+
+def _string(value: object, label: str) -> str:
+    if not isinstance(value, str) or "\x00" in value:
         raise InvalidLudusaviIndex(f"Ludusavi 索引{label}无效。")
     return value

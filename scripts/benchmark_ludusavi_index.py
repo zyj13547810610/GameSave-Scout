@@ -25,6 +25,7 @@ from gameshelf.saves.templates import PathTemplateResolver  # noqa: E402
 class BenchmarkResult:
     games: int
     names: int
+    path_rules: int
     cold_seconds: float
     warm_seconds: float
     exact_matches: int
@@ -58,6 +59,7 @@ def benchmark_directory(directory: Path) -> BenchmarkResult:
     return BenchmarkResult(
         games=index.metadata.game_count,
         names=index.metadata.name_count,
+        path_rules=index.metadata.path_rule_count,
         cold_seconds=cold_seconds,
         warm_seconds=warm_seconds,
         exact_matches=len(exact_matches),

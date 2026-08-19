@@ -17,6 +17,7 @@ def test_benchmark_reports_cold_and_warm_queries(tmp_path: Path) -> None:
 
     assert result.games == 2
     assert result.names >= 2
+    assert result.path_rules == 1
     assert result.cold_seconds >= 0
     assert result.warm_seconds >= 0
     assert result.exact_matches == 1
