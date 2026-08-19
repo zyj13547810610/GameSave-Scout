@@ -449,6 +449,61 @@ describe('App', () => {
     wrapper.unmount()
   })
 
+  it('keeps one batch-mode toggle in the fixed heading', async () => {
+    const bridge = createMockBridge({
+      async list_games() { return ok([fixtureGame({ id: 'game-1' })]) },
+    })
+    const wrapper = mount(App, {
+      global: {
+        plugins: [createPinia()],
+        provide: { [bridgeKey as symbol]: bridge },
+      },
+    })
+    await flushPromises()
+
+    const toggle = wrapper.get('[data-test="enter-batch-mode"]')
+    expect(toggle.text()).toBe('批量管理')
+    expect(toggle.attributes('aria-pressed')).toBe('false')
+
+    await toggle.trigger('click')
+
+    const exitToggle = wrapper.get('[data-test="enter-batch-mode"]')
+    expect(exitToggle.text()).toBe('退出批量管理')
+    expect(exitToggle.attributes('aria-pressed')).toBe('true')
+    expect(wrapper.get('[data-test="batch-management-bar"]').text()).not.toContain('退出批量管理')
+
+    await exitToggle.trigger('click')
+
+    expect(wrapper.get('[data-test="enter-batch-mode"]').text()).toBe('批量管理')
+    expect(wrapper.find('[data-test="batch-management-bar"]').exists()).toBe(false)
+  })
+
+  it('keeps the batch group modal above sticky batch controls', async () => {
+    const bridge = createMockBridge({
+      async list_games() { return ok([fixtureGame({ id: 'game-1' })]) },
+      async list_game_groups() { return ok([fixtureGroup({ id: 'group-rpg' })]) },
+    })
+    const wrapper = mount(App, {
+      global: {
+        plugins: [createPinia()],
+        provide: { [bridgeKey as symbol]: bridge },
+      },
+    })
+    await flushPromises()
+
+    await wrapper.get('[data-test="enter-batch-mode"]').trigger('click')
+    await wrapper.get('[data-test="game-card-game-1"]').trigger('click')
+    const batchBar = wrapper.get('[data-test="batch-management-bar"]')
+    await wrapper.get('[data-test="batch-group"]').trigger('click')
+
+    const dialog = wrapper.get('[data-test="batch-group-dialog"]')
+    const backdrop = dialog.element.parentElement as HTMLElement
+    const backdropZIndex = Number.parseInt(getComputedStyle(backdrop).zIndex, 10)
+    const batchBarZIndex = Number.parseInt(getComputedStyle(batchBar.element).zIndex, 10)
+
+    expect(backdropZIndex).toBeGreaterThan(batchBarZIndex)
+  })
+
   it('selects eligible games across filters and removes them in one batch', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     const games = [

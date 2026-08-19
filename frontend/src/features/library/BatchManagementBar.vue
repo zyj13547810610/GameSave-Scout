@@ -12,7 +12,6 @@ defineProps<{
 defineEmits<{
   selectVisible: []
   clear: []
-  exit: []
   remove: []
   group: [event: MouseEvent]
 }>()
@@ -30,7 +29,6 @@ defineEmits<{
     <div class="batch-actions">
       <button data-test="select-visible-games" type="button" :disabled="busy || !canSelectVisible" @click="$emit('selectVisible')">全选当前结果</button>
       <button type="button" :disabled="busy || selectedCount === 0" @click="$emit('clear')">清空选择</button>
-      <button type="button" :disabled="busy" @click="$emit('exit')">退出批量管理</button>
       <button data-test="batch-group" type="button" :disabled="busy || selectedCount === 0" @click="$emit('group', $event)">调整分组</button>
       <button
         data-test="batch-delete"

@@ -70,7 +70,7 @@ async function save() {
 </script>
 
 <template>
-  <details open data-test="game-groups-section" class="detail-section game-groups-section">
+  <details data-test="game-groups-section" class="detail-section game-groups-section">
     <summary class="detail-section-summary">
       <span>游戏分组</span>
       <small>{{ game.groupIds.length }} 个</small>

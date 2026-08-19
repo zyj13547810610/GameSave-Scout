@@ -319,7 +319,15 @@ function restoreGuidedSave(gameId: string) {
             <div class="content-heading">
               <h2>我的游戏 <span>{{ games.length }}</span></h2>
               <div class="compact-actions">
-                <button v-if="!batchMode && games.length" data-test="enter-batch-mode" class="secondary" type="button" @click="enterBatchMode">批量管理</button>
+                <button
+                  v-if="games.length"
+                  data-test="enter-batch-mode"
+                  class="secondary"
+                  type="button"
+                  :aria-pressed="batchMode"
+                  :disabled="batchBusy"
+                  @click="batchMode ? exitBatchMode() : enterBatchMode()"
+                >{{ batchMode ? '退出批量管理' : '批量管理' }}</button>
                 <button ref="coverWizardEntry" data-test="enter-cover-wizard" class="secondary" type="button" @click="openCoverWizard">批量封面</button>
               </div>
             </div>
@@ -335,7 +343,6 @@ function restoreGuidedSave(gameId: string) {
               :can-remove="canRemoveSelected"
               @select-visible="selectVisibleGames"
               @clear="clearBatchSelection"
-              @exit="exitBatchMode"
               @group="openBatchGroup"
               @remove="removeSelectedGames"
             />

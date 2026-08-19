@@ -156,6 +156,7 @@ onBeforeUnmount(() => {
         <CoverActions :game-id="game.id" :has-cover="Boolean(game.coverOriginalUrl)" :bridge="bridge" @updated="$emit('updated', $event)" />
       </section>
       <GameSettingsPanel :game="game" :bridge="bridge" @updated="$emit('updated', $event)" />
+      <SaveLocationList :game-id="game.id" :bridge="bridge" />
       <GameGroupSection
         :game="game"
         :groups="groups"
@@ -163,7 +164,6 @@ onBeforeUnmount(() => {
         @updated="$emit('updated', $event)"
         @manage-groups="$emit('manageGroups', $event)"
       />
-      <SaveLocationList :game-id="game.id" :bridge="bridge" />
       <EngineSection :game="game" :bridge="bridge" @updated="$emit('updated', $event)" />
       <details v-if="game.status !== 'save_only'" data-test="record-section" class="detail-section record-danger-zone">
         <summary class="detail-section-summary danger-summary">
