@@ -106,4 +106,6 @@ def test_pyinstaller_bundle_includes_only_migration_payload(
 
     assert (migrations / "0001_initial.sql").is_file()
     assert (migrations / "0002_initial.sql").is_file()
+    assert (migrations / "0003_initial.sql").is_file()
+    assert (migrations / "0004_initial.sql").is_file()
     assert not (migrations / "__init__.py").exists()

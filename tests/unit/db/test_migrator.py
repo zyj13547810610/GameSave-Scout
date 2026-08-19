@@ -18,7 +18,7 @@ V1_TABLES = {
 }
 
 
-def test_migrator_creates_v3_schema_with_groups_version_fields_and_wal(
+def test_migrator_creates_v4_schema_with_batch_save_tables_and_wal(
     tmp_path: Path,
 ) -> None:
     factory = ConnectionFactory(tmp_path / "data" / "library.db")
@@ -40,10 +40,20 @@ def test_migrator_creates_v3_schema_with_groups_version_fields_and_wal(
             row[1]
             for row in connection.execute("PRAGMA table_info(game_analysis_cache)")
         }
+        scan_session_sql = connection.execute(
+            "SELECT sql FROM sqlite_master WHERE name = 'scan_sessions'"
+        ).fetchone()[0]
+        discovery_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(save_discoveries)")
+        }
 
-    assert version == user_version == 3
+    assert version == user_version == 4
     assert tables >= V1_TABLES
     assert {"game_groups", "game_group_memberships"} <= tables
+    assert {"save_scan_candidates", "save_scan_observations"} <= tables
+    assert "save_discovery" in scan_session_sql
+    assert "interrupted" in scan_session_sql
+    assert "scan_session_id" not in discovery_columns
     assert {"version", "detected_version", "version_is_manual"} <= game_columns
     assert cache_columns == {
         "game_id",
@@ -85,7 +95,7 @@ def test_new_database_cascades_game_analysis_cache_with_its_game(
     assert remaining == 0
 
 
-@pytest.mark.parametrize("version", [1, 2])
+@pytest.mark.parametrize("version", [1, 2, 3])
 def test_migrator_rejects_legacy_schema_without_modifying_database(
     tmp_path: Path, version: int
 ) -> None:
@@ -127,7 +137,8 @@ def test_v1_guided_save_schema_has_single_active_slot_and_review_fields(
             "SELECT sql FROM sqlite_master WHERE name = 'save_detection_sessions'"
         ).fetchone()[0]
         discovery_columns = {
-            row[1] for row in connection.execute("PRAGMA table_info(save_discoveries)")
+            row[1]: row
+            for row in connection.execute("PRAGMA table_info(save_discoveries)")
         }
         indexes = {
             row[1]
@@ -137,6 +148,8 @@ def test_v1_guided_save_schema_has_single_active_slot_and_review_fields(
     assert "interrupted" in session_sql
     assert "active_slot" in session_sql
     assert "save_detection_one_active" in indexes
+    assert "scan_session_id" not in discovery_columns
+    assert discovery_columns["detection_session_id"][3] == 1
     assert {
         "path_key",
         "representative_files_json",
@@ -147,7 +160,7 @@ def test_v1_guided_save_schema_has_single_active_slot_and_review_fields(
         "affected_by_truncation",
         "preselected",
         "save_location_id",
-    } <= discovery_columns
+    } <= discovery_columns.keys()
 
 
 def test_readonly_connection_uses_rows_and_rejects_writes(tmp_path: Path) -> None:

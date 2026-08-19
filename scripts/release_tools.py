@@ -1168,6 +1168,8 @@ def _validate_release_layout(
         "_internal/resources/manifests/ludusavi/manifest-index.sqlite",
         "_internal/gameshelf/db/migrations/0001_initial.sql",
         "_internal/gameshelf/db/migrations/0002_initial.sql",
+        "_internal/gameshelf/db/migrations/0003_initial.sql",
+        "_internal/gameshelf/db/migrations/0004_initial.sql",
     ]
     critical_files.append(
         "runtime/msedgewebview2.exe"

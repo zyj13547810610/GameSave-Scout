@@ -84,8 +84,8 @@ CREATE TABLE save_locations (
 CREATE TABLE scan_sessions (
   id TEXT PRIMARY KEY,
   root_id TEXT REFERENCES scan_roots(id) ON DELETE SET NULL,
-  kind TEXT NOT NULL CHECK (kind IN ('library', 'orphan')),
-  status TEXT NOT NULL CHECK (status IN ('running', 'completed', 'cancelled', 'failed', 'unavailable')),
+  kind TEXT NOT NULL CHECK (kind IN ('library', 'save_discovery')),
+  status TEXT NOT NULL CHECK (status IN ('running', 'completed', 'cancelled', 'failed', 'unavailable', 'interrupted')),
   started_at TEXT NOT NULL,
   finished_at TEXT,
   scope_json TEXT NOT NULL DEFAULT '{}',
@@ -135,8 +135,7 @@ CREATE UNIQUE INDEX save_detection_one_active
 
 CREATE TABLE save_discoveries (
   id TEXT PRIMARY KEY,
-  scan_session_id TEXT REFERENCES scan_sessions(id) ON DELETE CASCADE,
-  detection_session_id TEXT REFERENCES save_detection_sessions(id) ON DELETE CASCADE,
+  detection_session_id TEXT NOT NULL REFERENCES save_detection_sessions(id) ON DELETE CASCADE,
   candidate_template TEXT NOT NULL,
   display_path TEXT NOT NULL,
   path_key TEXT NOT NULL,
@@ -158,10 +157,6 @@ CREATE TABLE save_discoveries (
     CHECK (review_status IN ('unreviewed', 'accepted', 'ignored', 'linked', 'save_only')),
   linked_game_id TEXT REFERENCES games(id) ON DELETE SET NULL,
   save_location_id TEXT REFERENCES save_locations(id) ON DELETE SET NULL,
-  CHECK (
-    (scan_session_id IS NOT NULL AND detection_session_id IS NULL)
-    OR (scan_session_id IS NULL AND detection_session_id IS NOT NULL)
-  ),
   UNIQUE(detection_session_id, kind, path_key)
 );
 

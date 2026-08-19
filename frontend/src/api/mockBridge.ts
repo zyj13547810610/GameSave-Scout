@@ -78,7 +78,7 @@ export function createMockBridge(overrides: Partial<GameShelfBridge> = {}): Game
   const bridge: GameShelfBridge = {
     async bootstrap() {
       return ok({
-        appName: 'GameShelf', schemaVersion: 3, portable: true, uiScale: 1,
+        appName: 'GameShelf', schemaVersion: 4, portable: true, uiScale: 1,
         coverWizardSettings: {
           coverOnlineEnabled: false,
           coverVndbCandidateLimit: 5,

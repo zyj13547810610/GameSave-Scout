@@ -7,7 +7,7 @@ from pathlib import Path
 
 from gameshelf.db.connection import ConnectionFactory
 
-LATEST_SCHEMA_VERSION = 3
+LATEST_SCHEMA_VERSION = 4
 
 
 class MigrationError(RuntimeError):

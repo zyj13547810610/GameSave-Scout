@@ -10,7 +10,7 @@ describe('desktop bridge', () => {
     expect(result).toEqual({
       ok: true,
       data: {
-        appName: 'GameShelf', schemaVersion: 3, portable: true, uiScale: 1,
+        appName: 'GameShelf', schemaVersion: 4, portable: true, uiScale: 1,
         libraryScanSettings: { startupQuickScan: true, scanConcurrency: 1 },
         coverWizardSettings: {
           coverOnlineEnabled: false,
