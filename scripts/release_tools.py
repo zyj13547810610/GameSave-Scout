@@ -1157,6 +1157,15 @@ def _validate_release_layout(
         raise ReleaseToolError(f"发布目录包含意外顶层内容：{', '.join(unexpected)}")
     if not top_level["GameShelf.exe"].is_file():
         raise ReleaseToolError("GameShelf.exe 必须是普通文件。")
+    readme = top_level["README.txt"]
+    if not readme.is_file():
+        raise ReleaseToolError("README.txt 必须是普通文件。")
+    try:
+        readme_text = readme.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as error:
+        raise ReleaseToolError(f"无法读取发布 README：{error}") from error
+    if f"GameShelf {versions.version}" not in readme_text:
+        raise ReleaseToolError("发布 README 中的 GameShelf 版本不匹配。")
     mode_directory = "runtime" if mode is ReleaseMode.FIXED else "prerequisites"
     if not top_level["_internal"].is_dir() or not top_level[mode_directory].is_dir():
         raise ReleaseToolError(f"_internal 和 {mode_directory} 必须是目录。")

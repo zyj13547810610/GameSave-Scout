@@ -523,6 +523,21 @@ def test_verify_release_tree_detects_payload_changes(tmp_path: Path) -> None:
         )
 
 
+def test_release_manifest_rejects_stale_readme_version(tmp_path: Path) -> None:
+    release_root = _minimal_release_tree(tmp_path)
+    (release_root / "README.txt").write_text(
+        "GameShelf 0.1.4 Windows x64 便携版\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ReleaseToolError, match="README.*版本"):
+        build_release_manifest(
+            release_root,
+            _release_metadata(),
+            ReleaseMode.FIXED,
+        )
+
+
 def test_verify_release_tree_requires_schema_four_payload(tmp_path: Path) -> None:
     release_root = _minimal_release_tree(tmp_path)
     migration = (
@@ -821,7 +836,10 @@ def _minimal_release_tree(
         (root / "prerequisites" / "MicrosoftEdgeWebview2Setup.exe").write_bytes(
             b"bootstrapper"
         )
-    (root / "README.txt").write_text("readme", encoding="utf-8")
+    (root / "README.txt").write_text(
+        "GameShelf 0.1.0 Windows x64 便携版\n",
+        encoding="utf-8",
+    )
     (root / "LICENSE").write_text("MIT", encoding="utf-8")
     (root / "THIRD_PARTY_NOTICES.md").write_text("notices", encoding="utf-8")
     return root
