@@ -23,7 +23,7 @@ GameShelf 不需要账号或云服务。游戏库、配置、封面、日志和 
 
 ## 版本更新记录
 
-以下记录按源码开发里程碑整理；`V0.1.0` 和 `V0.1.4` 已生成本地双版本便携候选包，其余小版本不表示曾单独生成便携包或发布到 GitHub Release。详细设计、实现边界和验证记录以[固定设计文档](docs/superpowers/plans)为准。
+以下记录按源码开发里程碑整理；`V0.1.0`、`V0.1.4` 和 `V0.2.1` 已生成本地双版本便携候选包，其余小版本不表示曾单独生成便携包或发布到 GitHub Release。详细设计、实现边界和验证记录以[固定设计文档](docs/superpowers/plans)为准。
 
 <details open>
 <summary><strong>V0.2.1 — 2026-08-20（最新源码）</strong></summary>
@@ -35,8 +35,8 @@ GameShelf 不需要账号或云服务。游戏库、配置、封面、日志和 
 - 支持批量接受、调整关联和创建 `save_only` 仅存档卡片；存档位置、候选状态、可选引擎及多个分组均以单事务写入，注册表候选要求额外确认；
 - VNDB、DLsite 和 2DFan 仅在用户点击后以界面显示的作品 ID 或关键词打开系统浏览器，不进行后台抓取，也不发送本地路径；
 - 数据库升级为 schema 4、配置升级为版本 5。开发阶段不提供 schema 3 迁移，旧库必须由用户自行移走或删除；
-- 完整自动门禁通过：Python 857 项、前端 48 个测试文件共 193 项，并通过 Ruff、mypy、Vue 类型检查、115 模块生产构建和隔离 schema 4 源码 smoke；
-- 真实 pywebview 已完成扫描、分类、审核、仅存档卡片、五档缩放和三类窗口尺寸验收；本条仍只表示 V0.2.1 源码里程碑，尚未构建或发布 V0.2.1 便携包。
+- 完整自动门禁通过：Python 858 项、前端 48 个测试文件共 193 项，并通过 Ruff、mypy、Vue 类型检查、115 模块生产构建和 schema 4 源码 smoke；
+- 真实 pywebview 已完成扫描、分类、审核、仅存档卡片、五档缩放和三类窗口尺寸验收；从干净提交 `184ac7a` 构建的完整离线版与轻量联网版已通过两版冻结 smoke、清单、ZIP、SHA-256、模式隔离和无 `data` 复核，但尚未上传 GitHub Release。
 
 </details>
 
@@ -106,7 +106,7 @@ GameShelf 不需要账号或云服务。游戏库、配置、封面、日志和 
 
 ## 当前状态
 
-V0.1.x 已完成源码、便携包与既定验收收口。V0.2.0 自定义游戏分组和 V0.2.1 批量存档发现均已完成源码实现与既定真实 pywebview 验收；V0.2.1 已具备 `save_only` 正式创建入口及自动闭环验证。完整目标 Windows 10/11 设备、SmartScreen、UNC/只读目录和特殊运行时故障矩阵没有全部执行，作为后续可选兼容性复核。
+V0.1.x 已完成源码、便携包与既定验收收口。V0.2.0 自定义游戏分组和 V0.2.1 批量存档发现均已完成源码实现与既定真实 pywebview 验收；V0.2.1 已具备 `save_only` 正式创建入口、自动闭环验证和本地双版本便携候选包。完整目标 Windows 10/11 设备、SmartScreen、UNC/只读目录和特殊运行时故障矩阵没有全部执行，作为后续可选兼容性复核。
 
 V0.2 批量存档发现展示已安装、失效、未关联及已记录存档位置，而不只显示“孤立”结果；候选始终由用户审核，不自动确认归属。V0.3 或更晚再考虑存档备份、恢复、同步和版本管理，这些后续功能目前尚未实现。
 
@@ -132,12 +132,12 @@ V0.2 批量存档发现展示已安装、失效、未关联及已记录存档位
 
 ## 便携版选择与使用
 
-当前可用的 V0.1.4 提供两个 Windows x64 便携包；V0.2.1 目前只有源码，尚未构建便携包：
+当前 V0.2.1 提供两个本地 Windows x64 便携候选包；尚未上传 GitHub Release：
 
 | 版本 | 目录/ZIP 名称 | WebView2 | 适用场景 |
 | --- | --- | --- | --- |
-| 完整离线版 | `GameShelf-0.1.4-win-x64` | 自带 Fixed Version Runtime | 体积较大，可在系统没有 WebView2 时离线启动 |
-| 轻量联网版 | `GameShelf-0.1.4-win-x64-lite` | 使用系统 Evergreen Runtime | 下载体积较小，系统缺失 Runtime 时需要联网手动安装 |
+| 完整离线版 | `GameShelf-0.2.1-win-x64` | 自带 Fixed Version Runtime | 体积较大，可在系统没有 WebView2 时离线启动 |
+| 轻量联网版 | `GameShelf-0.2.1-win-x64-lite` | 使用系统 Evergreen Runtime | 下载体积较小，系统缺失 Runtime 时需要联网手动安装 |
 
 使用步骤：
 
@@ -152,9 +152,9 @@ V0.2 批量存档发现展示已安装、失效、未关联及已记录存档位
 
 - 完全退出 GameShelf 后，复制整个程序目录即可迁移；不要只移动 `GameShelf.exe`。
 - 删除整个 GameShelf 目录即可删除程序及其便携数据；轻量版使用的系统 Evergreen Runtime 不会随之卸载。
-- V0.1 只支持本地文件系统中的可写目录，且完整发布负载的绝对路径必须少于 260 个字符；不支持 UNC 或网络共享路径。
+- 当前便携包只支持本地文件系统中的可写目录，且完整发布负载的绝对路径必须少于 260 个字符；不支持 UNC 或网络共享路径。
 - 启动错误日志位于 `data\logs\startup-error.log`，普通运行日志位于 `data\logs\gameshelf.log`。
-- GameShelf V0.1 本体未进行 Authenticode 签名，Windows 可能显示未知发布者或 SmartScreen 提示。请只使用可信来源的发布包并核对 ZIP 的 SHA-256，不要为运行程序而关闭系统安全功能。
+- 当前 GameShelf 本体未进行 Authenticode 签名，Windows 可能显示未知发布者或 SmartScreen 提示。请只使用可信来源的发布包并核对 ZIP 的 SHA-256，不要为运行程序而关闭系统安全功能。
 
 ## 开发环境
 
@@ -177,7 +177,7 @@ npm --prefix frontend ci
 conda activate .\.venv
 ```
 
-当前源码使用 SQLite schema 3，并按开发期约定不迁移 V0.1 的 schema 1/2 数据库。如果程序提示检测到旧库，请先完全退出 GameShelf，再自行移走或删除可舍弃的 `data\library.db` 后重启。该操作会丢失旧数据库记录；程序不会自动删除 `data\covers` 中的图片，但新库也不会自动恢复旧封面关联。
+当前源码和 V0.2.1 便携候选包使用 SQLite schema 4，并按开发期约定不迁移 schema 1/2/3 数据库。如果程序提示检测到旧库，请先完全退出 GameShelf，再自行移走或删除可舍弃的 `data\library.db` 后重启。该操作会丢失旧数据库记录；程序不会自动删除 `data\covers` 中的图片，但新库也不会自动恢复旧封面关联。
 
 后端检查：
 
@@ -231,28 +231,28 @@ $webView2Bootstrapper = (Resolve-Path ".\webview安装包\MicrosoftEdgeWebview2S
 
 ```text
 dist/
-├─ GameShelf-0.1.4-win-x64/
-├─ GameShelf-0.1.4-win-x64.zip
-├─ GameShelf-0.1.4-win-x64.zip.sha256
-├─ GameShelf-0.1.4-win-x64-lite/
-├─ GameShelf-0.1.4-win-x64-lite.zip
-└─ GameShelf-0.1.4-win-x64-lite.zip.sha256
+├─ GameShelf-0.2.1-win-x64/
+├─ GameShelf-0.2.1-win-x64.zip
+├─ GameShelf-0.2.1-win-x64.zip.sha256
+├─ GameShelf-0.2.1-win-x64-lite/
+├─ GameShelf-0.2.1-win-x64-lite.zip
+└─ GameShelf-0.2.1-win-x64-lite.zip.sha256
 ```
 
 可以独立复核两个 ZIP：
 
 ```powershell
-Get-FileHash .\dist\GameShelf-0.1.4-win-x64.zip -Algorithm SHA256
-Get-Content .\dist\GameShelf-0.1.4-win-x64.zip.sha256
+Get-FileHash .\dist\GameShelf-0.2.1-win-x64.zip -Algorithm SHA256
+Get-Content .\dist\GameShelf-0.2.1-win-x64.zip.sha256
 
-Get-FileHash .\dist\GameShelf-0.1.4-win-x64-lite.zip -Algorithm SHA256
-Get-Content .\dist\GameShelf-0.1.4-win-x64-lite.zip.sha256
+Get-FileHash .\dist\GameShelf-0.2.1-win-x64-lite.zip -Algorithm SHA256
+Get-Content .\dist\GameShelf-0.2.1-win-x64-lite.zip.sha256
 ```
 
-2026-08-18 本地 V0.1.4 候选包的 ZIP SHA-256 为：
+2026-08-20 本地 V0.2.1 候选包的 ZIP SHA-256 为：
 
-- 完整离线版：`4ceef6e5759977beaab2dc89cec73f2356aed1e677b6e2135b443c8682f9693b`
-- 轻量联网版：`5a454fa05da362f822b6a39eef374bc898c546cd644aae3321e305354dd6156d`
+- 完整离线版：`bf821d6b0d00a00f9c184cdbf1b7df3ba1da0001cf7aa3e7ced9851b79064af5`
+- 轻量联网版：`8e8749a44343ce021aaaca840c81fef73b1777d58fd59f3289753659f7f5f44f`
 
 构建失败时，脚本不会用不完整的新结果覆盖上一组六个正式产物。`build/`、`dist/` 与 `webview安装包/` 都是本地内容，不应提交到 Git。
 
