@@ -35,6 +35,7 @@ describe('BatchSaveSettings', () => {
     await flushPromises()
     expect(add).toHaveBeenCalledWith({ displayPath: 'D:\\Save Archive', enabled: true, maxDepth: 6 })
     expect(wrapper.text()).toContain('D:\\Save Archive')
+    wrapper.unmount()
   })
 
   it('confirms the selected scopes and locks settings while active', async () => {
@@ -53,5 +54,23 @@ describe('BatchSaveSettings', () => {
     await wrapper.setProps({ active: true })
     expect(wrapper.get('[data-test="standard-documents"]').attributes('disabled')).toBeDefined()
     expect(wrapper.get('[data-test="start-batch-scan"]').attributes('disabled')).toBeDefined()
+    wrapper.unmount()
+  })
+
+  it('closes an open settings popover only after a click outside it', async () => {
+    const wrapper = mount(BatchSaveSettings, {
+      attachTo: document.body,
+      props: { bridge: createMockBridge(), active: false },
+    })
+    await flushPromises()
+    const settings = wrapper.get('.batch-save-settings')
+    ;(settings.element as HTMLDetailsElement).open = true
+
+    await wrapper.get('.batch-save-settings-popover').trigger('click')
+    expect((settings.element as HTMLDetailsElement).open).toBe(true)
+
+    document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect((settings.element as HTMLDetailsElement).open).toBe(false)
+    wrapper.unmount()
   })
 })

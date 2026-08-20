@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { BatchSaveCustomRoot, GameShelfBridge } from '../../api/contracts'
 
 const props = defineProps<{ bridge: GameShelfBridge; active: boolean }>()
@@ -17,6 +17,7 @@ const customRoots = ref<BatchSaveCustomRoot[]>([])
 const loading = ref(true)
 const busy = ref(false)
 const error = ref('')
+const settings = ref<HTMLDetailsElement | null>(null)
 const canStart = computed(() => (
   !props.active
   && !busy.value
@@ -24,11 +25,21 @@ const canStart = computed(() => (
 ))
 
 onMounted(async () => {
+  document.addEventListener('click', closeOnOutsideClick)
   const result = await props.bridge.bootstrap()
   loading.value = false
   if (!result.ok) error.value = result.error.message
   else customRoots.value = result.data.batchSaveSettings.customRoots
 })
+
+onBeforeUnmount(() => document.removeEventListener('click', closeOnOutsideClick))
+
+function closeOnOutsideClick(event: MouseEvent) {
+  const element = settings.value
+  if (element?.open && event.target instanceof Node && !element.contains(event.target)) {
+    element.open = false
+  }
+}
 
 function toggleStandard(scopeId: string, selected: boolean) {
   const next = new Set(selectedStandard.value)
@@ -101,7 +112,7 @@ function start() {
 </script>
 
 <template>
-  <details class="batch-save-settings">
+  <details ref="settings" class="batch-save-settings">
     <summary class="batch-save-settings-trigger">扫描设置</summary>
     <section class="batch-save-settings-popover" aria-label="批量存档扫描设置">
       <div class="batch-save-settings-heading">
