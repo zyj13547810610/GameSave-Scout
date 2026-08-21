@@ -1,130 +1,17 @@
 version: "2026.08.13-2"
 rules:
-  - id: tyrano
-    label: TyranoScript
-    variant: TyranoBuilder/TyranoScript
-    experimental: false
-    threshold: 0.70
-    all:
-      - op: path_exists
-        path: data/system/Config.tjs
-        weight: 0.45
-    any:
-      - op: path_exists
-        path: tyrano/tyrano.js
-        weight: 0.45
-      - op: text_contains
-        path: data/system/Config.tjs
-        value: projectID
-        weight: 0.25
-    negative:
-      - op: path_exists
-        path: Editor.exe
-        weight: -0.10
-  - id: kirikiri
-    label: KiriKiri 2/Z
-    variant: null
-    experimental: false
-    threshold: 0.70
-    all:
-      - op: magic_at
-        path: data.xp3
-        value: "hex:5850330d0a200a1a8b6701"
-        weight: 0.55
-    any:
-      - op: path_exists
-        path: startup.tjs
-        weight: 0.45
-      - op: glob_exists
-        path: "**/*.ks"
-        weight: 0.35
-  - id: choicescript
-    label: ChoiceScript
-    variant: null
-    experimental: false
-    threshold: 0.70
-    all:
-      - op: text_contains
-        path: scenes/startup.txt
-        value: "*title"
-        weight: 0.55
-      - op: path_exists
-        path: scenes/choicescript_stats.txt
-        weight: 0.45
-  - id: srpg_studio
-    label: SRPG Studio
-    variant: null
-    experimental: false
-    threshold: 0.70
-    all:
-      - op: path_exists
-        path: data.dts
-        weight: 0.5
-      - op: path_exists
-        path: runtime.rts
-        weight: 0.5
-  - id: pixel_game_maker_mv
-    label: Pixel Game Maker MV
-    variant: null
-    experimental: false
-    threshold: 0.70
-    all:
-      - op: text_contains
-        path: js/libs/AGtk.js
-        value: Agtk
-        weight: 0.6
-      - op: path_exists
-        path: package.json
-        weight: 0.4
-  - id: artemis
-    label: Artemis
-    threshold: 0.70
-    all:
-      - { op: glob_magic_at, path: "*.pfs", value: "hex:70660000", weight: 0.55 }
-      - { op: magic_at, path: movie.mja, value: MJA0, weight: 0.45 }
-  - id: reallive
-    label: RealLive
-    variant: RealLive
-    threshold: 0.70
-    all:
-      - { op: path_exists, path: Gameexe.ini, weight: 0.45 }
-      - { op: magic_at, path: seen.txt, value: PACL, weight: 0.55 }
-  - id: siglus
-    label: SiglusEngine
-    variant: SiglusEngine
-    threshold: 0.70
-    all:
-      - { op: pe_field_contains, path: SiglusEngine.exe, field: product_name, value: Siglus, weight: 0.6 }
-    any:
-      - { op: path_exists, path: Scene.pck, weight: 0.1334 }
-      - { op: path_exists, path: Scene.chs, weight: 0.1333 }
-      - { op: path_exists, path: Scene.gbk, weight: 0.1333 }
-  - id: bgi_ethornell
-    label: BGI/Ethornell
-    threshold: 0.70
-    all:
-      - { op: magic_at, path: data.arc, value: "PackFile    ", weight: 0.7 }
-    any:
-      - { op: glob_exists, path: "*.bss", weight: 0.3 }
-      - { op: glob_exists, path: "*.arc", weight: 0.3 }
-  - id: catsystem2
-    label: CatSystem2
-    threshold: 0.70
-    all:
-      - { op: magic_at, path: data.dat, value: CsPack2, weight: 0.6 }
-      - { op: glob_exists, path: "*.cst", weight: 0.4 }
-  - id: yuris
-    label: YU-RIS
-    threshold: 0.70
-    all:
-      - { op: magic_at, path: data.ypf, value: "hex:59504600", weight: 0.6 }
-      - { op: glob_exists, path: "*.ybn", weight: 0.4 }
-  - id: nscripter
-    label: NScripter/ONScripter
-    threshold: 0.70
-    all:
-      - { op: path_exists, path: nscript.dat, weight: 0.55 }
-      - { op: glob_exists, path: "*.nsa", weight: 0.45 }
+  - { id: tyrano, label: TyranoScript, variant: TyranoBuilder/TyranoScript, experimental: false, threshold: 0.70, all: [{ op: path_exists, path: data/system/Config.tjs, weight: 0.45 }], any: [{ op: path_exists, path: tyrano/tyrano.js, weight: 0.45 }, { op: text_contains, path: data/system/Config.tjs, value: projectID, weight: 0.25 }], negative: [{ op: path_exists, path: Editor.exe, weight: -0.10 }] }
+  - { id: kirikiri, label: KiriKiri 2/Z, variant: null, experimental: false, threshold: 0.70, all: [{ op: magic_at, path: data.xp3, value: "hex:5850330d0a200a1a8b6701", weight: 0.55 }], any: [{ op: path_exists, path: startup.tjs, weight: 0.45 }, { op: glob_exists, path: "**/*.ks", weight: 0.35 }] }
+  - { id: choicescript, label: ChoiceScript, variant: null, experimental: false, threshold: 0.70, all: [{ op: text_contains, path: scenes/startup.txt, value: "*title", weight: 0.55 }, { op: path_exists, path: scenes/choicescript_stats.txt, weight: 0.45 }] }
+  - { id: srpg_studio, label: SRPG Studio, variant: null, experimental: false, threshold: 0.70, all: [{ op: path_exists, path: data.dts, weight: 0.5 }, { op: path_exists, path: runtime.rts, weight: 0.5 }] }
+  - { id: pixel_game_maker_mv, label: Pixel Game Maker MV, variant: null, experimental: false, threshold: 0.70, all: [{ op: text_contains, path: js/libs/AGtk.js, value: Agtk, weight: 0.6 }, { op: path_exists, path: package.json, weight: 0.4 }] }
+  - { id: artemis, label: Artemis, threshold: 0.70, all: [{ op: glob_magic_at, path: "*.pfs", value: "hex:70660000", weight: 0.55 }, { op: magic_at, path: movie.mja, value: MJA0, weight: 0.45 }] }
+  - { id: reallive, label: RealLive, variant: RealLive, threshold: 0.70, all: [{ op: path_exists, path: Gameexe.ini, weight: 0.45 }, { op: magic_at, path: seen.txt, value: PACL, weight: 0.55 }] }
+  - { id: siglus, label: SiglusEngine, variant: SiglusEngine, threshold: 0.70, all: [{ op: pe_field_contains, path: SiglusEngine.exe, field: product_name, value: Siglus, weight: 0.6 }], any: [{ op: path_exists, path: Scene.pck, weight: 0.1334 }, { op: path_exists, path: Scene.chs, weight: 0.1333 }, { op: path_exists, path: Scene.gbk, weight: 0.1333 }] }
+  - { id: bgi_ethornell, label: BGI/Ethornell, threshold: 0.70, all: [{ op: magic_at, path: data.arc, value: "PackFile    ", weight: 0.7 }], any: [{ op: glob_exists, path: "*.bss", weight: 0.3 }, { op: glob_exists, path: "*.arc", weight: 0.3 }] }
+  - { id: catsystem2, label: CatSystem2, threshold: 0.70, all: [{ op: magic_at, path: data.dat, value: CsPack2, weight: 0.6 }, { op: glob_exists, path: "*.cst", weight: 0.4 }] }
+  - { id: yuris, label: YU-RIS, threshold: 0.70, all: [{ op: magic_at, path: data.ypf, value: "hex:59504600", weight: 0.6 }, { op: glob_exists, path: "*.ybn", weight: 0.4 }] }
+  - { id: nscripter, label: NScripter/ONScripter, threshold: 0.70, all: [{ op: path_exists, path: nscript.dat, weight: 0.55 }, { op: glob_exists, path: "*.nsa", weight: 0.45 }] }
   - { id: qlie, label: QLIE, experimental: true, threshold: 0.80, all: [{ op: edge_contains, path: data.pack, value: FilePackVer3.0, weight: 1.0 }] }
   - { id: majiro, label: Majiro, experimental: true, threshold: 0.80, all: [{ op: magic_at, path: data.arc, value: MajiroArcV3.000, weight: 1.0 }] }
   - { id: malie, label: Malie, experimental: true, threshold: 0.80, all: [{ op: magic_at, path: data.lib, value: LIBP, weight: 1.0 }] }
