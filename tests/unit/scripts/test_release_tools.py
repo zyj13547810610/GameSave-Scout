@@ -41,7 +41,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 def test_repository_versions_are_consistent() -> None:
     versions = ReleaseVersions.load(REPOSITORY_ROOT)
 
-    assert versions.version == "0.2.1"
+    assert versions.version == "0.3.0"
 
 
 def test_release_versions_reject_mismatched_project_files(tmp_path: Path) -> None:

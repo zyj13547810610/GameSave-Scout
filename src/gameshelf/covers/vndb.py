@@ -31,7 +31,7 @@ VNDB_FIELDS = (
     "id,title,alttitle,titles{lang,title,latin,official,main},"
     "aliases,image{id,url,dims}"
 )
-USER_AGENT = "GameShelf/0.2.1"
+USER_AGENT = "GameShelf/0.3.0"
 REQUEST_TIMEOUT_SECONDS = 20.0
 MINIMUM_REQUEST_INTERVAL_SECONDS = 2.0
 MAX_API_RESPONSE_BYTES = 8 * 1024 * 1024
