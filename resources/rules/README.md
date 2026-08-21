@@ -64,6 +64,22 @@
 | `unity_user_data` / 引擎通用 | Windows Player 的 `persistentDataPath` 与 PlayerPrefs 由公司名、产品名组成 | [Unity persistentDataPath](https://docs.unity3d.com/2023.1/Documentation/ScriptReference/Application-persistentDataPath.html)、[Unity PlayerPrefs](https://docs.unity3d.com/2020.2/Documentation/ScriptReference/PlayerPrefs.html) | 只接受受限 `app.info` 中两个安全路径段；缺失或包含表达式/路径分隔符时不建议 |
 | `unreal_save_games` / 引擎通用 | 项目名对应 `Saved\SaveGames`，Windows 安装版使用项目用户目录 | [Unreal SaveGame](https://dev.epicgames.com/documentation/unreal-engine/saving-and-loading-your-game-in-unreal-engine)、[FPaths](https://dev.epicgames.com/documentation/en-us/unreal-engine/API/Runtime/Core/FPaths) | 只从受限、有效的 `.uproject` 取得项目名；不能用安装目录名猜测，命令行重定向和自定义存储不在本规则覆盖范围 |
 
+## 可分享的脱敏诊断
+
+需要在另一台电脑采集引擎识别线索时，必须显式使用脱敏模式：
+
+```powershell
+.venv\python.exe -m gameshelf.tools.detect_directory "D:\Games\目标游戏" --sanitized > engine-diagnostic.json
+```
+
+脱敏报告不包含游戏根绝对路径、用户名、文件正文、图片、音频、存档内容或归档载荷；
+只保留相对证据路径、候选引擎、置信度、实验状态、规则版本，以及最多 256 项、
+深度 3 的受限文件概况。已知二进制类型最多读取并输出前 16 字节十六进制魔数，
+根级 EXE 只输出受限 PE 产品字段；重解析点会记录但不会继续遍历。读取失败只记录
+相对路径、操作名和异常类型。报告仍需人工打开复核后再分享，且不得直接提交仓库。
+
+不带 `--sanitized` 的旧命令继续保留本机诊断兼容行为，会输出所选绝对目录，不能用于分享。
+
 ## 维护规则
 
 1. 新增或升级正式规则前，先写正向和相似结构负向测试，再修改 YAML。
