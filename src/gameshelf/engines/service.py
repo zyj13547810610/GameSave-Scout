@@ -73,6 +73,7 @@ class EngineDetectionService:
         cls,
         rules: tuple[EngineRule, ...],
     ) -> EngineDetectionService:
+        enabled_rules = tuple(rule for rule in rules if rule.metadata.enabled)
         detectors: tuple[EngineDetector, ...] = (
             RpgMakerDetector(),
             RenPyDetector(),
@@ -80,10 +81,10 @@ class EngineDetectionService:
             UnrealDetector(),
             WolfRpgDetector(),
             CreatorEngineDetector(),
-            *(RuleDetector(rule) for rule in rules),
+            *(RuleDetector(rule) for rule in enabled_rules),
         )
         options_by_id = {option.id: option for option in _BUILTIN_OPTIONS}
-        for rule in rules:
+        for rule in enabled_rules:
             options_by_id[rule.engine_id] = EngineOption(
                 rule.engine_id, rule.label, rule.experimental
             )

@@ -33,6 +33,18 @@ def test_missing_required_evidence_never_matches(tmp_path: Path) -> None:
     assert RuleDetector(rule).inspect(DetectionContext(game, None)) is None
 
 
+def test_rule_exposes_shared_metadata_without_changing_engine_id(tmp_path: Path) -> None:
+    rule = load_engine_rules(_write_rules(tmp_path, valid_rule()))[0]
+
+    assert rule.engine_id == "tyrano"
+    assert rule.metadata.qualified_id == "builtin:tyrano"
+    assert rule.experimental is False
+    assert rule.version == "test-1"
+    assert rule.metadata.priority == 20
+    assert rule.metadata.enabled is True
+    assert rule.metadata.references == ("https://tyranoscript.com/",)
+
+
 def test_unknown_rule_key_is_rejected(tmp_path: Path) -> None:
     path = tmp_path / "rules.yaml"
     path.write_text(
@@ -40,6 +52,20 @@ def test_unknown_rule_key_is_rejected(tmp_path: Path) -> None:
     )
     with pytest.raises(RuleSchemaError, match="surprise"):
         load_engine_rules(path)
+
+
+def test_legacy_experimental_key_is_rejected_after_metadata_upgrade(
+    tmp_path: Path,
+) -> None:
+    content = valid_rule().replace("status: formal", "experimental: false")
+
+    with pytest.raises(RuleSchemaError, match="experimental"):
+        load_engine_rules(_write_rules(tmp_path, content))
+
+
+def test_duplicate_builtin_rule_ids_are_rejected(tmp_path: Path) -> None:
+    with pytest.raises(RuleSchemaError, match="builtin:tyrano"):
+        load_engine_rules(_write_rules(tmp_path, f"{valid_rule()}{valid_rule()}"))
 
 
 def test_rule_paths_cannot_escape_game_root(tmp_path: Path) -> None:
@@ -58,7 +84,11 @@ def valid_rule() -> str:
     return """- id: tyrano
   label: TyranoScript
   variant: TyranoBuilder/TyranoScript
-  experimental: false
+  status: formal
+  priority: 20
+  enabled: true
+  references:
+    - https://tyranoscript.com/
   threshold: 0.70
   all:
     - op: path_exists

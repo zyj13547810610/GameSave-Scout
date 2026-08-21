@@ -83,7 +83,7 @@ def test_siglus_accepts_exact_scene_file_variants(
     )
 
     assert outcome.best is not None and outcome.best.engine_id == "siglus"
-    assert outcome.best.rule_version == "2026.08.13-2"
+    assert outcome.best.rule_version == "2026.08.21-1"
     assert {item.path for item in outcome.best.evidence} == {
         "SiglusEngine.exe",
         scene_name,

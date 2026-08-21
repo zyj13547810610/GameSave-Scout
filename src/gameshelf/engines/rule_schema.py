@@ -9,6 +9,9 @@ from typing import Any, Literal, cast
 
 import yaml
 
+from gameshelf.rules.models import RuleMetadata
+from gameshelf.rules.validation import RuleMetadataError, build_rule_metadata
+
 type EvidenceOp = Literal[
     "path_exists",
     "glob_exists",
@@ -24,7 +27,10 @@ _RULE_KEYS = {
     "id",
     "label",
     "variant",
-    "experimental",
+    "status",
+    "priority",
+    "enabled",
+    "references",
     "threshold",
     "all",
     "any",
@@ -58,15 +64,25 @@ class EvidenceRule:
 
 @dataclass(frozen=True)
 class EngineRule:
-    engine_id: str
+    metadata: RuleMetadata
     label: str
     variant: str | None
-    experimental: bool
     threshold: float
     required: tuple[EvidenceRule, ...]
     optional: tuple[EvidenceRule, ...]
     negative: tuple[EvidenceRule, ...]
-    version: str
+
+    @property
+    def engine_id(self) -> str:
+        return self.metadata.rule_id
+
+    @property
+    def experimental(self) -> bool:
+        return self.metadata.status == "experimental"
+
+    @property
+    def version(self) -> str:
+        return self.metadata.version
 
 
 def load_engine_rules(path: Path) -> tuple[EngineRule, ...]:
@@ -80,7 +96,14 @@ def load_engine_rules(path: Path) -> tuple[EngineRule, ...]:
     entries = document.get("rules")
     if not isinstance(entries, list):
         raise RuleSchemaError("rules must be a list")
-    return tuple(_parse_rule(_mapping(entry, "rule"), version) for entry in entries)
+    rules = tuple(_parse_rule(_mapping(entry, "rule"), version) for entry in entries)
+    seen: set[str] = set()
+    for rule in rules:
+        qualified_id = rule.metadata.qualified_id
+        if qualified_id in seen:
+            raise RuleSchemaError(f"duplicate engine rule id: {qualified_id}")
+        seen.add(qualified_id)
+    return rules
 
 
 def _parse_rule(raw: dict[str, Any], version: str) -> EngineRule:
@@ -90,22 +113,32 @@ def _parse_rule(raw: dict[str, Any], version: str) -> EngineRule:
     variant_raw = raw.get("variant")
     if variant_raw is not None and not isinstance(variant_raw, str):
         raise RuleSchemaError("variant must be a string or null")
-    experimental = raw.get("experimental", False)
-    if not isinstance(experimental, bool):
-        raise RuleSchemaError("experimental must be boolean")
+    status = raw.get("status", "formal")
+    experimental = status == "experimental"
     threshold = _number(raw.get("threshold", 0.8 if experimental else 0.7), "threshold")
     if not 0 <= threshold <= 1:
         raise RuleSchemaError("threshold must be between 0 and 1")
+    try:
+        metadata = build_rule_metadata(
+            rule_id=engine_id,
+            rule_type="engine",
+            source="builtin",
+            status=status,
+            version=version,
+            references=raw.get("references", []),
+            priority=raw.get("priority", 0),
+            enabled=raw.get("enabled", True),
+        )
+    except RuleMetadataError as error:
+        raise RuleSchemaError(f"invalid metadata for rule {engine_id}: {error}") from error
     return EngineRule(
-        engine_id,
+        metadata,
         label,
         variant_raw,
-        experimental,
         threshold,
         _parse_evidence_list(raw.get("all", []), "all"),
         _parse_evidence_list(raw.get("any", []), "any"),
         _parse_evidence_list(raw.get("negative", []), "negative"),
-        version,
     )
 
 
