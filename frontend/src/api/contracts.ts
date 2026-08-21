@@ -253,7 +253,7 @@ export type SaveLocation = {
 }
 
 export type SaveSuggestionEvidence = {
-  source: 'custom' | 'ludusavi' | 'engine'
+  source: 'custom' | 'builtin' | 'ludusavi' | 'engine'
   detail: string
 }
 
@@ -269,6 +269,7 @@ export type SaveSuggestion = {
   preselected: boolean
   category: 'save' | 'config' | 'other'
   group: 'exact' | 'possible' | 'experimental'
+  availability: 'found' | 'predicted'
 }
 
 export type GuidedSessionStatus =

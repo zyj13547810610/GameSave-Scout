@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from io import StringIO
 from pathlib import Path
 
@@ -24,7 +24,7 @@ from gameshelf.saves.ludusavi_index import LudusaviIndex
 from gameshelf.saves.ludusavi_index_builder import build_ludusavi_index
 from gameshelf.saves.ludusavi_parser import parse_manifest
 from gameshelf.saves.ludusavi_provider import SnapshotUpdateError
-from gameshelf.saves.models import SaveLocationSuggestion
+from gameshelf.saves.models import SaveLocationSuggestion, SuggestionEvidence
 from gameshelf.saves.repository import SaveLocationRepository
 from gameshelf.saves.service import SaveLocationService
 from gameshelf.saves.static_discovery import StaticSaveDiscovery
@@ -68,6 +68,67 @@ class NoopRegistry:
         return False
 
     def open_key(self, _key: str) -> None: ...
+
+
+@dataclass
+class RecordingBuiltinRules:
+    events: list[str]
+    fail: bool = False
+    game_suggestions: tuple[SaveLocationSuggestion, ...] = ()
+    engine_suggestions: tuple[SaveLocationSuggestion, ...] = ()
+
+    def suggest_game_specific(
+        self, _game: Game, _install_dir: Path, _metadata: object
+    ) -> tuple[SaveLocationSuggestion, ...]:
+        self.events.append("builtin_game")
+        if self.fail:
+            raise RuntimeError("broken builtin game rule")
+        return self.game_suggestions
+
+    def suggest_engine(
+        self, _game: Game, _install_dir: Path, _metadata: object
+    ) -> tuple[SaveLocationSuggestion, ...]:
+        self.events.append("builtin_engine")
+        if self.fail:
+            raise RuntimeError("broken builtin engine rule")
+        return self.engine_suggestions
+
+
+@dataclass
+class RecordingEngineHints:
+    events: list[str]
+
+    def suggest(
+        self, _game: Game, _install_dir: Path, _metadata: object
+    ) -> tuple[SaveLocationSuggestion, ...]:
+        self.events.append("engine_code")
+        return ()
+
+
+@dataclass
+class RecordingCustomProvider:
+    events: list[str]
+
+    def load_all(self) -> CustomManifestLoadResult:
+        self.events.append("custom")
+        return CustomManifestLoadResult((), ())
+
+
+class RecordingLudusaviProvider:
+    def __init__(self, events: list[str], provider: FakeLudusaviProvider) -> None:
+        self._events = events
+        self._provider = provider
+
+    @contextmanager
+    def index_session(self) -> Iterator[LudusaviIndex]:
+        self._events.append("ludusavi")
+        with self._provider.index_session() as index:
+            yield index
+
+
+class FailingRegistry:
+    def key_exists(self, _key: str) -> bool:
+        raise OSError("registry unavailable")
 
 
 @dataclass
@@ -115,10 +176,9 @@ def static_harness(tmp_path: Path) -> Iterator[StaticHarness]:
     official_provider = FakeLudusaviProvider(
         LudusaviIndex.open(index_path, manifest_sha256="d" * 64)
     )
+    (folders.app_data / "RenPy" / "Alice").mkdir(parents=True)
     custom = parse_manifest(StringIO(document))
-    custom_result = CustomManifestLoadResult(
-        (LoadedCustomManifest("local.yaml", custom),), ()
-    )
+    custom_result = CustomManifestLoadResult((LoadedCustomManifest("local.yaml", custom),), ())
     save_repository = SaveLocationRepository(factory)
     save_service = SaveLocationService(
         save_repository,
@@ -155,7 +215,135 @@ def test_static_discovery_merges_same_path_and_keeps_all_source_evidence(
         "engine",
     }
     assert suggestions[0].preselected is True
+    assert suggestions[0].availability == "found"
     assert static_harness.save_service.list_for_game(static_harness.game_id) == ()
+
+
+def test_static_discovery_runs_all_sources_only_after_explicit_call(
+    static_harness: StaticHarness,
+) -> None:
+    events: list[str] = []
+    discovery = static_harness.discovery
+    discovery._custom_provider = RecordingCustomProvider(events)
+    discovery._builtin_rules = RecordingBuiltinRules(events)
+    discovery._ludusavi_provider = RecordingLudusaviProvider(
+        events, static_harness.official_provider
+    )
+    discovery._engine_hints = RecordingEngineHints(events)
+
+    assert events == []
+    discovery.suggest_for_game(static_harness.game_id)
+
+    assert events == [
+        "custom",
+        "builtin_game",
+        "ludusavi",
+        "builtin_engine",
+        "engine_code",
+    ]
+
+
+def test_broken_builtin_rules_do_not_block_ludusavi_or_code_hints(
+    static_harness: StaticHarness,
+) -> None:
+    events: list[str] = []
+    discovery = static_harness.discovery
+    discovery._custom_provider = RecordingCustomProvider(events)
+    discovery._builtin_rules = RecordingBuiltinRules(events, fail=True)
+    discovery._ludusavi_provider = RecordingLudusaviProvider(
+        events, static_harness.official_provider
+    )
+    discovery._engine_hints = RecordingEngineHints(events)
+
+    suggestions = discovery.suggest_for_game(static_harness.game_id)
+
+    assert suggestions
+    assert "ludusavi" in events
+    assert "engine_code" in events
+
+
+def test_existing_path_becomes_predicted_and_unselected_after_removal(
+    static_harness: StaticHarness,
+) -> None:
+    first = static_harness.discovery.suggest_for_game(static_harness.game_id)[0]
+    Path(first.display_path).rmdir()
+
+    predicted = static_harness.discovery.suggest_for_game(static_harness.game_id)[0]
+
+    assert predicted.availability == "predicted"
+    assert predicted.preselected is False
+
+
+def test_availability_probe_failure_keeps_candidate_with_diagnostic(
+    static_harness: StaticHarness,
+) -> None:
+    events: list[str] = []
+    registry_suggestion = SaveLocationSuggestion(
+        kind="registry",
+        path_template=r"HKEY_CURRENT_USER\Software\Studio\Alice",
+        display_path=r"HKEY_CURRENT_USER\Software\Studio\Alice",
+        source="engine",
+        confidence=0.95,
+        evidence=("内置游戏规则",),
+        source_evidence=(
+            SuggestionEvidence("builtin", "内置游戏规则"),
+        ),
+        group="exact",
+        preselected=True,
+    )
+    static_harness.discovery._builtin_rules = RecordingBuiltinRules(
+        events,
+        game_suggestions=(registry_suggestion,),
+    )
+    static_harness.discovery._registry = FailingRegistry()
+
+    suggestions = static_harness.discovery.suggest_for_game(static_harness.game_id)
+    registry = next(item for item in suggestions if item.kind == "registry")
+
+    assert registry.availability == "predicted"
+    assert registry.preselected is False
+    assert "存在性检查失败，已按可能路径保留" in registry.evidence
+
+
+def test_game_specific_display_wins_while_formal_engine_evidence_is_retained(
+    static_harness: StaticHarness,
+) -> None:
+    events: list[str] = []
+    game_specific = SaveLocationSuggestion(
+        kind="directory",
+        path_template=r"<winDocuments>\Exact Game\Save",
+        display_path=r"C:\Profile\Documents\Exact Game\Save",
+        source="engine",
+        confidence=0.6,
+        evidence=("游戏专属实验规则",),
+        source_evidence=(SuggestionEvidence("builtin", "游戏专属实验规则"),),
+        group="experimental",
+    )
+    engine_generic = replace(
+        game_specific,
+        path_template=r"<winDocuments>\exact game\save",
+        display_path=r"C:\Profile\Documents\exact game\save",
+        confidence=0.99,
+        evidence=("引擎正式规则",),
+        source_evidence=(SuggestionEvidence("builtin", "引擎正式规则"),),
+        group="exact",
+    )
+    static_harness.discovery._builtin_rules = RecordingBuiltinRules(
+        events,
+        game_suggestions=(game_specific,),
+        engine_suggestions=(engine_generic,),
+    )
+
+    suggestions = static_harness.discovery.suggest_for_game(static_harness.game_id)
+    merged = next(item for item in suggestions if "Exact Game" in item.path_template)
+
+    assert merged.path_template == game_specific.path_template
+    assert merged.confidence == 0.99
+    assert merged.group == "exact"
+    assert {item.detail for item in merged.source_evidence} == {
+        "游戏专属实验规则",
+        "引擎正式规则",
+    }
 
 
 def test_confirmed_location_is_never_suggested_again(

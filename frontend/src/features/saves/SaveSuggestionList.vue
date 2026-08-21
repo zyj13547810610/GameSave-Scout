@@ -17,9 +17,16 @@ const message = ref('')
 const hasSearched = ref(props.suggestions !== undefined)
 
 const groups = computed(() => [
-  { id: 'exact', label: '高可信建议', items: items.value.filter((item) => item.group === 'exact') },
-  { id: 'possible', label: '可能的位置', items: items.value.filter((item) => item.group === 'possible') },
-  { id: 'experimental', label: '实验性引擎建议', items: items.value.filter((item) => item.group === 'experimental') },
+  {
+    id: 'found',
+    label: `已找到（${items.value.filter((item) => item.availability === 'found').length}）`,
+    items: items.value.filter((item) => item.availability === 'found'),
+  },
+  {
+    id: 'predicted',
+    label: `可能路径 / 未发现（${items.value.filter((item) => item.availability === 'predicted').length}）`,
+    items: items.value.filter((item) => item.availability === 'predicted'),
+  },
 ].filter((group) => group.items.length > 0))
 
 watch(() => props.suggestions, (suggestions) => {
@@ -37,7 +44,11 @@ function setItems(suggestions: SaveSuggestion[]) {
   items.value = [...suggestions]
   selected.value = new Set(
     suggestions
-      .filter((item) => item.preselected && item.kind !== 'registry')
+      .filter((item) => (
+        item.preselected
+        && item.availability === 'found'
+        && item.kind !== 'registry'
+      ))
       .map((item) => item.suggestionId),
   )
 }
@@ -89,7 +100,16 @@ function categoryLabel(category: SaveSuggestion['category']): string {
 }
 
 function evidenceSourceLabel(source: SaveSuggestion['sourceEvidence'][number]['source']): string {
-  return { custom: '自定义清单', ludusavi: 'Ludusavi', engine: '引擎规则' }[source]
+  return {
+    custom: '自定义清单',
+    builtin: '内置规则',
+    ludusavi: 'Ludusavi',
+    engine: '引擎规则',
+  }[source]
+}
+
+function suggestionGroupLabel(group: SaveSuggestion['group']): string {
+  return { exact: '高可信', possible: '可能', experimental: '实验性' }[group]
 }
 </script>
 
@@ -114,8 +134,15 @@ function evidenceSourceLabel(source: SaveSuggestion['sourceEvidence'][number]['s
     <p v-else-if="!loading && items.length === 0" class="empty-save-message">
       暂未发现新的存档位置。
     </p>
-    <section v-for="group in groups" :key="group.id" class="suggestion-group">
-      <h5>{{ group.label }}</h5>
+    <component
+      :is="group.id === 'predicted' ? 'details' : 'section'"
+      v-for="group in groups"
+      :key="group.id"
+      class="suggestion-group"
+      :data-test="group.id === 'predicted' ? 'predicted-group' : 'found-group'"
+    >
+      <summary v-if="group.id === 'predicted'">{{ group.label }}</summary>
+      <h5 v-else>{{ group.label }}</h5>
       <label v-for="item in group.items" :key="item.suggestionId" class="save-suggestion-card">
         <input
           :data-test="`suggestion-${item.suggestionId}`"
@@ -128,6 +155,7 @@ function evidenceSourceLabel(source: SaveSuggestion['sourceEvidence'][number]['s
             <strong>{{ saveKindLabel(item.kind) }}</strong>
             <span>{{ categoryLabel(item.category) }}</span>
             <span>{{ confidenceLabel(item.confidence) }}</span>
+            <span>{{ suggestionGroupLabel(item.group) }}</span>
           </span>
           <span class="save-display-path">{{ item.displayPath }}</span>
           <small v-for="entry in item.sourceEvidence" :key="`${entry.source}:${entry.detail}`">
@@ -139,7 +167,7 @@ function evidenceSourceLabel(source: SaveSuggestion['sourceEvidence'][number]['s
           </details>
         </span>
       </label>
-    </section>
+    </component>
 
     <button
       v-if="items.length"

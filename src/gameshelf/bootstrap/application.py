@@ -180,6 +180,8 @@ def build_application(
         ludusavi_provider=ludusavi_provider,
         custom_provider=custom_provider,
         engine_hints=EngineSaveHintProvider(resolver),
+        builtin_rules=builtin_save_rules,
+        registry=registry,
         engine_is_experimental=engine_detection.is_experimental,
     )
     guided_repository = GuidedSaveRepository(database, writer)

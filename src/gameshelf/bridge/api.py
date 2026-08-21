@@ -2089,6 +2089,7 @@ def _save_suggestion_dto(suggestion: SaveLocationSuggestion) -> dict[str, JSONVa
         "preselected": suggestion.preselected,
         "category": suggestion.category,
         "group": suggestion.group,
+        "availability": suggestion.availability,
     }
 
 

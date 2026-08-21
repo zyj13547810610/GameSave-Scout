@@ -20,6 +20,7 @@ from gameshelf.saves.service import InvalidSaveLocation, SaveLocationService
 
 class FakeSaveService:
     def __init__(self) -> None:
+        self.accepted_sources: list[str] = []
         self.location = SaveLocation(
             id="save-1",
             game_id="game-1",
@@ -53,6 +54,10 @@ class FakeSaveService:
     def open_location(self, _location_id: str) -> None:
         return None
 
+    def accept_suggestion(self, _game_id: str, suggestion: SaveLocationSuggestion) -> SaveLocation:
+        self.accepted_sources.append(suggestion.source)
+        return replace(self.location, source=suggestion.source)
+
 
 class FakeWindow:
     def __init__(self) -> None:
@@ -73,9 +78,10 @@ class FakeDiscovery:
             source="engine",
             confidence=0.9,
             evidence=("Unity PlayerPrefs",),
-            source_evidence=(SuggestionEvidence("engine", "Unity PlayerPrefs"),),
+            source_evidence=(SuggestionEvidence("builtin", "Unity PlayerPrefs"),),
             suggestion_id="suggestion-1",
             group="exact",
+            availability="found",
         )
 
     def suggest_for_game(self, _game_id: str) -> tuple[SaveLocationSuggestion, ...]:
@@ -198,6 +204,49 @@ def test_registry_suggestion_requires_explicit_confirmation(tmp_path: Path) -> N
     assert result["error"]["code"] == "registry_confirmation_required"
 
 
+def test_suggestion_dto_exposes_builtin_evidence_and_availability(
+    tmp_path: Path,
+) -> None:
+    api, tasks = _api(tmp_path, discovery=FakeDiscovery())
+    try:
+        result = api.suggest_save_locations({"gameId": "game-1"})
+    finally:
+        tasks.close()
+
+    assert result["ok"] is True
+    assert result["data"][0]["availability"] == "found"
+    assert result["data"][0]["sourceEvidence"] == [
+        {"source": "builtin", "detail": "Unity PlayerPrefs"}
+    ]
+
+
+def test_accepting_builtin_suggestion_keeps_persisted_source_compatible(
+    tmp_path: Path,
+) -> None:
+    service = FakeSaveService()
+    discovery = FakeDiscovery()
+    discovery.suggestion = replace(discovery.suggestion, kind="directory")
+    api, tasks = _api(
+        tmp_path,
+        discovery=discovery,
+        save_service=service,
+    )
+    try:
+        result = api.accept_save_suggestions(
+            {
+                "gameId": "game-1",
+                "suggestionIds": ["suggestion-1"],
+                "confirmRegistry": False,
+            }
+        )
+    finally:
+        tasks.close()
+
+    assert result["ok"] is True
+    assert result["data"][0]["source"] == "engine"
+    assert service.accepted_sources == ["engine"]
+
+
 def test_ludusavi_update_is_submitted_only_after_explicit_api_call(tmp_path: Path) -> None:
     discovery = FakeDiscovery()
     provider = FakeSnapshotProvider()
@@ -256,6 +305,7 @@ def _api(
     *,
     discovery: FakeDiscovery | None = None,
     snapshot_provider: FakeSnapshotProvider | None = None,
+    save_service: FakeSaveService | None = None,
 ) -> tuple[BridgeApi, TaskRegistry]:
     paths = AppPaths.from_root(tmp_path / "portable")
     tasks = TaskRegistry(max_workers=1)
@@ -263,7 +313,7 @@ def _api(
         paths,
         tasks,
         schema_version=1,
-        save_locations=cast(SaveLocationService, FakeSaveService()),
+        save_locations=cast(SaveLocationService, save_service or FakeSaveService()),
         static_discovery=discovery,
         ludusavi_provider=snapshot_provider,
         custom_provider=FakeCustomProvider(),
