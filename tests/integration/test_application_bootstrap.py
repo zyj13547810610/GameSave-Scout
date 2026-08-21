@@ -13,6 +13,7 @@ from gameshelf.bootstrap.resources import ResourcePaths
 from gameshelf.bridge.tasks import TaskContext
 from gameshelf.engines.rule_schema import RuleSchemaError
 from gameshelf.saves.batch_rules import BatchRuleCatalog
+from gameshelf.saves.rule_schema import SaveRuleSchemaError
 
 
 def test_application_bootstrap_creates_only_portable_state(tmp_path: Path) -> None:
@@ -205,10 +206,13 @@ rules:
 """,
         encoding="utf-8",
     )
+    save_rules_file = resource_root / "rules" / "saves.yaml"
+    save_rules_file.write_text("version: test\nrules: []\n", encoding="utf-8")
     resources = ResourcePaths(
         root=resource_root,
         ui_dir=ui_dir,
         engine_rules_file=rules_file,
+        save_rules_file=save_rules_file,
         ludusavi_dir=resource_root / "missing-ludusavi",
     )
 
@@ -249,10 +253,13 @@ def test_application_degrades_to_builtin_detectors_for_invalid_rules(
     rules_file = resource_root / "rules" / "engines.yaml"
     rules_file.parent.mkdir()
     rules_file.write_text(rules_content, encoding="utf-8")
+    save_rules_file = resource_root / "rules" / "saves.yaml"
+    save_rules_file.write_text("version: test\nrules: []\n", encoding="utf-8")
     resources = ResourcePaths(
         root=resource_root,
         ui_dir=ui_dir,
         engine_rules_file=rules_file,
+        save_rules_file=save_rules_file,
         ludusavi_dir=resource_root / "missing-ludusavi",
     )
     paths = AppPaths.from_root(tmp_path / "便携应用")
@@ -285,11 +292,82 @@ def test_application_rejects_missing_engine_rules_before_database_start(
         root=resource_root,
         ui_dir=ui_dir,
         engine_rules_file=resource_root / "rules" / "missing.yaml",
+        save_rules_file=resource_root / "rules" / "saves.yaml",
         ludusavi_dir=resource_root / "missing-ludusavi",
     )
     paths = AppPaths.from_root(tmp_path / "便携应用")
 
     with pytest.raises(RuleSchemaError, match="Cannot read engine rules"):
+        build_application(paths, resources=resources)
+
+    assert not paths.database_file.exists()
+
+
+@pytest.mark.parametrize(
+    "rules_content",
+    (
+        "version: [",
+        "version: test\nrules: not-a-list\n",
+    ),
+)
+def test_application_disables_only_invalid_builtin_save_rules(
+    tmp_path: Path,
+    rules_content: str,
+) -> None:
+    resource_root = tmp_path / "resources"
+    ui_dir = resource_root / "ui"
+    ui_dir.mkdir(parents=True)
+    (ui_dir / "index.html").write_text("test ui", encoding="utf-8")
+    rules_dir = resource_root / "rules"
+    rules_dir.mkdir()
+    engine_rules_file = rules_dir / "engines.yaml"
+    engine_rules_file.write_text("version: test\nrules: []\n", encoding="utf-8")
+    save_rules_file = rules_dir / "saves.yaml"
+    save_rules_file.write_text(rules_content, encoding="utf-8")
+    resources = ResourcePaths(
+        root=resource_root,
+        ui_dir=ui_dir,
+        engine_rules_file=engine_rules_file,
+        save_rules_file=save_rules_file,
+        ludusavi_dir=resource_root / "missing-ludusavi",
+    )
+    paths = AppPaths.from_root(tmp_path / "便携应用")
+
+    application = build_application(paths, resources=resources)
+    try:
+        log_text = paths.logs_dir.joinpath("gameshelf.log").read_text(
+            encoding="utf-8"
+        )
+
+        assert application.api.bootstrap()["ok"] is True
+        assert application.builtin_save_rules.rules_version is None
+        assert "内置存档规则加载失败" in log_text
+        assert str(save_rules_file) in log_text
+    finally:
+        application.close()
+
+
+def test_application_rejects_missing_save_rules_before_database_start(
+    tmp_path: Path,
+) -> None:
+    resource_root = tmp_path / "resources"
+    ui_dir = resource_root / "ui"
+    ui_dir.mkdir(parents=True)
+    (ui_dir / "index.html").write_text("test ui", encoding="utf-8")
+    rules_dir = resource_root / "rules"
+    rules_dir.mkdir()
+    engine_rules_file = rules_dir / "engines.yaml"
+    engine_rules_file.write_text("version: test\nrules: []\n", encoding="utf-8")
+    resources = ResourcePaths(
+        root=resource_root,
+        ui_dir=ui_dir,
+        engine_rules_file=engine_rules_file,
+        save_rules_file=rules_dir / "missing-saves.yaml",
+        ludusavi_dir=resource_root / "missing-ludusavi",
+    )
+    paths = AppPaths.from_root(tmp_path / "便携应用")
+
+    with pytest.raises(SaveRuleSchemaError, match="Cannot read save rules"):
         build_application(paths, resources=resources)
 
     assert not paths.database_file.exists()

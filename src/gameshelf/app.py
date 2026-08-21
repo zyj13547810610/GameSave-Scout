@@ -62,6 +62,7 @@ def main(
                 "engineRules": (
                     "rules/engines.yaml" not in resource_status.missing
                 ),
+                "saveRules": "rules/saves.yaml" not in resource_status.missing,
                 "ludusavi": (
                     "manifests/ludusavi" not in resource_status.missing
                 ),

@@ -91,6 +91,7 @@ def test_json_smoke_writes_success_without_creating_desktop_window(
         "resources": True,
         "ui": True,
         "engineRules": True,
+        "saveRules": True,
         "ludusavi": True,
         "desktopDependencies": True,
         "webviewRuntime": True,
@@ -178,6 +179,7 @@ def test_json_smoke_writes_failure_without_showing_frozen_dialog(
         "resources": False,
         "ui": False,
         "engineRules": False,
+        "saveRules": False,
         "ludusavi": False,
     }
     assert "ui/index.html" in payload["error"]
@@ -393,6 +395,10 @@ def _create_required_resources(resource_root: Path) -> None:
     )
     (resource_root / "rules").mkdir()
     (resource_root / "rules" / "engines.yaml").write_text(
+        "version: test\nrules: []\n",
+        encoding="utf-8",
+    )
+    (resource_root / "rules" / "saves.yaml").write_text(
         "version: test\nrules: []\n",
         encoding="utf-8",
     )

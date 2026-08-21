@@ -73,6 +73,7 @@ rules:
         root=tmp_path / "resources",
         ui_dir=tmp_path / "resources" / "ui",
         engine_rules_file=rules_file,
+        save_rules_file=tmp_path / "resources" / "rules" / "saves.yaml",
         ludusavi_dir=tmp_path / "resources" / "manifests" / "ludusavi",
     )
 

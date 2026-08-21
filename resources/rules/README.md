@@ -56,6 +56,12 @@
 | `cmvs` / CMVS/CVNS | `start.ps3` 加 CPZ5/6/7 | [GARbro ArcCPZ](https://github.com/morkt/GARbro/blob/master/ArcFormats/Cmvs/ArcCPZ.cs) | 孤立脚本、孤立 CPZ 和未知版本均不命中 |
 | `godot` / Godot | EXE 加官方项目配置或 PCK 魔数 | [Godot 文件系统](https://docs.godotengine.org/en/stable/tutorials/scripting/filesystem.html)、[PCK 导出](https://docs.godotengine.org/en/stable/tutorials/export/exporting_pcks.html)、[魔数定义](https://github.com/godotengine/godot/blob/master/core/io/file_access_pack.h) | 普通 PCK、偏移魔数、无配置头文本不命中 |
 
+## 当前正式存档规则
+
+| 稳定 ID / 类型 | 当前建议依据 | 公开依据 | 风险与负向边界 |
+| --- | --- | --- | --- |
+| `godot_user_data` / 引擎通用 | Windows 默认 `user://` 位于 `%APPDATA%\Godot\app_userdata\<项目名>` | [Godot 数据路径](https://docs.godotengine.org/en/stable/tutorials/io/data_paths.html) | 必须先从受限项目配置取得安全的 `project_name`；缺失、非法路径段或启用自定义用户目录时不拼接默认路径 |
+
 ## 维护规则
 
 1. 新增或升级正式规则前，先写正向和相似结构负向测试，再修改 YAML。

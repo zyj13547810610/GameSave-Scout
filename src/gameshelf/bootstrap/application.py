@@ -43,6 +43,7 @@ from gameshelf.saves.batch_rules import BatchRuleProvider
 from gameshelf.saves.batch_scanner import BatchFilesystemScanner
 from gameshelf.saves.batch_scope import BatchScopeBuilder
 from gameshelf.saves.batch_service import BatchSaveDiscoveryService
+from gameshelf.saves.builtin_rules import BuiltinSaveRuleProvider
 from gameshelf.saves.custom_manifest_provider import CustomManifestProvider
 from gameshelf.saves.engine_hints import EngineSaveHintProvider
 from gameshelf.saves.guided_models import GuidedScopeOption
@@ -59,6 +60,7 @@ from gameshelf.saves.guided_service import (
 )
 from gameshelf.saves.ludusavi_provider import LudusaviProvider
 from gameshelf.saves.repository import SaveLocationRepository
+from gameshelf.saves.rule_schema import SaveRuleSchemaError
 from gameshelf.saves.service import SaveLocationService
 from gameshelf.saves.static_discovery import StaticSaveDiscovery
 from gameshelf.saves.templates import PathTemplateResolver
@@ -81,6 +83,7 @@ class Application:
     asset_server: AssetServer
     asset_address: AssetServerAddress
     guided_saves: GuidedSaveSessionService
+    builtin_save_rules: BuiltinSaveRuleProvider
     cover_wizard: CoverWizardService
     analysis_pool: ScanAnalysisPool
     _close_lock: Lock = field(default_factory=Lock, repr=False)
@@ -117,6 +120,13 @@ def build_application(
         resource_paths.engine_rules_file,
         logger,
     )
+    known_folders = WindowsKnownFolderProvider().load()
+    resolver = PathTemplateResolver(known_folders)
+    builtin_save_rules = _load_builtin_save_rules(
+        resource_paths.save_rules_file,
+        resolver,
+        logger,
+    )
     database = ConnectionFactory(paths.database_file)
     schema_version = Migrator(database, paths.backups_dir).migrate()
     writer = DbWriter(database)
@@ -146,8 +156,6 @@ def build_application(
         LocalCoverDiscovery(),
         VndbClient(),
     )
-    known_folders = WindowsKnownFolderProvider().load()
-    resolver = PathTemplateResolver(known_folders)
     save_repository = SaveLocationRepository(database)
     registry = WindowsRegistry()
     save_locations = SaveLocationService(
@@ -305,6 +313,7 @@ def build_application(
         asset_server=asset_server,
         asset_address=asset_address,
         guided_saves=guided_saves,
+        builtin_save_rules=builtin_save_rules,
         cover_wizard=cover_wizard,
         analysis_pool=analysis_pool,
     )
@@ -325,3 +334,21 @@ def _load_engine_detection(
             error,
         )
         return EngineDetectionService.builtins_only()
+
+
+def _load_builtin_save_rules(
+    rules_file: Path,
+    resolver: PathTemplateResolver,
+    logger: logging.Logger,
+) -> BuiltinSaveRuleProvider:
+    try:
+        return BuiltinSaveRuleProvider.from_file(rules_file, resolver, logger)
+    except SaveRuleSchemaError as error:
+        if not rules_file.is_file() or isinstance(error.__cause__, OSError):
+            raise
+        logger.warning(
+            "内置存档规则加载失败，已禁用该建议来源（%s）：%s",
+            rules_file,
+            error,
+        )
+        return BuiltinSaveRuleProvider.empty(resolver, logger)

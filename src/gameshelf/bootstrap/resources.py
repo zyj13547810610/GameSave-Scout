@@ -25,6 +25,7 @@ class ResourcePaths:
     root: Path
     ui_dir: Path
     engine_rules_file: Path
+    save_rules_file: Path
     ludusavi_dir: Path
 
     @classmethod
@@ -54,6 +55,7 @@ class ResourcePaths:
             root=root,
             ui_dir=root / "ui",
             engine_rules_file=root / "rules" / "engines.yaml",
+            save_rules_file=root / "rules" / "saves.yaml",
             ludusavi_dir=root / "manifests" / "ludusavi",
         )
 
@@ -63,6 +65,8 @@ class ResourcePaths:
             missing.append("ui/index.html")
         if not self.engine_rules_file.is_file():
             missing.append("rules/engines.yaml")
+        if not self.save_rules_file.is_file():
+            missing.append("rules/saves.yaml")
         if not self.ludusavi_dir.is_dir():
             missing.append("manifests/ludusavi")
         return ResourceStatus(missing=tuple(missing))

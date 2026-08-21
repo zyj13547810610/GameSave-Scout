@@ -30,6 +30,7 @@ def test_frozen_runtime_resolves_resources_from_meipass(
     assert resources.root == resource_root.resolve(strict=False)
     assert resources.ui_dir == resource_root / "ui"
     assert resources.engine_rules_file == resource_root / "rules" / "engines.yaml"
+    assert resources.save_rules_file == resource_root / "rules" / "saves.yaml"
     assert resources.ludusavi_dir == resource_root / "manifests" / "ludusavi"
     assert resources.status().ok is True
 
@@ -46,6 +47,7 @@ def test_status_reports_each_missing_required_resource(tmp_path: Path) -> None:
     assert status.missing == (
         "ui/index.html",
         "rules/engines.yaml",
+        "rules/saves.yaml",
         "manifests/ludusavi",
     )
 
@@ -81,4 +83,7 @@ def _create_required_resources(resource_root: Path) -> None:
     (resource_root / "ui" / "index.html").write_text("<!doctype html>", encoding="utf-8")
     (resource_root / "rules").mkdir()
     (resource_root / "rules" / "engines.yaml").write_text("version: test", encoding="utf-8")
+    (resource_root / "rules" / "saves.yaml").write_text(
+        "version: test\nrules: []\n", encoding="utf-8"
+    )
     (resource_root / "manifests" / "ludusavi").mkdir(parents=True)

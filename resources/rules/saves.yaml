@@ -1,0 +1,16 @@
+version: 2026.08.21-1
+rules:
+  - id: godot_user_data
+    type: save_engine
+    status: formal
+    priority: 20
+    enabled: true
+    references:
+      - https://docs.godotengine.org/en/stable/tutorials/io/data_paths.html
+    engine_ids:
+      - godot
+    locations:
+      - kind: directory
+        path: <winAppData>\Godot\app_userdata\{project_name}
+        category: save
+        confidence: 0.9

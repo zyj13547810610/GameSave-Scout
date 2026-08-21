@@ -109,3 +109,13 @@ def test_pyinstaller_bundle_includes_only_migration_payload(
     assert (migrations / "0003_initial.sql").is_file()
     assert (migrations / "0004_initial.sql").is_file()
     assert not (migrations / "__init__.py").exists()
+
+
+def test_pyinstaller_bundle_includes_both_declarative_rule_catalogs(
+    pyinstaller_build: tuple[Path, Path],
+) -> None:
+    dist_path, _ = pyinstaller_build
+    rules = dist_path / "GameShelf" / "_internal" / "resources" / "rules"
+
+    assert (rules / "engines.yaml").is_file()
+    assert (rules / "saves.yaml").is_file()
