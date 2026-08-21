@@ -4,7 +4,7 @@ import pytest
 
 from gameshelf.library.models import Game
 from gameshelf.platform.windows.known_folders import KnownFolders
-from gameshelf.saves.engine_hints import EngineSaveHintProvider
+from gameshelf.saves.engine_hints import EngineSaveHintProvider, load_engine_metadata
 from gameshelf.saves.templates import PathTemplateResolver
 
 
@@ -38,6 +38,10 @@ def test_renpy_reads_literal_save_directory_and_suggests_appdata(
 
     assert suggestions[0].path_template == r"<winAppData>\RenPy\Alice-123"
     assert suggestions[0].confidence >= 0.9
+    assert suggestions[0].availability == "predicted"
+
+    Path(suggestions[0].display_path).mkdir(parents=True)
+    assert hint_provider.suggest(_game("renpy"), root, {})[0].availability == "found"
 
 
 def test_renpy_never_executes_expression_or_accepts_unsafe_segment(
@@ -85,6 +89,14 @@ def test_unity_suggests_local_low_and_player_prefs_from_reliable_metadata(
         r"HKEY_CURRENT_USER\Software\Studio\作品",
     ]
     assert suggestions[1].kind == "registry"
+    assert [item.availability for item in suggestions] == ["predicted", "predicted"]
+
+    Path(suggestions[0].display_path).mkdir(parents=True)
+    assert hint_provider.suggest(
+        _game("unity"),
+        tmp_path / "Game",
+        {"company_name": "Studio", "product_name": "作品"},
+    )[0].availability == "found"
 
 
 @pytest.mark.parametrize(
@@ -109,6 +121,7 @@ def test_rgss_hint_requires_existing_generation_specific_file(
     (root / filename).write_bytes(b"save")
 
     assert hint_provider.suggest(_game(engine_id), root, {})[0].path_template == expected
+    assert hint_provider.suggest(_game(engine_id), root, {})[0].availability == "found"
 
 
 @pytest.mark.parametrize(
@@ -131,6 +144,7 @@ def test_javascript_rpg_maker_hint_requires_existing_save_file(
     save.write_bytes(b"save")
 
     assert hint_provider.suggest(_game(engine_id), root, {})[0].path_template == expected
+    assert hint_provider.suggest(_game(engine_id), root, {})[0].availability == "found"
 
 
 def test_wolf_kirikiri_and_nscripter_require_existing_layout_evidence(
@@ -140,6 +154,8 @@ def test_wolf_kirikiri_and_nscripter_require_existing_layout_evidence(
     wolf = tmp_path / "Wolf"
     wolf_save = wolf / "Data" / "Save"
     wolf_save.mkdir(parents=True)
+    assert hint_provider.suggest(_game("wolf_rpg"), wolf, {}) == ()
+    (wolf_save / "SaveData01.sav").write_bytes(b"save")
     kirikiri = tmp_path / "KiriKiri"
     kiri_save = kirikiri / "savedata"
     kiri_save.mkdir(parents=True)
@@ -156,6 +172,105 @@ def test_wolf_kirikiri_and_nscripter_require_existing_layout_evidence(
         r"<game>\save*.dat",
         r"<game>\kidoku.dat",
     }
+    assert all(item.availability == "found" for item in nscripter_hints)
+
+
+def test_unreal_requires_a_valid_project_file_and_never_guesses_from_directory(
+    tmp_path: Path,
+    hint_provider: EngineSaveHintProvider,
+) -> None:
+    root = tmp_path / "GuessedProject"
+    root.mkdir()
+    game = _game("unreal")
+
+    assert load_engine_metadata(game, root) == {}
+    assert hint_provider.suggest(game, root, {}) == ()
+
+    (root / "Broken.uproject").write_text("{}", encoding="utf-8")
+    assert load_engine_metadata(game, root) == {}
+
+
+def test_unreal_reads_bounded_project_metadata_and_predicts_savegames(
+    tmp_path: Path,
+    hint_provider: EngineSaveHintProvider,
+) -> None:
+    root = tmp_path / "UnrealGame"
+    project = root / "Project" / "ReliableName.uproject"
+    project.parent.mkdir(parents=True)
+    project.write_text('{"FileVersion": 3}', encoding="utf-8")
+    game = _game("unreal")
+
+    metadata = load_engine_metadata(game, root)
+    suggestions = hint_provider.suggest(game, root, metadata)
+
+    assert metadata == {"project_name": "ReliableName"}
+    assert suggestions[0].path_template == (
+        r"<winLocalAppData>\ReliableName\Saved\SaveGames"
+    )
+    assert suggestions[0].availability == "predicted"
+
+    Path(suggestions[0].display_path).mkdir(parents=True)
+    assert hint_provider.suggest(game, root, metadata)[0].availability == "found"
+
+
+def test_godot_reads_only_literal_project_settings_and_supports_default_path(
+    tmp_path: Path,
+    hint_provider: EngineSaveHintProvider,
+) -> None:
+    root = tmp_path / "GodotGame"
+    root.mkdir()
+    project = root / "project.godot"
+    project.write_text(
+        '[application]\nconfig/name="Project 作品"\n'
+        "config/use_custom_user_dir=false\n",
+        encoding="utf-8",
+    )
+    game = _game("godot")
+
+    metadata = load_engine_metadata(game, root)
+    suggestions = hint_provider.suggest(game, root, metadata)
+
+    assert metadata == {"project_name": "Project 作品"}
+    assert suggestions[0].path_template == (
+        r"<winAppData>\Godot\app_userdata\Project 作品"
+    )
+    assert suggestions[0].availability == "predicted"
+
+    project.write_text(
+        '[application]\nconfig/name=tr("Project")\n', encoding="utf-8"
+    )
+    assert load_engine_metadata(game, root) == {}
+    assert hint_provider.suggest(game, root, {}) == ()
+
+
+def test_godot_custom_user_directory_accepts_only_safe_relative_segments(
+    tmp_path: Path,
+    hint_provider: EngineSaveHintProvider,
+) -> None:
+    root = tmp_path / "GodotGame"
+    root.mkdir()
+    project = root / "project.godot"
+    game = _game("godot")
+    project.write_text(
+        '[application]\nconfig/name="Project"\n'
+        "config/use_custom_user_dir=true\n"
+        'config/custom_user_dir_name="Studio/Game"\n',
+        encoding="utf-8",
+    )
+
+    metadata = load_engine_metadata(game, root)
+    suggestions = hint_provider.suggest(game, root, metadata)
+
+    assert metadata == {"godot_custom_user_dir": r"Studio\Game"}
+    assert suggestions[0].path_template == r"<winAppData>\Studio\Game"
+
+    project.write_text(
+        '[application]\nconfig/name="Project"\n'
+        "config/use_custom_user_dir=true\n"
+        'config/custom_user_dir_name="../Escape"\n',
+        encoding="utf-8",
+    )
+    assert load_engine_metadata(game, root) == {}
 
 
 def test_unsupported_engine_returns_no_guessed_hint(

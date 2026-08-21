@@ -253,12 +253,45 @@ def test_public_engine_metadata_loader_reads_unity_app_info(tmp_path: Path) -> N
     metadata.write_text("Studio\nProduct\n", encoding="utf-8")
 
     assert load_engine_metadata(game, install_dir) == {
-        "companyName": "Studio",
-        "productName": "Product",
+        "company_name": "Studio",
+        "product_name": "Product",
     }
 
 
-def _unity_game() -> Game:
+@pytest.mark.parametrize(
+    ("engine_id", "relative_path", "content", "expected"),
+    [
+        (
+            "godot",
+            "project.godot",
+            '[application]\nconfig/name="Godot Project"\n',
+            {"project_name": "Godot Project"},
+        ),
+        (
+            "unreal",
+            "Nested/ReliableProject.uproject",
+            '{"FileVersion": 3}',
+            {"project_name": "ReliableProject"},
+        ),
+    ],
+)
+def test_public_engine_metadata_loader_reads_only_bounded_project_files(
+    tmp_path: Path,
+    engine_id: str,
+    relative_path: str,
+    content: str,
+    expected: dict[str, str],
+) -> None:
+    game = _unity_game(engine_id)
+    install_dir = tmp_path / "Game"
+    metadata_path = install_dir.joinpath(*relative_path.split("/"))
+    metadata_path.parent.mkdir(parents=True)
+    metadata_path.write_text(content, encoding="utf-8")
+
+    assert load_engine_metadata(game, install_dir) == expected
+
+
+def _unity_game(engine_id: str = "unity") -> Game:
     return Game(
         id="unity-game",
         scan_root_id="root-1",
@@ -267,9 +300,9 @@ def _unity_game() -> Game:
         title="UnityGame",
         detected_title="UnityGame",
         status="installed",
-        detected_engine_id="unity",
+        detected_engine_id=engine_id,
         detected_engine_variant=None,
-        engine_id="unity",
+        engine_id=engine_id,
         engine_variant=None,
         engine_is_manual=False,
         engine_confidence=1.0,

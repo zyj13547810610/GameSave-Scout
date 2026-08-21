@@ -1,4 +1,4 @@
-version: 2026.08.21-1
+version: 2026.08.21-2
 rules:
   - id: godot_user_data
     type: save_engine
@@ -14,3 +14,37 @@ rules:
         path: <winAppData>\Godot\app_userdata\{project_name}
         category: save
         confidence: 0.9
+  - id: unity_user_data
+    type: save_engine
+    status: formal
+    priority: 20
+    enabled: true
+    references:
+      - https://docs.unity3d.com/2023.1/Documentation/ScriptReference/Application-persistentDataPath.html
+      - https://docs.unity3d.com/2020.2/Documentation/ScriptReference/PlayerPrefs.html
+    engine_ids:
+      - unity
+    locations:
+      - kind: directory
+        path: <winLocalAppDataLow>\{company_name}\{product_name}
+        category: save
+        confidence: 0.94
+      - kind: registry
+        path: HKEY_CURRENT_USER\Software\{company_name}\{product_name}
+        category: config
+        confidence: 0.9
+  - id: unreal_save_games
+    type: save_engine
+    status: formal
+    priority: 20
+    enabled: true
+    references:
+      - https://dev.epicgames.com/documentation/unreal-engine/saving-and-loading-your-game-in-unreal-engine
+      - https://dev.epicgames.com/documentation/en-us/unreal-engine/API/Runtime/Core/FPaths
+    engine_ids:
+      - unreal
+    locations:
+      - kind: directory
+        path: <winLocalAppData>\{project_name}\Saved\SaveGames
+        category: save
+        confidence: 0.92

@@ -61,6 +61,8 @@
 | 稳定 ID / 类型 | 当前建议依据 | 公开依据 | 风险与负向边界 |
 | --- | --- | --- | --- |
 | `godot_user_data` / 引擎通用 | Windows 默认 `user://` 位于 `%APPDATA%\Godot\app_userdata\<项目名>` | [Godot 数据路径](https://docs.godotengine.org/en/stable/tutorials/io/data_paths.html) | 必须先从受限项目配置取得安全的 `project_name`；缺失、非法路径段或启用自定义用户目录时不拼接默认路径 |
+| `unity_user_data` / 引擎通用 | Windows Player 的 `persistentDataPath` 与 PlayerPrefs 由公司名、产品名组成 | [Unity persistentDataPath](https://docs.unity3d.com/2023.1/Documentation/ScriptReference/Application-persistentDataPath.html)、[Unity PlayerPrefs](https://docs.unity3d.com/2020.2/Documentation/ScriptReference/PlayerPrefs.html) | 只接受受限 `app.info` 中两个安全路径段；缺失或包含表达式/路径分隔符时不建议 |
+| `unreal_save_games` / 引擎通用 | 项目名对应 `Saved\SaveGames`，Windows 安装版使用项目用户目录 | [Unreal SaveGame](https://dev.epicgames.com/documentation/unreal-engine/saving-and-loading-your-game-in-unreal-engine)、[FPaths](https://dev.epicgames.com/documentation/en-us/unreal-engine/API/Runtime/Core/FPaths) | 只从受限、有效的 `.uproject` 取得项目名；不能用安装目录名猜测，命令行重定向和自定义存储不在本规则覆盖范围 |
 
 ## 维护规则
 

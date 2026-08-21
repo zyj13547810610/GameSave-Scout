@@ -12,6 +12,7 @@ type SaveLocationSource = Literal[
 type SuggestionEvidenceSource = Literal["custom", "builtin", "ludusavi", "engine"]
 type SuggestionCategory = Literal["save", "config", "other"]
 type SuggestionGroup = Literal["exact", "possible", "experimental"]
+type SuggestionAvailability = Literal["found", "predicted"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,3 +53,4 @@ class SaveLocationSuggestion:
     preselected: bool = False
     category: SuggestionCategory = "save"
     group: SuggestionGroup = "possible"
+    availability: SuggestionAvailability = "predicted"

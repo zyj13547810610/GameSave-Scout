@@ -150,6 +150,18 @@ rules:
     assert provider.suggest_engine(_game(engine_id="unity"), tmp_path, {}) == ()
 
 
+def test_bundled_catalog_contains_only_publicly_supported_generic_templates() -> None:
+    rules = load_save_rules(Path("resources/rules/saves.yaml"))
+
+    assert {rule.metadata.rule_id for rule in rules} == {
+        "godot_user_data",
+        "unity_user_data",
+        "unreal_save_games",
+    }
+    assert all(rule.metadata.status == "formal" for rule in rules)
+    assert all(rule.metadata.references for rule in rules)
+
+
 def _provider(tmp_path: Path, yaml_text: str) -> BuiltinSaveRuleProvider:
     path = tmp_path / "saves.yaml"
     path.write_text(yaml_text, encoding="utf-8")
