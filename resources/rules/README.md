@@ -15,17 +15,17 @@
 
 ## V0.3.0 首批校准目标
 
-下表记录首批 10 项当前结论。Task 3、Task 4 完成后会原地更新状态和测试结论，不另建临时台账。
+下表记录首批 10 项当前结论。Task 3 已完成旧规则校准；Task 4 完成新增规则后会继续原地更新，不另建临时台账。
 
 | 稳定 ID / 标签 | 候选签名与公开依据 | 主要误报风险 | 合成测试边界 | 当前结论与理由 |
 | --- | --- | --- | --- | --- |
-| `qlie` / QLIE | `data.pack` 边界包含 `FilePackVer3.0`；[GARbro ArcQLIE](https://github.com/morkt/GARbro/blob/master/ArcFormats/Qlie/ArcQLIE.cs) | 文件名常见，边界字符串可能被包装器保留 | 正向：最小合法边界；负向：随机 `data.pack`、偏移/截断签名 | **保持实验**；等待 Task 3 核对边界位置和组合证据 |
-| `majiro` / Majiro | `data.arc` 起始 `MajiroArcV3.000`；[GARbro ArcMajiro](https://github.com/morkt/GARbro/blob/master/ArcFormats/Majiro/ArcMajiro.cs) | `data.arc` 极常见，需依赖完整版本头 | 正向：完整头；负向：随机同名、截断头、错误版本 | **保持实验**；等待 Task 3 校准版本兼容范围 |
-| `malie` / Malie | `data.lib` 起始 `LIBP`；[GARbro ArcLIB](https://github.com/morkt/GARbro/blob/master/ArcFormats/Malie/ArcLIB.cs) | 四字节头较短，单证据排他性有限 | 正向：格式头；负向：随机 `.lib`、偏移头、同名空文件 | **保持实验**；等待 Task 3 寻找独立配套证据 |
-| `shiina_rio` / ShiinaRio | `data.war` 起始 `WARC`；[GARbro ArcWARC](https://github.com/morkt/GARbro/blob/master/ArcFormats/ShiinaRio/ArcWARC.cs) | `WARC`/`.war` 可能与其他归档混淆 | 正向：格式头；负向：随机 `.war`、偏移/截断头 | **保持实验**；等待 Task 3 核对版本字段或组合证据 |
+| `qlie` / QLIE | `data.pack` 距文件尾 28 字节处为 `FilePackVer3.0`；[GARbro ArcQLIE](https://github.com/morkt/GARbro/blob/master/ArcFormats/Qlie/ArcQLIE.cs) | 文件名常见，宽泛边缘搜索会误收包装器残留 | 正向：精确尾部位置；负向：随机同名、偏移/截断签名 | **转正式**；使用受限尾部读取精确复现上游位置检查 |
+| `majiro` / Majiro | `data.arc` 起始完整 `MajiroArcV3.000\0`；[GARbro ArcMajiro](https://github.com/morkt/GARbro/blob/master/ArcFormats/Majiro/ArcMajiro.cs) | `data.arc` 极常见，省略终止字节会放宽匹配 | 正向：含终止字节的完整头；负向：随机同名、偏移/截断头 | **转正式**；完整长版本头具备排他性 |
+| `malie` / Malie | `data.lib` 起始原始 `LIB\0`；[GARbro ArcLIB](https://github.com/morkt/GARbro/blob/master/ArcFormats/Malie/ArcLIB.cs) | `LIBP` 是已解密后的头，不能直接当作磁盘原始字节 | 正向：公开原始格式头；负向：`LIBP`、随机 `.lib`、偏移/截断头 | **转正式**；修正旧规则后与上游原始签名一致 |
+| `shiina_rio` / ShiinaRio | `data.war` 起始 `WARC`，偏移 4 同时为 ` 1.`；[GARbro ArcWARC](https://github.com/morkt/GARbro/blob/master/ArcFormats/ShiinaRio/ArcWARC.cs) | 单独 `WARC` 可能与其他归档混淆 | 正向：魔数与版本前缀组合；负向：随机 `.war`、孤立 WARC、偏移/截断头 | **转正式**；加入上游版本结构检查后不再依赖短魔数 |
 | `softpal_amusecraft` / SoftPal/AmuseCraft | `data.pac` 起始 `PAC `；[GARbro ArcPAC](https://github.com/morkt/GARbro/blob/master/ArcFormats/Softpal/ArcPAC.cs) | `.pac` 与短头均不唯一；现有只读数据库仅提供单个文件名证据 | 正向：最小格式头；负向：随机 `.pac`、偏移/截断头、相似 PAC | **保持实验**；现有真实样本证据不足以转正式 |
-| `entis` / Entis/ERI/NOA | `data.noa` 起始 `Entis` 与控制字节；[GARbro ArcNOA](https://github.com/morkt/GARbro/blob/master/ArcFormats/Entis/ArcNOA.cs) | 产品族格式不必然等于单一游戏引擎 | 正向：完整头；负向：纯文本 `Entis`、截断头、随机 `.noa` | **保持实验**；等待 Task 3 核对完整签名长度 |
-| `nitroplus` / Nitroplus | `data.npa` 起始 `NPA` 及版本字节；[GARbro ArcNPA](https://github.com/morkt/GARbro/blob/master/ArcFormats/NitroPlus/ArcNPA.cs) | NPA 版本差异和第三方工具生成文件 | 正向：支持版本头；负向：随机 `.npa`、错误版本、截断头 | **保持实验**；等待 Task 3 校准版本范围 |
+| `entis` / Entis/ERI/NOA | `data.noa` 起始 `Entis\x1a`，偏移 8 同时为固定 ID `0x02000400`；[GARbro ArcNOA](https://github.com/morkt/GARbro/blob/master/ArcFormats/Entis/ArcNOA.cs) | 产品族格式不必然等于单一作品，但可归于 Entis 格式族 | 正向：魔数与固定 ID 组合；负向：纯文本 `Entis`、错误 ID、偏移/截断头 | **转正式**；两段独立固定字段与上游校验一致 |
+| `nitroplus` / Nitroplus | `data.npa` 起始完整 `NPA\x01`；[GARbro ArcNPA](https://github.com/morkt/GARbro/blob/master/ArcFormats/NitroPlus/ArcNPA.cs) | 仅识别受支持的 NPA 版本，不泛化到其他 NPA 写法 | 正向：完整版本头；负向：随机 `.npa`、偏移/截断头 | **转正式**；公开固定版本签名通过正负夹具 |
 | `livemaker` / LiveMaker | LiveMaker VF/GAL 等格式组合；[GARbro LiveMaker 目录](https://github.com/morkt/GARbro/tree/master/ArcFormats/LiveMaker) | 单个 `.gal` 图像格式不足以证明游戏引擎 | 计划正向：归档/脚本组合；负向：孤立 GAL、随机同扩展名 | **暂不加入**；Task 4 先确定至少两项独立稳定证据 |
 | `cmvs` / CMVS/CVNS | CPZ 归档族及配套文件；[GARbro Cmvs 目录](https://github.com/morkt/GARbro/tree/master/ArcFormats/Cmvs) | CPZ 版本较多，单一通用文件可能误报 | 计划正向：受支持 CPZ 头加配套证据；负向：随机/孤立 CPZ | **暂不加入**；Task 4 校准版本与组合门槛 |
 | `godot` / Godot | `project.godot` 配置或导出 PCK 结构；[Godot 数据路径](https://docs.godotengine.org/en/stable/tutorials/io/data_paths.html)、[Godot PCKPacker](https://docs.godotengine.org/en/stable/classes/class_pckpacker.html) | `.pck` 并非 Godot 独占，文件名也可能被修改 | 计划正向：官方配置或 PCK 头加独立结构；负向：普通 `.pck`、随机同名 | **暂不加入**；Task 4 完成格式与负向验证后决定正式/实验 |
@@ -46,6 +46,12 @@
 | `catsystem2` / CatSystem2 | `data.dat` 的 `CsPack2` 头加 `.cst` | [GARbro ArcDAT](https://github.com/morkt/GARbro/blob/master/ArcFormats/CatSystem/ArcDAT.cs) | 归档与脚本组合命中 |
 | `yuris` / YU-RIS | `data.ypf` 的 YPF 头加 `.ybn` | [GARbro ArcYPF](https://github.com/morkt/GARbro/blob/master/ArcFormats/YuRis/ArcYPF.cs) | 排除随机 YPF 和缺少配套脚本的目录 |
 | `nscripter` / NScripter/ONScripter | `nscript.dat` 加 `.nsa` | [NScripter 官方站](https://www.nscripter.com/)、[GARbro ArcNSA](https://github.com/morkt/GARbro/blob/master/ArcFormats/NScripter/ArcNSA.cs) | 两类文件组合命中，孤立 NSA 不足 |
+| `qlie` / QLIE | `data.pack` 的固定尾部版本签名 | [GARbro ArcQLIE](https://github.com/morkt/GARbro/blob/master/ArcFormats/Qlie/ArcQLIE.cs) | 只匹配距文件尾 28 字节的完整 `FilePackVer3.0` |
+| `majiro` / Majiro | `data.arc` 的完整 V3 版本头 | [GARbro ArcMajiro](https://github.com/morkt/GARbro/blob/master/ArcFormats/Majiro/ArcMajiro.cs) | 包含终止字节，偏移和截断均不命中 |
+| `malie` / Malie | `data.lib` 的原始 `LIB\0` 头 | [GARbro ArcLIB](https://github.com/morkt/GARbro/blob/master/ArcFormats/Malie/ArcLIB.cs) | 不把仅在解密后出现的 `LIBP` 当成原始签名 |
+| `shiina_rio` / ShiinaRio | WARC 魔数加版本前缀 | [GARbro ArcWARC](https://github.com/morkt/GARbro/blob/master/ArcFormats/ShiinaRio/ArcWARC.cs) | 两段固定位置同时命中，孤立 WARC 不足 |
+| `entis` / Entis/ERI/NOA | Entis 控制头加固定归档 ID | [GARbro ArcNOA](https://github.com/morkt/GARbro/blob/master/ArcFormats/Entis/ArcNOA.cs) | 错误 ID 和单独产品字符串不命中 |
+| `nitroplus` / Nitroplus | NPA 版本 1 完整头 | [GARbro ArcNPA](https://github.com/morkt/GARbro/blob/master/ArcFormats/NitroPlus/ArcNPA.cs) | 只覆盖 `NPA\x01`，不推测未知版本 |
 
 ## 维护规则
 

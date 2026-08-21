@@ -74,6 +74,25 @@ def test_rule_paths_cannot_escape_game_root(tmp_path: Path) -> None:
         load_engine_rules(_write_rules(tmp_path, content))
 
 
+def test_magic_from_end_matches_only_the_exact_bounded_position(tmp_path: Path) -> None:
+    game = tmp_path / "game"
+    game.mkdir()
+    archive = game / "data.pack"
+    archive.write_bytes(b"payloadFilePackVer3.0" + b"\0" * 14)
+    rule = load_engine_rules(_write_rules(tmp_path, suffix_rule()))[0]
+
+    match = RuleDetector(rule).inspect(DetectionContext(game, None))
+
+    assert match is not None
+    archive.write_bytes(b"payloadFilePackVer3.0" + b"\0" * 13)
+    assert RuleDetector(rule).inspect(DetectionContext(game, None)) is None
+
+
+def test_magic_from_end_rejects_an_unbounded_offset(tmp_path: Path) -> None:
+    with pytest.raises(RuleSchemaError, match="offset"):
+        load_engine_rules(_write_rules(tmp_path, suffix_rule(offset=65_537)))
+
+
 def _write_rules(tmp_path: Path, rule: str) -> Path:
     path = tmp_path / "rules.yaml"
     path.write_text(f"version: 'test-1'\nrules:\n{rule}", encoding="utf-8")
@@ -106,4 +125,20 @@ def valid_rule() -> str:
     - op: path_exists
       path: Editor.exe
       weight: -0.10
+"""
+
+
+def suffix_rule(*, offset: int = 28) -> str:
+    return f"""- id: qlie
+  label: QLIE
+  status: formal
+  references:
+    - https://github.com/morkt/GARbro
+  threshold: 0.70
+  all:
+    - op: magic_from_end
+      path: data.pack
+      value: FilePackVer3.0
+      offset: {offset}
+      weight: 1.0
 """

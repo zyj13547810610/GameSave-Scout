@@ -9,6 +9,7 @@ from gameshelf.engines.base import DetectionContext
 from gameshelf.engines.bounded_reader import (
     contains_in_edges,
     read_prefix,
+    read_suffix,
     read_text_limit,
 )
 from gameshelf.engines.models import EngineEvidence, EngineMatch
@@ -92,6 +93,9 @@ def _evaluate(
     elif evidence.op == "magic_at" and path.is_file():
         needle = _bytes_value(evidence.value or "")
         matched = _matches_magic(path, evidence.offset, needle)
+    elif evidence.op == "magic_from_end" and path.is_file():
+        needle = _bytes_value(evidence.value or "")
+        matched = _matches_magic_from_end(path, evidence.offset, needle)
     elif evidence.op == "edge_contains" and path.is_file():
         matched = contains_in_edges(path, _bytes_value(evidence.value or ""))
     elif evidence.op == "text_contains" and path.is_file():
@@ -117,6 +121,7 @@ def _evidence_detail(evidence: EvidenceRule) -> str:
         "glob_exists": "发现匹配文件",
         "glob_magic_at": "匹配文件头特征",
         "magic_at": "文件头特征匹配",
+        "magic_from_end": "文件尾固定位置特征匹配",
         "edge_contains": "文件边缘特征匹配",
         "text_contains": "配置文本特征匹配",
         "pe_field_contains": "程序产品信息匹配",
@@ -152,3 +157,10 @@ def _bytes_value(value: str) -> bytes:
 def _matches_magic(path: Path, offset: int, needle: bytes) -> bool:
     data = read_prefix(path, min(64 * 1024, offset + len(needle)))
     return data[offset : offset + len(needle)] == needle
+
+
+def _matches_magic_from_end(path: Path, offset: int, needle: bytes) -> bool:
+    if offset < len(needle):
+        return False
+    data = read_suffix(path, offset)
+    return len(data) == offset and data[: len(needle)] == needle

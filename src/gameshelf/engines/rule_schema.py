@@ -9,6 +9,7 @@ from typing import Any, Literal, cast
 
 import yaml
 
+from gameshelf.engines.bounded_reader import MAX_BINARY_REGION
 from gameshelf.rules.models import RuleMetadata
 from gameshelf.rules.validation import RuleMetadataError, build_rule_metadata
 
@@ -17,6 +18,7 @@ type EvidenceOp = Literal[
     "glob_exists",
     "glob_magic_at",
     "magic_at",
+    "magic_from_end",
     "edge_contains",
     "text_contains",
     "pe_field_contains",
@@ -42,6 +44,7 @@ _OPS = {
     "glob_exists",
     "glob_magic_at",
     "magic_at",
+    "magic_from_end",
     "edge_contains",
     "text_contains",
     "pe_field_contains",
@@ -160,12 +163,17 @@ def _parse_evidence_list(raw: object, label: str) -> tuple[EvidenceRule, ...]:
         offset = item.get("offset", 0)
         if not isinstance(offset, int) or isinstance(offset, bool) or offset < 0:
             raise RuleSchemaError("evidence offset must be a non-negative integer")
+        if op == "magic_from_end" and not 0 < offset <= MAX_BINARY_REGION:
+            raise RuleSchemaError(
+                "magic_from_end offset must be between 1 and 65536 bytes"
+            )
         field = item.get("field")
         if field is not None and not isinstance(field, str):
             raise RuleSchemaError("evidence field must be a string")
         value_ops = {
             "glob_magic_at",
             "magic_at",
+            "magic_from_end",
             "edge_contains",
             "text_contains",
             "pe_field_contains",
