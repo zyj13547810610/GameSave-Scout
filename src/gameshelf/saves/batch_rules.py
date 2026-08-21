@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import glob
 import hashlib
 import json
 import re
 from collections.abc import Callable, Mapping
 from contextlib import AbstractContextManager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from itertools import islice
 from pathlib import Path, PureWindowsPath
 from types import MappingProxyType
 from typing import Literal, Protocol
@@ -41,7 +43,7 @@ from gameshelf.saves.ludusavi_models import (
     ManifestLocationRule,
 )
 from gameshelf.saves.ludusavi_provider import SnapshotUpdateError
-from gameshelf.saves.models import SaveLocation
+from gameshelf.saves.models import SaveLocation, SaveLocationSuggestion
 from gameshelf.saves.templates import InvalidPathTemplate, PathTemplateResolver
 from gameshelf.scanning.path_keys import windows_path_key
 
@@ -124,6 +126,47 @@ class BatchRegistry(Protocol):
     def key_exists(self, key: str) -> bool: ...
 
 
+class BatchBuiltinRules(Protocol):
+    @property
+    def rules_version(self) -> str | None: ...
+
+    def suggest_game_specific(
+        self,
+        game: Game,
+        install_dir: Path | None,
+        metadata: Mapping[str, object],
+    ) -> tuple[SaveLocationSuggestion, ...]: ...
+
+    def suggest_engine(
+        self,
+        game: Game,
+        install_dir: Path | None,
+        metadata: Mapping[str, object],
+    ) -> tuple[SaveLocationSuggestion, ...]: ...
+
+
+class _EmptyBuiltinRules:
+    @property
+    def rules_version(self) -> str | None:
+        return None
+
+    def suggest_game_specific(
+        self,
+        _game: Game,
+        _install_dir: Path | None,
+        _metadata: Mapping[str, object],
+    ) -> tuple[SaveLocationSuggestion, ...]:
+        return ()
+
+    def suggest_engine(
+        self,
+        _game: Game,
+        _install_dir: Path | None,
+        _metadata: Mapping[str, object],
+    ) -> tuple[SaveLocationSuggestion, ...]:
+        return ()
+
+
 type AddCandidate = Callable[[RawBatchCandidate, RuleIdentity], None]
 
 
@@ -137,6 +180,7 @@ class BatchRuleProvider:
         ludusavi_provider: BatchLudusaviProvider,
         custom_provider: BatchCustomManifestProvider,
         engine_hints: EngineSaveHintProvider,
+        builtin_rules: BatchBuiltinRules | None = None,
         registry: BatchRegistry,
     ) -> None:
         self._library = library
@@ -145,6 +189,7 @@ class BatchRuleProvider:
         self._ludusavi_provider = ludusavi_provider
         self._custom_provider = custom_provider
         self._engine_hints = engine_hints
+        self._builtin_rules = builtin_rules or _EmptyBuiltinRules()
         self._registry = registry
 
     def collect(self, context: BatchRuleContext) -> BatchRuleCatalog:
@@ -276,6 +321,7 @@ class BatchRuleProvider:
         except (InvalidLudusaviIndex, SnapshotUpdateError, OSError, ValueError) as error:
             warnings.append(f"Ludusavi 规则不可用：{error}")
         version_parts.append(("ludusavi", official_digest))
+        version_parts.append(("builtin", self._builtin_rules.rules_version))
 
         for game in games:
             if game.status != "installed":
@@ -285,6 +331,53 @@ class BatchRuleProvider:
             except (OSError, ValueError):
                 continue
             metadata = load_engine_metadata(game, install_dir)
+            try:
+                builtin_suggestions = (
+                    *self._builtin_rules.suggest_game_specific(
+                        game,
+                        install_dir,
+                        metadata,
+                    ),
+                    *self._builtin_rules.suggest_engine(
+                        game,
+                        install_dir,
+                        metadata,
+                    ),
+                )
+            except Exception as error:
+                warnings.append(f"内置存档规则不可用：{error}")
+                builtin_suggestions = ()
+            for suggestion in builtin_suggestions:
+                found_suggestion = self._with_availability(suggestion, install_dir)
+                if found_suggestion.availability != "found":
+                    continue
+                identity = RuleIdentity(
+                    source="builtin",
+                    game_id=game.id,
+                    external_title=game.title,
+                    external_product_id=_product_id(found_suggestion.display_path),
+                    engine_id=game.engine_id,
+                    confidence=(
+                        "high" if found_suggestion.confidence >= 0.9 else "medium"
+                    ),
+                    strong_group_key=f"game:{game.id}",
+                    evidence=found_suggestion.evidence,
+                )
+                add(
+                    _raw_candidate(
+                        scope_key=_scope_key(found_suggestion.path_template),
+                        kind=found_suggestion.kind,
+                        path_template=found_suggestion.path_template,
+                        display_path=found_suggestion.display_path,
+                        path_key=candidate_path_key(
+                            found_suggestion.kind,
+                            found_suggestion.display_path,
+                        ),
+                        source="builtin",
+                        evidence=found_suggestion.evidence,
+                    ),
+                    identity,
+                )
             for suggestion in self._engine_hints.suggest(game, install_dir, metadata):
                 if suggestion.kind == "registry":
                     if not self._registry.key_exists(suggestion.path_template):
@@ -338,6 +431,26 @@ class BatchRuleProvider:
             warnings=tuple(warnings),
             rules_version=rules_version,
         )
+
+    def _with_availability(
+        self,
+        suggestion: SaveLocationSuggestion,
+        install_dir: Path,
+    ) -> SaveLocationSuggestion:
+        try:
+            if suggestion.kind == "registry":
+                found = self._registry.key_exists(suggestion.path_template)
+            else:
+                path = self._resolver.expand(suggestion.path_template, install_dir)
+                if suggestion.kind == "directory":
+                    found = path.is_dir()
+                elif suggestion.kind == "file":
+                    found = path.is_file()
+                else:
+                    found = next(islice(glob.iglob(str(path)), 1), None) is not None
+        except (OSError, RuntimeError, ValueError):
+            found = False
+        return replace(suggestion, availability="found" if found else "predicted")
 
     def _collect_custom_manifest(
         self,

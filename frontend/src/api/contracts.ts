@@ -59,7 +59,7 @@ export type BatchSaveCandidateFilters = {
   status?: 'all' | 'pending' | 'installed' | 'missing' | 'unknown' | 'recorded' | 'ignored' | 'unavailable'
   keyword?: string
   confidence?: 'all' | 'high' | 'medium' | 'low'
-  source?: 'all' | 'recorded' | 'custom' | 'ludusavi' | 'engine' | 'bounded_scan' | 'registry'
+  source?: 'all' | 'recorded' | 'custom' | 'builtin' | 'ludusavi' | 'engine' | 'bounded_scan' | 'registry'
 }
 
 export type BatchSaveScanSummary = {

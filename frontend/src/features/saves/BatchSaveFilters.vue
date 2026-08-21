@@ -65,7 +65,8 @@ async function page(direction: -1 | 1) {
     </select>
     <select v-model="filters.source" data-test="batch-source-filter" aria-label="候选来源">
       <option value="all">全部来源</option><option value="recorded">已记录位置</option>
-      <option value="custom">自定义清单</option><option value="ludusavi">Ludusavi</option>
+      <option value="custom">自定义清单</option><option value="builtin">内置规则</option>
+      <option value="ludusavi">Ludusavi</option>
       <option value="engine">引擎提示</option><option value="bounded_scan">受限扫描</option>
       <option value="registry">注册表规则</option>
     </select>

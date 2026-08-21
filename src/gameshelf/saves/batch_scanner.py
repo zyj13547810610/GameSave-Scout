@@ -19,6 +19,7 @@ from gameshelf.saves.batch_candidates import (
     candidate_path_key,
 )
 from gameshelf.saves.batch_models import (
+    BatchCandidateSource,
     BatchScanScope,
     RawBatchCandidate,
     RepresentativeFile,
@@ -467,7 +468,7 @@ class BatchFilesystemScanner:
         scope: BatchScanScope,
         directory: Path,
         *,
-        source: Literal["recorded", "custom", "ludusavi", "engine", "bounded_scan", "registry"],
+        source: BatchCandidateSource,
         evidence: tuple[str, ...],
         representatives: tuple[RepresentativeFile, ...],
         matched_file_count: int,

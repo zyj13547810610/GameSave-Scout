@@ -17,7 +17,11 @@ from gameshelf.library.repository import LibraryRepository
 from gameshelf.library.service import LibraryService
 from gameshelf.platform.windows.known_folders import KnownFolders
 from gameshelf.saves.batch_candidates import candidate_path_key
-from gameshelf.saves.batch_models import RawBatchCandidate, RepresentativeFile
+from gameshelf.saves.batch_models import (
+    BatchCandidateSource,
+    RawBatchCandidate,
+    RepresentativeFile,
+)
 from gameshelf.saves.batch_repository import BatchSaveRepository
 from gameshelf.saves.batch_review import BatchSaveReviewService
 from gameshelf.saves.batch_rules import (
@@ -92,6 +96,13 @@ def test_scan_review_detail_and_rescan_complete_one_real_bridge_loop(
         assert candidates["UnknownDojin"]["confidence"] == "low"
         assert candidates["SharedA"]["strongGroupKey"] == "game:game-installed"
         assert candidates["SharedB"]["strongGroupKey"] == "game:game-installed"
+        builtin_page = harness.api.list_batch_save_candidates(
+            {"source": "builtin", "offset": 0, "limit": 100}
+        )
+        assert builtin_page["ok"] is True
+        assert [item["displayPath"] for item in builtin_page["data"]["items"]] == [
+            candidates["InstalledOne"]["displayPath"]
+        ]
 
         accepted_ids = [
             candidates[name]["id"]
@@ -107,6 +118,12 @@ def test_scan_review_detail_and_rescan_complete_one_real_bridge_loop(
         )
         assert installed_locations["ok"] is True
         assert len(installed_locations["data"]) == 3
+        builtin_location = next(
+            item
+            for item in installed_locations["data"]
+            if "InstalledOne" in item["displayPath"]
+        )
+        assert builtin_location["source"] == "engine"
 
         group = harness.api.create_game_group({"name": "存档归档"})
         save_only = harness.api.create_batch_save_only_game(
@@ -318,7 +335,7 @@ def _catalog(paths: dict[str, Path], documents: Path) -> BatchRuleCatalog:
         name: str,
         identity: RuleIdentity | None,
         *,
-        source: str,
+        source: BatchCandidateSource,
     ) -> None:
         path = paths[name]
         relative = str(path.relative_to(documents)).replace("/", "\\")
@@ -328,7 +345,7 @@ def _catalog(paths: dict[str, Path], documents: Path) -> BatchRuleCatalog:
             path_template=rf"<winDocuments>\{relative}",
             display_path=str(path),
             path_key=windows_path_key(path),
-            sources=(source,),  # type: ignore[arg-type]
+            sources=(source,),
             evidence=(f"{source} 测试规则",),
             representative_files=(RepresentativeFile("save01.sav", 10, 100),),
             matched_file_count=1,
@@ -341,7 +358,11 @@ def _catalog(paths: dict[str, Path], documents: Path) -> BatchRuleCatalog:
             )
 
     add("AlreadyRecorded", None, source="recorded")
-    add("InstalledOne", _identity("game-installed", "Installed One"), source="custom")
+    add(
+        "InstalledOne",
+        _identity("game-installed", "Installed One", source="builtin"),
+        source="builtin",
+    )
     add("MissingGame", _identity("game-missing", "Missing Game"), source="custom")
     add("SharedA", _identity("game-installed", "Installed One"), source="ludusavi")
     add("SharedB", _identity("game-installed", "Installed One"), source="ludusavi")
@@ -395,9 +416,14 @@ def _catalog(paths: dict[str, Path], documents: Path) -> BatchRuleCatalog:
     )
 
 
-def _identity(game_id: str, title: str) -> RuleIdentity:
+def _identity(
+    game_id: str,
+    title: str,
+    *,
+    source: BatchCandidateSource = "custom",
+) -> RuleIdentity:
     return RuleIdentity(
-        source="custom",
+        source=source,
         game_id=game_id,
         external_title=title,
         external_product_id=None,

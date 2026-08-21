@@ -19,6 +19,7 @@ describe('BatchSaveFilters', () => {
 
     expect(wrapper.findAll('[data-test="batch-status-filter"] option')).toHaveLength(8)
     expect(wrapper.get('[data-test="batch-status-filter"]').text()).toContain('未关联游戏')
+    expect(wrapper.get('[data-test="batch-source-filter"]').text()).toContain('内置规则')
     expect(wrapper.find('button[type="submit"]').exists()).toBe(false)
     await wrapper.get('[data-test="batch-status-filter"]').setValue('missing')
     await flushPromises()
@@ -29,11 +30,11 @@ describe('BatchSaveFilters', () => {
     })
 
     await wrapper.get('[data-test="batch-confidence-filter"]').setValue('medium')
-    await wrapper.get('[data-test="batch-source-filter"]').setValue('engine')
+    await wrapper.get('[data-test="batch-source-filter"]').setValue('builtin')
     await flushPromises()
 
     expect(list).toHaveBeenLastCalledWith({
-      status: 'missing', keyword: '', confidence: 'medium', source: 'engine',
+      status: 'missing', keyword: '', confidence: 'medium', source: 'builtin',
       offset: 0, limit: 50,
     })
     await wrapper.get('[data-test="batch-next-page"]').trigger('click')

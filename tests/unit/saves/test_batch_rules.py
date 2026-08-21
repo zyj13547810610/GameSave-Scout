@@ -14,6 +14,7 @@ from gameshelf.saves.batch_rules import (
     BatchRuleContext,
     BatchRuleProvider,
 )
+from gameshelf.saves.builtin_rules import BuiltinSaveRuleProvider
 from gameshelf.saves.custom_manifest_provider import (
     CustomManifestError,
     CustomManifestLoadResult,
@@ -24,6 +25,7 @@ from gameshelf.saves.ludusavi_index import LudusaviIndex
 from gameshelf.saves.ludusavi_index_builder import build_ludusavi_index
 from gameshelf.saves.ludusavi_parser import parse_manifest
 from gameshelf.saves.models import SaveLocation
+from gameshelf.saves.rule_schema import load_save_rules
 from gameshelf.saves.templates import PathTemplateResolver
 from gameshelf.scanning.path_keys import windows_path_key
 
@@ -251,6 +253,75 @@ def test_batch_rule_provider_degrades_when_official_and_custom_rules_are_broken(
     assert catalog.rules_version
 
 
+def test_batch_rule_provider_reuses_only_found_builtin_rules(
+    tmp_path: Path,
+) -> None:
+    folders = _folders(tmp_path)
+    resolver = PathTemplateResolver(folders)
+    game_dir = tmp_path / "Games" / "Alice"
+    game_dir.mkdir(parents=True)
+    game_found = folders.documents / "Alice" / "GameFound"
+    engine_found = folders.documents / "Alice" / "EngineFound"
+    game_found.mkdir(parents=True)
+    engine_found.mkdir(parents=True)
+    game = _game("game-alice", "Alice", "installed", "godot")
+    builtin = _builtin_provider(
+        tmp_path,
+        resolver,
+        version="batch-test-v1",
+    )
+    registry = _Registry(set(), [])
+    provider = BatchRuleProvider(
+        library=_Library((game,), {game.id: game_dir}),
+        save_repository=_SaveLocations(()),
+        resolver=resolver,
+        ludusavi_provider=_Ludusavi(_index(tmp_path, "{}")),
+        custom_provider=_Custom(CustomManifestLoadResult((), ())),
+        engine_hints=EngineSaveHintProvider(resolver),
+        builtin_rules=builtin,
+        registry=registry,
+    )
+
+    catalog = provider.collect(BatchRuleContext(("<winDocuments>",)))
+
+    builtin_candidates = tuple(
+        candidate for candidate in catalog.candidates if "builtin" in candidate.sources
+    )
+    assert {candidate.display_path for candidate in builtin_candidates} == {
+        str(game_found),
+        str(engine_found),
+    }
+    assert not any("Missing" in candidate.display_path for candidate in catalog.candidates)
+    assert not any(rule.source == "builtin" for rule in catalog.reverse_path_rules)
+    assert registry.calls == [r"HKEY_CURRENT_USER\Software\Alice\Missing"]
+    game_identity = catalog.identities_by_path[
+        ("directory", windows_path_key(game_found))
+    ][0]
+    assert game_identity.source == "builtin"
+    assert game_identity.game_id == game.id
+    assert any("builtin:alice_game" in item for item in game_identity.evidence)
+    assert any("formal" in item for item in game_identity.evidence)
+    assert any("https://example.com/alice-save" in item for item in game_identity.evidence)
+
+    changed_provider = BatchRuleProvider(
+        library=_Library((game,), {game.id: game_dir}),
+        save_repository=_SaveLocations(()),
+        resolver=resolver,
+        ludusavi_provider=_Ludusavi(_index(tmp_path / "changed", "{}")),
+        custom_provider=_Custom(CustomManifestLoadResult((), ())),
+        engine_hints=EngineSaveHintProvider(resolver),
+        builtin_rules=_builtin_provider(
+            tmp_path / "changed",
+            resolver,
+            version="batch-test-v2",
+        ),
+        registry=_Registry(set(), []),
+    )
+    changed_catalog = changed_provider.collect(BatchRuleContext(("<winDocuments>",)))
+
+    assert changed_catalog.rules_version != catalog.rules_version
+
+
 def _folders(tmp_path: Path) -> KnownFolders:
     home = tmp_path / "Profile"
     return KnownFolders(
@@ -267,6 +338,7 @@ def _folders(tmp_path: Path) -> KnownFolders:
 
 
 def _index(tmp_path: Path, document: str) -> LudusaviIndex:
+    tmp_path.mkdir(parents=True, exist_ok=True)
     path = tmp_path / "manifest-index.sqlite"
     build_ludusavi_index(
         path,
@@ -274,6 +346,60 @@ def _index(tmp_path: Path, document: str) -> LudusaviIndex:
         manifest_sha256="e" * 64,
     )
     return LudusaviIndex.open(path, manifest_sha256="e" * 64)
+
+
+def _builtin_provider(
+    tmp_path: Path,
+    resolver: PathTemplateResolver,
+    *,
+    version: str,
+) -> BuiltinSaveRuleProvider:
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    path = tmp_path / "builtin-saves.yaml"
+    path.write_text(
+        f"""\
+version: {version}
+rules:
+  - id: alice_game
+    type: save_game
+    status: formal
+    priority: 20
+    enabled: true
+    references: [https://example.com/alice-save]
+    titles: [Alice]
+    locations:
+      - kind: directory
+        path: <winDocuments>\\Alice\\GameFound
+        category: save
+        confidence: 0.96
+      - kind: directory
+        path: <winDocuments>\\Alice\\GameMissing
+        category: save
+        confidence: 0.96
+      - kind: registry
+        path: HKEY_CURRENT_USER\\Software\\Alice\\Missing
+        category: config
+        confidence: 0.9
+  - id: godot_generic
+    type: save_engine
+    status: experimental
+    priority: 10
+    enabled: true
+    references: [https://example.com/godot-save]
+    engine_ids: [godot]
+    locations:
+      - kind: directory
+        path: <winDocuments>\\Alice\\EngineFound
+        category: save
+        confidence: 0.8
+      - kind: directory
+        path: <winDocuments>\\Alice\\EngineMissing
+        category: save
+        confidence: 0.8
+""",
+        encoding="utf-8",
+    )
+    return BuiltinSaveRuleProvider(load_save_rules(path), resolver)
 
 
 def _game(

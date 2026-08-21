@@ -77,6 +77,23 @@ describe('batchSaveStore', () => {
     expect(store.selectedIds.size).toBe(0)
   })
 
+  it('passes the builtin source filter through list and selection queries', async () => {
+    const list = vi.fn(async () => ok({ items: [], total: 0 }))
+    const select = vi.fn(async () => ok({ candidateIds: [] }))
+    const bridge = createMockBridge({
+      list_batch_save_candidates: list,
+      select_batch_save_candidate_ids: select,
+    })
+    const store = useBatchSaveStore()
+    store.filters.source = 'builtin'
+
+    await store.loadPage(bridge)
+    await store.selectCurrentFiltered(bridge)
+
+    expect(list).toHaveBeenCalledWith(expect.objectContaining({ source: 'builtin' }))
+    expect(select).toHaveBeenCalledWith(expect.objectContaining({ source: 'builtin' }))
+  })
+
   it('keeps selection and filters when a review transaction fails', async () => {
     const bridge = createMockBridge({
       async accept_batch_save_candidates() {

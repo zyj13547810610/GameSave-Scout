@@ -22,7 +22,7 @@ from gameshelf.saves.location_persistence import (
     PreparedSaveLocation,
     upsert_confirmed_location_result,
 )
-from gameshelf.saves.models import SaveLocation, SaveLocationKind
+from gameshelf.saves.models import SaveLocation, SaveLocationKind, SaveLocationSource
 
 MAX_REVIEW_CANDIDATES = 500
 _CONFIDENCE = {"high": 0.95, "medium": 0.72, "low": 0.45}
@@ -363,7 +363,7 @@ def _candidate_rows(
     placeholders = ",".join("?" for _ in candidate_ids)
     rows = connection.execute(
         f"""
-        SELECT c.*, o.evidence_json
+        SELECT c.*, o.evidence_json, o.sources_json
         FROM save_scan_candidates AS c
         LEFT JOIN save_scan_observations AS o
           ON o.candidate_id = c.id AND o.session_id = c.latest_session_id
@@ -455,13 +455,18 @@ def _prepared_location(row: sqlite3.Row, game_id: str) -> PreparedSaveLocation:
         path_template=str(row["path_template"]),
         display_path=str(row["display_path"]),
         path_key=str(row["path_key"]),
-        source="legacy_scan",
+        source=_accepted_location_source(row),
         confidence=confidence,
         evidence=_string_tuple(row["evidence_json"]),
     )
 
 
-def _string_tuple(value: object) -> tuple[str, ...]:
+def _accepted_location_source(row: sqlite3.Row) -> SaveLocationSource:
+    sources = _string_tuple(row["sources_json"], label="来源")
+    return "engine" if "builtin" in sources else "legacy_scan"
+
+
+def _string_tuple(value: object, *, label: str = "证据") -> tuple[str, ...]:
     if value is None:
         return ()
     try:
@@ -469,11 +474,11 @@ def _string_tuple(value: object) -> tuple[str, ...]:
     except json.JSONDecodeError as error:
         raise BatchReviewError(
             "batch_candidate_invalid",
-            "批量存档候选证据无效。",
+            f"批量存档候选{label}无效。",
         ) from error
     if not isinstance(loaded, list) or not all(isinstance(item, str) for item in loaded):
         raise BatchReviewError(
             "batch_candidate_invalid",
-            "批量存档候选证据无效。",
+            f"批量存档候选{label}无效。",
         )
     return tuple(loaded)

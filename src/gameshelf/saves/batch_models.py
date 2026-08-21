@@ -10,6 +10,7 @@ type BatchCandidateKind = Literal["directory", "file", "glob", "registry"]
 type BatchCandidateSource = Literal[
     "recorded",
     "custom",
+    "builtin",
     "ludusavi",
     "engine",
     "bounded_scan",
