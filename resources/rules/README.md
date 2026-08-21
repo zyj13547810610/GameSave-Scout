@@ -26,9 +26,9 @@
 | `softpal_amusecraft` / SoftPal/AmuseCraft | `data.pac` 起始 `PAC `；[GARbro ArcPAC](https://github.com/morkt/GARbro/blob/master/ArcFormats/Softpal/ArcPAC.cs) | `.pac` 与短头均不唯一；现有只读数据库仅提供单个文件名证据 | 正向：最小格式头；负向：随机 `.pac`、偏移/截断头、相似 PAC | **保持实验**；现有真实样本证据不足以转正式 |
 | `entis` / Entis/ERI/NOA | `data.noa` 起始 `Entis\x1a`，偏移 8 同时为固定 ID `0x02000400`；[GARbro ArcNOA](https://github.com/morkt/GARbro/blob/master/ArcFormats/Entis/ArcNOA.cs) | 产品族格式不必然等于单一作品，但可归于 Entis 格式族 | 正向：魔数与固定 ID 组合；负向：纯文本 `Entis`、错误 ID、偏移/截断头 | **转正式**；两段独立固定字段与上游校验一致 |
 | `nitroplus` / Nitroplus | `data.npa` 起始完整 `NPA\x01`；[GARbro ArcNPA](https://github.com/morkt/GARbro/blob/master/ArcFormats/NitroPlus/ArcNPA.cs) | 仅识别受支持的 NPA 版本，不泛化到其他 NPA 写法 | 正向：完整版本头；负向：随机 `.npa`、偏移/截断头 | **转正式**；公开固定版本签名通过正负夹具 |
-| `livemaker` / LiveMaker | LiveMaker VF/GAL 等格式组合；[GARbro LiveMaker 目录](https://github.com/morkt/GARbro/tree/master/ArcFormats/LiveMaker) | 单个 `.gal` 图像格式不足以证明游戏引擎 | 计划正向：归档/脚本组合；负向：孤立 GAL、随机同扩展名 | **暂不加入**；Task 4 先确定至少两项独立稳定证据 |
-| `cmvs` / CMVS/CVNS | CPZ 归档族及配套文件；[GARbro Cmvs 目录](https://github.com/morkt/GARbro/tree/master/ArcFormats/Cmvs) | CPZ 版本较多，单一通用文件可能误报 | 计划正向：受支持 CPZ 头加配套证据；负向：随机/孤立 CPZ | **暂不加入**；Task 4 校准版本与组合门槛 |
-| `godot` / Godot | `project.godot` 配置或导出 PCK 结构；[Godot 数据路径](https://docs.godotengine.org/en/stable/tutorials/io/data_paths.html)、[Godot PCKPacker](https://docs.godotengine.org/en/stable/classes/class_pckpacker.html) | `.pck` 并非 Godot 独占，文件名也可能被修改 | 计划正向：官方配置或 PCK 头加独立结构；负向：普通 `.pck`、随机同名 | **暂不加入**；Task 4 完成格式与负向验证后决定正式/实验 |
+| `livemaker` / LiveMaker/LiveNovel | `game.dat` 起始完整 `vff\0`；[GARbro ArcVF](https://github.com/morkt/GARbro/blob/master/ArcFormats/LiveMaker/ArcVF.cs) | 单个 GAL/GALX 只是图像格式；独立 EXE 内嵌归档不在本轮声明式读取范围 | 正向：标准外置 VF 归档；负向：随机 DAT、偏移头、孤立 GALX | **转正式**；公开 VF 头直接标注为 LiveMaker 资源归档，且不使用通用图像格式 |
+| `cmvs` / CMVS/CVNS | `start.ps3` 加任一 CPZ5/6/7 归档；[GARbro ArcCPZ](https://github.com/morkt/GARbro/blob/master/ArcFormats/Cmvs/ArcCPZ.cs) | 单一 CPZ 可能是孤立资源，版本 4 或未知版本不能类推 | 正向：启动脚本与受支持归档组合；负向：随机/孤立 CPZ、孤立脚本、CPZ4 | **转正式**；两类独立证据组合达到正式门槛 |
+| `godot` / Godot | 游戏 EXE 加 `project.godot` 配置，或 EXE 加 PCK 的 `GDPC` 头；[Godot 文件系统](https://docs.godotengine.org/en/stable/tutorials/scripting/filesystem.html)、[PCK 导出](https://docs.godotengine.org/en/stable/tutorials/export/exporting_pcks.html)、[官方魔数定义](https://github.com/godotengine/godot/blob/master/core/io/file_access_pack.h) | 任意 `.pck` 扩展名或普通 INI 文本都不足；内嵌 PCK 暂不扫描 EXE 尾部 | 正向：官方项目配置或独立 PCK 头；负向：普通 PCK、偏移魔数、伪配置 | **转正式**；官方文件名/格式与游戏 EXE 组合通过负向测试 |
 
 ## 当前正式引擎规则
 
@@ -52,6 +52,9 @@
 | `shiina_rio` / ShiinaRio | WARC 魔数加版本前缀 | [GARbro ArcWARC](https://github.com/morkt/GARbro/blob/master/ArcFormats/ShiinaRio/ArcWARC.cs) | 两段固定位置同时命中，孤立 WARC 不足 |
 | `entis` / Entis/ERI/NOA | Entis 控制头加固定归档 ID | [GARbro ArcNOA](https://github.com/morkt/GARbro/blob/master/ArcFormats/Entis/ArcNOA.cs) | 错误 ID 和单独产品字符串不命中 |
 | `nitroplus` / Nitroplus | NPA 版本 1 完整头 | [GARbro ArcNPA](https://github.com/morkt/GARbro/blob/master/ArcFormats/NitroPlus/ArcNPA.cs) | 只覆盖 `NPA\x01`，不推测未知版本 |
+| `livemaker` / LiveMaker/LiveNovel | `game.dat` 的 VF 完整头 | [GARbro ArcVF](https://github.com/morkt/GARbro/blob/master/ArcFormats/LiveMaker/ArcVF.cs) | 不使用孤立 GAL/GALX；本轮不读取 EXE 内嵌归档 |
+| `cmvs` / CMVS/CVNS | `start.ps3` 加 CPZ5/6/7 | [GARbro ArcCPZ](https://github.com/morkt/GARbro/blob/master/ArcFormats/Cmvs/ArcCPZ.cs) | 孤立脚本、孤立 CPZ 和未知版本均不命中 |
+| `godot` / Godot | EXE 加官方项目配置或 PCK 魔数 | [Godot 文件系统](https://docs.godotengine.org/en/stable/tutorials/scripting/filesystem.html)、[PCK 导出](https://docs.godotengine.org/en/stable/tutorials/export/exporting_pcks.html)、[魔数定义](https://github.com/godotengine/godot/blob/master/core/io/file_access_pack.h) | 普通 PCK、偏移魔数、无配置头文本不命中 |
 
 ## 维护规则
 

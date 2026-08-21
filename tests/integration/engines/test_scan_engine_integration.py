@@ -218,6 +218,22 @@ def test_scan_detects_unreal_shipping_runtime(
     assert game.detected_engine_id == "unreal"
 
 
+def test_scan_adopts_new_declarative_godot_engine(
+    engine_scan_harness: "EngineScanHarness",
+) -> None:
+    engine_scan_harness.game_path.mkdir()
+    (engine_scan_harness.game_path / "Game.exe").write_bytes(b"MZ")
+    (engine_scan_harness.game_path / "Game.pck").write_bytes(
+        b"GDPC" + b"\x04\0\0\0" + b"\0" * 32
+    )
+
+    game = engine_scan_harness.rescan()
+
+    assert game.detected_engine_id == "godot"
+    assert game.engine_id == "godot"
+    assert game.engine_is_manual is False
+
+
 class EngineScanHarness:
     def __init__(
         self,
