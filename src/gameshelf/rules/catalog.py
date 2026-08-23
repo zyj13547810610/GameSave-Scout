@@ -111,6 +111,10 @@ class RuleCatalogService:
         with self._snapshot_lock:
             return self._snapshot
 
+    @property
+    def repository(self) -> UserRuleRepository:
+        return self._repository
+
     def refresh(self) -> RuleRefreshResult:
         with self._mutation_lock:
             try:
@@ -148,8 +152,21 @@ class RuleCatalogService:
         self,
         changes: Mapping[Path, bytes | None],
         settings: RuleSettings,
+        *,
+        expected_generation: int | None = None,
     ) -> RuleSnapshot:
         with self._mutation_lock:
+            if (
+                expected_generation is not None
+                and self.snapshot().generation != expected_generation
+            ):
+                diagnostic = RuleDiagnostic(
+                    "error",
+                    "stale_rule_catalog",
+                    "规则目录已被其他操作更新，请刷新后重试。",
+                    "rules",
+                )
+                raise RuleCatalogError(diagnostic.message, (diagnostic,))
             original = dict(self._repository.read_all())
             candidate_files = dict(original)
             for path, content in changes.items():
@@ -175,6 +192,10 @@ class RuleCatalogService:
                 self._repository.apply_batch(rollback)
                 raise
             return self.publish(candidate)
+
+    def current_settings(self) -> RuleSettings:
+        builtins = self._load_builtins()
+        return self._settings_store.load(_builtin_ids(builtins)).settings
 
     def publish(self, snapshot: RuleSnapshot) -> RuleSnapshot:
         with self._snapshot_lock:

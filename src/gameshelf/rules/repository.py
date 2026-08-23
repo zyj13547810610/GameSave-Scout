@@ -9,6 +9,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from uuid import uuid4
 
+from gameshelf.rules.models import RuleType
 from gameshelf.rules.validation import RuleMetadataError, validate_rule_id
 
 MAX_RULE_FILE_COUNT = 512
@@ -43,6 +44,10 @@ class UserRuleRepository:
     @property
     def roots(self) -> tuple[Path, Path]:
         return (self.engine_dir, self.save_dir)
+
+    def rule_path(self, rule_type: RuleType, rule_id: str) -> Path:
+        root = self.engine_dir if rule_type == "engine" else self.save_dir
+        return root / safe_rule_filename(rule_id)
 
     def read_all(self) -> Mapping[Path, bytes]:
         candidates: list[Path] = []

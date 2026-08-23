@@ -35,6 +35,7 @@ from gameshelf.platform.windows.processes import WindowsProcessLauncher
 from gameshelf.platform.windows.registry import WindowsRegistry
 from gameshelf.platform.windows.shell import WindowsShell
 from gameshelf.rules.catalog import RuleCatalogService
+from gameshelf.rules.management import RuleManagementService
 from gameshelf.rules.repository import UserRuleRepository
 from gameshelf.rules.settings import RuleSettingsStore
 from gameshelf.saves.batch_external import BatchCandidateOpener, BatchExternalLookup
@@ -84,6 +85,7 @@ class Application:
     guided_saves: GuidedSaveSessionService
     builtin_save_rules: SaveRuleProvider
     rule_catalog: RuleCatalogService
+    rule_management: RuleManagementService
     cover_wizard: CoverWizardService
     analysis_pool: ScanAnalysisPool
     _close_lock: Lock = field(default_factory=Lock, repr=False)
@@ -118,6 +120,7 @@ def build_application(
     config = ConfigService(JsonConfigStore(paths.config_file))
     known_folders = WindowsKnownFolderProvider().load()
     resolver = PathTemplateResolver(known_folders)
+    rule_settings_store = RuleSettingsStore(paths.rule_settings_file)
     rule_catalog = RuleCatalogService(
         builtin_engine_file=resource_paths.builtin_engine_rules_file,
         builtin_save_file=resource_paths.builtin_save_rules_file,
@@ -126,7 +129,7 @@ def build_application(
             paths.user_save_rules_dir,
             paths.temp_dir,
         ),
-        settings_store=RuleSettingsStore(paths.rule_settings_file),
+        settings_store=rule_settings_store,
         resolver=resolver,
         legacy_manifest_dir=paths.legacy_manifests_dir,
         logger=logger,
@@ -179,6 +182,14 @@ def build_application(
         library,
         shell,
         registry,
+    )
+    rule_management = RuleManagementService(
+        catalog=rule_catalog,
+        repository=rule_catalog.repository,
+        resolver=resolver,
+        library=library,
+        save_repository=save_repository,
+        registry=registry,
     )
     ludusavi_provider = LudusaviProvider(
         resource_dir=resource_paths.ludusavi_dir,
@@ -327,6 +338,7 @@ def build_application(
         guided_saves=guided_saves,
         builtin_save_rules=builtin_save_rules,
         rule_catalog=rule_catalog,
+        rule_management=rule_management,
         cover_wizard=cover_wizard,
         analysis_pool=analysis_pool,
     )

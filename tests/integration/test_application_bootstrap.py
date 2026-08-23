@@ -12,6 +12,7 @@ from gameshelf.bootstrap.paths import AppPaths
 from gameshelf.bootstrap.resources import ResourcePaths
 from gameshelf.bridge.tasks import TaskContext
 from gameshelf.engines.rule_schema import RuleSchemaError
+from gameshelf.rules.management import RuleListFilters
 from gameshelf.saves.batch_rules import BatchRuleCatalog
 from gameshelf.saves.builtin_rules import SaveRuleProvider
 from gameshelf.saves.ludusavi_provider import LudusaviProvider
@@ -63,6 +64,7 @@ def test_application_bootstrap_creates_only_portable_state(
         assert snapshot.generation == 1
         assert snapshot.catalog_version
         assert application.builtin_save_rules is snapshot.save_rules
+        assert application.rule_management.list_rules(RuleListFilters()).total > 0
         assert application.guided_saves.current() is None
         assert application.api.current_guided_save_detection() == {
             "ok": True,
