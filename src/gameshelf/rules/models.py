@@ -8,6 +8,15 @@ from typing import Literal
 type RuleSource = Literal["builtin", "user"]
 type RuleStatus = Literal["formal", "experimental"]
 type RuleType = Literal["engine", "save_game", "save_engine"]
+type DiagnosticSeverity = Literal["info", "warning", "error"]
+
+
+@dataclass(frozen=True, slots=True)
+class RuleDiagnostic:
+    severity: DiagnosticSeverity
+    code: str
+    message: str
+    source_name: str
 
 
 @dataclass(frozen=True, slots=True)

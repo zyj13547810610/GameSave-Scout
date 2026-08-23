@@ -13,11 +13,35 @@ from gameshelf.bootstrap.resources import ResourcePaths
 from gameshelf.bridge.tasks import TaskContext
 from gameshelf.engines.rule_schema import RuleSchemaError
 from gameshelf.saves.batch_rules import BatchRuleCatalog
+from gameshelf.saves.builtin_rules import SaveRuleProvider
+from gameshelf.saves.ludusavi_provider import LudusaviProvider
 from gameshelf.saves.rule_schema import SaveRuleSchemaError
 
 
-def test_application_bootstrap_creates_only_portable_state(tmp_path: Path) -> None:
+def test_application_bootstrap_creates_only_portable_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     paths = AppPaths.from_root(tmp_path / "便携应用")
+
+    def unexpected_rule_execution(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("应用启动不应执行存档规则或初始化 Ludusavi 快照")
+
+    monkeypatch.setattr(
+        LudusaviProvider,
+        "ensure_initial_snapshot",
+        unexpected_rule_execution,
+    )
+    monkeypatch.setattr(
+        SaveRuleProvider,
+        "suggest_game_specific",
+        unexpected_rule_execution,
+    )
+    monkeypatch.setattr(
+        SaveRuleProvider,
+        "suggest_engine",
+        unexpected_rule_execution,
+    )
 
     application = build_application(paths)
     try:
@@ -30,7 +54,15 @@ def test_application_bootstrap_creates_only_portable_state(tmp_path: Path) -> No
         assert isinstance(bootstrap["data"]["assetSessionToken"], str)
         assert paths.config_file.exists()
         assert paths.database_file.exists()
+        assert paths.user_engine_rules_dir.is_dir()
+        assert paths.user_save_rules_dir.is_dir()
+        assert not paths.rule_settings_file.exists()
+        assert not paths.legacy_manifests_dir.exists()
         assert paths.logs_dir.joinpath("gameshelf.log").exists()
+        snapshot = application.rule_catalog.snapshot()
+        assert snapshot.generation == 1
+        assert snapshot.catalog_version
+        assert application.builtin_save_rules is snapshot.save_rules
         assert application.guided_saves.current() is None
         assert application.api.current_guided_save_detection() == {
             "ok": True,

@@ -23,8 +23,6 @@ from gameshelf.covers.wizard_service import CoverWizardService
 from gameshelf.db.connection import ConnectionFactory
 from gameshelf.db.migrator import Migrator
 from gameshelf.db.writer import DbWriter
-from gameshelf.engines.rule_schema import RuleSchemaError
-from gameshelf.engines.service import EngineDetectionService
 from gameshelf.library.group_repository import GroupRepository
 from gameshelf.library.group_service import GroupService
 from gameshelf.library.launcher import GameLauncher
@@ -36,6 +34,9 @@ from gameshelf.platform.windows.process_tree import WindowsProcessTreeTracker
 from gameshelf.platform.windows.processes import WindowsProcessLauncher
 from gameshelf.platform.windows.registry import WindowsRegistry
 from gameshelf.platform.windows.shell import WindowsShell
+from gameshelf.rules.catalog import RuleCatalogService
+from gameshelf.rules.repository import UserRuleRepository
+from gameshelf.rules.settings import RuleSettingsStore
 from gameshelf.saves.batch_external import BatchCandidateOpener, BatchExternalLookup
 from gameshelf.saves.batch_repository import BatchSaveRepository
 from gameshelf.saves.batch_review import BatchSaveReviewService
@@ -60,7 +61,6 @@ from gameshelf.saves.guided_service import (
 )
 from gameshelf.saves.ludusavi_provider import LudusaviProvider
 from gameshelf.saves.repository import SaveLocationRepository
-from gameshelf.saves.rule_schema import SaveRuleSchemaError
 from gameshelf.saves.service import SaveLocationService
 from gameshelf.saves.static_discovery import StaticSaveDiscovery
 from gameshelf.saves.templates import PathTemplateResolver
@@ -84,6 +84,7 @@ class Application:
     asset_address: AssetServerAddress
     guided_saves: GuidedSaveSessionService
     builtin_save_rules: SaveRuleProvider
+    rule_catalog: RuleCatalogService
     cover_wizard: CoverWizardService
     analysis_pool: ScanAnalysisPool
     _close_lock: Lock = field(default_factory=Lock, repr=False)
@@ -116,17 +117,30 @@ def build_application(
     paths.ensure_writable()
     logger = configure_logging(paths.logs_dir)
     config = ConfigService(JsonConfigStore(paths.config_file))
-    engine_detection = _load_engine_detection(
-        resource_paths.builtin_engine_rules_file,
-        logger,
-    )
     known_folders = WindowsKnownFolderProvider().load()
     resolver = PathTemplateResolver(known_folders)
-    builtin_save_rules = _load_builtin_save_rules(
-        resource_paths.builtin_save_rules_file,
-        resolver,
-        logger,
+    rule_catalog = RuleCatalogService(
+        builtin_engine_file=resource_paths.builtin_engine_rules_file,
+        builtin_save_file=resource_paths.builtin_save_rules_file,
+        repository=UserRuleRepository(
+            paths.user_engine_rules_dir,
+            paths.user_save_rules_dir,
+            paths.temp_dir,
+        ),
+        settings_store=RuleSettingsStore(paths.rule_settings_file),
+        resolver=resolver,
+        legacy_manifest_dir=paths.legacy_manifests_dir,
+        logger=logger,
     )
+    rule_snapshot = rule_catalog.snapshot()
+    engine_detection = rule_snapshot.engine_detection
+    builtin_save_rules = rule_snapshot.save_rules
+    for diagnostic in rule_snapshot.diagnostics:
+        source_path = {
+            "builtin/engines.yaml": resource_paths.builtin_engine_rules_file,
+            "builtin/saves.yaml": resource_paths.builtin_save_rules_file,
+        }.get(diagnostic.source_name, Path(diagnostic.source_name))
+        logger.warning("%s（%s）", diagnostic.message, source_path)
     database = ConnectionFactory(paths.database_file)
     schema_version = Migrator(database, paths.backups_dir).migrate()
     writer = DbWriter(database)
@@ -317,41 +331,7 @@ def build_application(
         asset_address=asset_address,
         guided_saves=guided_saves,
         builtin_save_rules=builtin_save_rules,
+        rule_catalog=rule_catalog,
         cover_wizard=cover_wizard,
         analysis_pool=analysis_pool,
     )
-
-
-def _load_engine_detection(
-    rules_file: Path,
-    logger: logging.Logger,
-) -> EngineDetectionService:
-    try:
-        return EngineDetectionService.from_rules_file(rules_file)
-    except RuleSchemaError as error:
-        if not rules_file.is_file() or isinstance(error.__cause__, OSError):
-            raise
-        logger.warning(
-            "声明式引擎规则加载失败，已仅启用内置检测器（%s）：%s",
-            rules_file,
-            error,
-        )
-        return EngineDetectionService.builtins_only()
-
-
-def _load_builtin_save_rules(
-    rules_file: Path,
-    resolver: PathTemplateResolver,
-    logger: logging.Logger,
-) -> SaveRuleProvider:
-    try:
-        return SaveRuleProvider.from_file(rules_file, resolver, logger)
-    except SaveRuleSchemaError as error:
-        if not rules_file.is_file() or isinstance(error.__cause__, OSError):
-            raise
-        logger.warning(
-            "内置存档规则加载失败，已禁用该建议来源（%s）：%s",
-            rules_file,
-            error,
-        )
-        return SaveRuleProvider.empty(resolver, logger)
