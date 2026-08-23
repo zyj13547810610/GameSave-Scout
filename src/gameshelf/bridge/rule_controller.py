@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from gameshelf.bridge.contracts import ApiResult, JSONValue, failure, success
+from gameshelf.bridge.tasks import TaskContext, TaskRegistry
 from gameshelf.rules.catalog import RuleCatalogService
 from gameshelf.rules.import_export import (
     RuleImportDecision,
@@ -25,6 +26,12 @@ from gameshelf.rules.management import (
     RuleTestResult,
 )
 from gameshelf.rules.models import RuleDiagnostic
+from gameshelf.saves.ludusavi_provider import (
+    LudusaviProvider,
+    LudusaviStatus,
+    SnapshotUpdateError,
+    UpdateResult,
+)
 
 _RULE_FILE_TYPES = ("GameShelf 规则 (*.yaml;*.yml)",)
 
@@ -43,6 +50,9 @@ class RuleBridgeController:
         user_rule_directory: Path,
         legacy_manifest_directory: Path,
         directory_opener: Callable[[Path], None],
+        tasks: TaskRegistry | None = None,
+        ludusavi_provider: LudusaviProvider | None = None,
+        ludusavi_invalidator: Callable[[], None] | None = None,
     ) -> None:
         self._management = management
         self._catalog = catalog
@@ -50,6 +60,9 @@ class RuleBridgeController:
         self._user_rule_directory = user_rule_directory
         self._legacy_manifest_directory = legacy_manifest_directory
         self._directory_opener = directory_opener
+        self._tasks = tasks
+        self._ludusavi_provider = ludusavi_provider
+        self._ludusavi_invalidator = ludusavi_invalidator
         self._window: Any | None = None
 
     def attach_window(self, window: object) -> None:
@@ -275,6 +288,54 @@ class RuleBridgeController:
         except OSError:
             return failure("open_failed", "规则目录打开失败。")
 
+    def ludusavi_status(self) -> ApiResult:
+        provider = self._require_ludusavi_provider()
+        return success(_ludusavi_status_dto(provider.status()))
+
+    def update_ludusavi(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(payload, set())
+            provider = self._require_ludusavi_provider()
+            tasks = self._require_tasks()
+        except (InvalidRuleRequest, RuntimeError) as error:
+            return failure("invalid_request", str(error))
+
+        def operation(context: TaskContext) -> dict[str, JSONValue]:
+            stage_messages = {
+                "connecting": "正在连接 Ludusavi 数据源……",
+                "downloading": "正在下载 Ludusavi 清单……",
+                "validating": "正在验证下载的清单……",
+                "indexing": "正在生成 Ludusavi 查找索引……",
+                "probing": "正在冷查询 Ludusavi 索引……",
+                "replacing": "正在替换当前有效清单……",
+            }
+
+            def report(stage: str) -> None:
+                context.report(0, 1, stage_messages[stage])
+
+            result = provider.update_explicitly(report)
+            if result.status == "updated" and self._ludusavi_invalidator is not None:
+                self._ludusavi_invalidator()
+            context.report(1, 1, result.message)
+            return _ludusavi_update_dto(result)
+
+        task_id = tasks.submit("ludusavi_update", operation)
+        return success({"taskId": task_id})
+
+    def restore_bundled_ludusavi(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(payload, set())
+            status = self._require_ludusavi_provider().restore_bundled()
+            if self._ludusavi_invalidator is not None:
+                self._ludusavi_invalidator()
+            return success(_ludusavi_status_dto(status))
+        except InvalidRuleRequest as error:
+            return failure("invalid_request", str(error))
+        except SnapshotUpdateError as error:
+            return failure("ludusavi_restore_failed", str(error))
+
     def _qualified_command(
         self,
         request: object,
@@ -315,6 +376,16 @@ class RuleBridgeController:
         )
         paths = _selected_paths(selected)
         return paths[0] if paths else None
+
+    def _require_ludusavi_provider(self) -> LudusaviProvider:
+        if self._ludusavi_provider is None:
+            raise RuntimeError("Ludusavi provider is not configured.")
+        return self._ludusavi_provider
+
+    def _require_tasks(self) -> TaskRegistry:
+        if self._tasks is None:
+            raise RuntimeError("Task registry is not configured.")
+        return self._tasks
 
 
 def _payload(request: object) -> dict[str, object]:
@@ -515,4 +586,37 @@ def _diagnostic_dto(diagnostic: RuleDiagnostic) -> dict[str, JSONValue]:
         "code": diagnostic.code,
         "message": diagnostic.message,
         "sourceName": diagnostic.source_name,
+    }
+
+
+def _ludusavi_status_dto(status: LudusaviStatus) -> dict[str, JSONValue]:
+    metadata = status.metadata
+    return {
+        "available": status.available,
+        "source": status.source,
+        "bundledSha256": status.bundled_sha256,
+        "unavailableReason": status.unavailable_reason,
+        "sourceUrl": None if metadata is None else metadata.source_url,
+        "downloadedAt": None if metadata is None else metadata.downloaded_at,
+        "sha256": None if metadata is None else metadata.sha256,
+        "etag": None if metadata is None else metadata.etag,
+        "upstreamCommit": None if metadata is None else metadata.upstream_commit,
+    }
+
+
+def _ludusavi_update_dto(result: UpdateResult) -> dict[str, JSONValue]:
+    return {
+        "status": result.status,
+        "message": result.message,
+        "metadata": (
+            None
+            if result.metadata is None
+            else {
+                "etag": result.metadata.etag,
+                "sha256": result.metadata.sha256,
+                "downloadedAt": result.metadata.downloaded_at,
+                "sourceUrl": result.metadata.source_url,
+                "upstreamCommit": result.metadata.upstream_commit,
+            }
+        ),
     }

@@ -129,6 +129,13 @@ export function createMockBridge(overrides: Partial<GameShelfBridge> = {}): Game
     },
     async export_rule() { return ok({ cancelled: true }) },
     async open_rule_directory() { return ok({ opened: true }) },
+    async restore_bundled_ludusavi() {
+      return ok({
+        available: true, source: 'bundled', bundledSha256: 'mock',
+        unavailableReason: null, sourceUrl: 'mock', downloadedAt: '2026-08-23T00:00:00Z',
+        sha256: 'mock', etag: null, upstreamCommit: null,
+      })
+    },
     async set_ui_scale(input) { return ok({ uiScale: input.uiScale }) },
     async set_library_scan_settings(input) { return ok(input) },
     async set_cover_wizard_settings(input) { return ok(input) },
@@ -339,6 +346,8 @@ export function createMockBridge(overrides: Partial<GameShelfBridge> = {}): Game
     async ludusavi_status() {
       return ok({
         available: true,
+        source: 'bundled',
+        bundledSha256: '1234567890abcdef'.repeat(4),
         unavailableReason: null,
         sourceUrl: 'https://raw.githubusercontent.com/mtkennerly/ludusavi-manifest/master/data/manifest.yaml',
         downloadedAt: '2026-08-12T00:00:00+00:00',

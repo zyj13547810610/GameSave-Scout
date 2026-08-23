@@ -7,6 +7,7 @@ from urllib.request import urlopen
 
 import pytest
 
+import gameshelf.saves.ludusavi_provider as ludusavi_provider_module
 from gameshelf.bootstrap.application import build_application
 from gameshelf.bootstrap.paths import AppPaths
 from gameshelf.bootstrap.resources import ResourcePaths
@@ -33,6 +34,21 @@ def test_application_bootstrap_creates_only_portable_state(
         "ensure_initial_snapshot",
         unexpected_rule_execution,
     )
+    http_calls: list[str] = []
+
+    def unexpected_http_open(
+        url: str,
+        _headers: dict[str, str],
+        _timeout: float,
+    ) -> object:
+        http_calls.append(url)
+        raise AssertionError("应用启动不应访问 Ludusavi 网络更新地址")
+
+    monkeypatch.setattr(
+        ludusavi_provider_module,
+        "_urllib_open",
+        unexpected_http_open,
+    )
     monkeypatch.setattr(
         SaveRuleProvider,
         "suggest_game_specific",
@@ -53,6 +69,7 @@ def test_application_bootstrap_creates_only_portable_state(
         assert application.schema_version == 4
         assert bootstrap["data"]["uiScale"] == 1.0
         assert isinstance(bootstrap["data"]["assetSessionToken"], str)
+        assert http_calls == []
         assert paths.config_file.exists()
         assert paths.database_file.exists()
         assert paths.user_engine_rules_dir.is_dir()

@@ -6,6 +6,7 @@ from gameshelf.bootstrap.paths import AppPaths
 from gameshelf.bridge.api import BridgeApi
 from gameshelf.bridge.tasks import TaskRegistry
 from gameshelf.saves.ludusavi_provider import (
+    LudusaviStatus,
     SnapshotMetadata,
     SnapshotUpdateError,
     UpdateResult,
@@ -94,6 +95,7 @@ class FakeDiscovery:
 class FakeSnapshotProvider:
     def __init__(self) -> None:
         self.update_calls = 0
+        self.restore_calls = 0
         self.result: UpdateResult | None = None
 
     def metadata(self) -> SnapshotMetadata:
@@ -112,16 +114,29 @@ class FakeSnapshotProvider:
             "downloading",
             "validating",
             "indexing",
+            "probing",
             "replacing",
         ):
             if report is not None:
                 report(stage)
         return self.result or UpdateResult("updated", "已更新", self.metadata())
 
+    def status(self) -> LudusaviStatus:
+        metadata = self.metadata()
+        return LudusaviStatus(True, "active", metadata, "c" * 64, None)
+
+    def restore_bundled(self) -> LudusaviStatus:
+        self.restore_calls += 1
+        metadata = self.metadata()
+        return LudusaviStatus(True, "bundled", metadata, "c" * 64, None)
+
 
 class UnavailableSnapshotProvider(FakeSnapshotProvider):
     def metadata(self) -> SnapshotMetadata:
         raise SnapshotUpdateError("内置清单损坏")
+
+    def status(self) -> LudusaviStatus:
+        return LudusaviStatus(False, None, None, None, "内置清单损坏")
 
 
 def test_manual_api_requires_supported_kind(tmp_path: Path) -> None:
@@ -273,6 +288,27 @@ def test_ludusavi_status_reports_unavailable_without_failing_api(
     assert result["data"]["available"] is False
     assert result["data"]["unavailableReason"] == "内置清单损坏"
     assert result["data"]["sha256"] is None
+    assert result["data"]["source"] is None
+    assert result["data"]["bundledSha256"] is None
+
+
+def test_restore_bundled_is_explicit_strict_and_invalidates_cache(
+    tmp_path: Path,
+) -> None:
+    discovery = FakeDiscovery()
+    provider = FakeSnapshotProvider()
+    api, tasks = _api(tmp_path, discovery=discovery, snapshot_provider=provider)
+    try:
+        rejected = api.restore_bundled_ludusavi({"unexpected": True})
+        restored = api.restore_bundled_ludusavi({})
+    finally:
+        tasks.close()
+
+    assert rejected["error"]["code"] == "invalid_request"
+    assert restored["ok"] is True
+    assert restored["data"]["source"] == "bundled"
+    assert provider.restore_calls == 1
+    assert discovery.invalidated is True
 
 
 def test_failed_update_result_does_not_invalidate_cache(tmp_path: Path) -> None:

@@ -185,6 +185,28 @@ def test_index_reader_releases_file_for_atomic_replace(tmp_path: Path) -> None:
     assert replacement.is_file()
 
 
+def test_index_probe_reads_one_name_and_its_game_locations(tmp_path: Path) -> None:
+    path = _build_fixture_index(tmp_path, MANIFEST_SHA256)
+    index = LudusaviIndex.open(path, manifest_sha256=MANIFEST_SHA256)
+
+    index.probe()
+
+    replacement = tmp_path / "probed-index.sqlite"
+    path.replace(replacement)
+    assert replacement.is_file()
+
+
+def test_index_probe_rejects_name_pointing_to_missing_game(tmp_path: Path) -> None:
+    path = _build_fixture_index(tmp_path, MANIFEST_SHA256)
+    with sqlite3.connect(path) as connection:
+        connection.execute("UPDATE names SET game_id = 999")
+        connection.commit()
+    index = LudusaviIndex.open(path, manifest_sha256=MANIFEST_SHA256)
+
+    with pytest.raises(InvalidLudusaviIndex, match="游戏条目"):
+        index.probe()
+
+
 def _build_fixture_index(directory: Path, manifest_sha256: str) -> Path:
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / "manifest-index.sqlite"

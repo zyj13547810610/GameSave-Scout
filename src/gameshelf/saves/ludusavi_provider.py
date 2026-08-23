@@ -1,12 +1,10 @@
-"""Validated offline snapshot and explicit-only Ludusavi updates."""
+"""Validated bundled fallback and explicit-only Ludusavi updates."""
 
 from __future__ import annotations
 
 import hashlib
-import io
 import json
 import os
-import shutil
 import sqlite3
 import threading
 import urllib.error
@@ -31,7 +29,7 @@ _CHUNK_BYTES = 1024 * 1024
 
 
 class SnapshotUpdateError(RuntimeError):
-    """Snapshot setup or update configuration is invalid."""
+    """Snapshot setup, selection, update, or restore failed safely."""
 
 
 class HttpResponse(Protocol):
@@ -49,6 +47,7 @@ class HttpResponse(Protocol):
 type HttpOpen = Callable[[str, dict[str, str], float], HttpResponse]
 type UpdateStatus = Literal["updated", "not_modified", "invalid", "failed"]
 type ProgressReporter = Callable[[str], None]
+type SnapshotSource = Literal["bundled", "active"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,7 +70,23 @@ class UpdateResult:
 class SnapshotBundle:
     manifest: Path
     metadata: Path
-    index: Path | None
+    index: Path
+
+
+@dataclass(frozen=True, slots=True)
+class LudusaviStatus:
+    available: bool
+    source: SnapshotSource | None
+    metadata: SnapshotMetadata | None
+    bundled_sha256: str | None
+    unavailable_reason: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class _SelectedBundle:
+    source: SnapshotSource
+    bundle: SnapshotBundle
+    metadata: SnapshotMetadata
 
 
 class LudusaviProvider:
@@ -98,181 +113,123 @@ class LudusaviProvider:
         self.active_manifest = active_dir / "manifest.yaml"
         self.active_metadata = active_dir / "manifest-meta.json"
         self.active_index = active_dir / "manifest-index.sqlite"
-        self.previous_dir = active_dir / "previous"
+        self._bundled = SnapshotBundle(
+            resource_dir / "manifest.yaml",
+            resource_dir / "manifest-meta.json",
+            resource_dir / "manifest-index.sqlite",
+        )
+        self._active = SnapshotBundle(
+            self.active_manifest,
+            self.active_metadata,
+            self.active_index,
+        )
         self._http_open = http_open or _urllib_open
         self._lock = threading.RLock()
 
     def ensure_initial_snapshot(self) -> None:
+        """Compatibility guard that validates availability without copying resources."""
+        status = self.status()
+        if not status.available:
+            raise SnapshotUpdateError(
+                status.unavailable_reason or "没有可用的 Ludusavi 清单。"
+            )
+
+    def status(self) -> LudusaviStatus:
         with self._lock:
-            self.active_dir.mkdir(parents=True, exist_ok=True)
-            self.temp_dir.mkdir(parents=True, exist_ok=True)
-            self.previous_dir.mkdir(parents=True, exist_ok=True)
-            active = SnapshotBundle(
-                self.active_manifest,
-                self.active_metadata,
-                self.active_index,
-            )
+            self._prepare_directories()
+            bundled_sha256 = self._bundled_sha256()
             try:
-                self._validate_source(active, allow_crlf_repair=False)
-                return
-            except SnapshotUpdateError:
-                pass
-
-            if self._restore_latest_valid_backup():
-                return
-
-            resource = SnapshotBundle(
-                self.resource_dir / "manifest.yaml",
-                self.resource_dir / "manifest-meta.json",
-                self.resource_dir / "manifest-index.sqlite",
-            )
-            try:
-                metadata, manifest_bytes = self._validate_bundle(
-                    resource,
-                    allow_crlf_repair=True,
-                    allow_missing_index=False,
-                )
+                selected = self._select_bundle(rebuild_active_index=False)
             except SnapshotUpdateError as error:
-                raise SnapshotUpdateError(
-                    f"缺少有效的内置 Ludusavi 文件组：{error}"
-                ) from error
-            assert resource.index is not None
-            self._install_pair_bytes(
-                manifest_bytes,
-                resource.metadata.read_bytes(),
-                resource.index.read_bytes(),
+                return LudusaviStatus(
+                    available=False,
+                    source=None,
+                    metadata=None,
+                    bundled_sha256=bundled_sha256,
+                    unavailable_reason=str(error),
+                )
+            return LudusaviStatus(
+                available=True,
+                source=selected.source,
+                metadata=selected.metadata,
+                bundled_sha256=bundled_sha256,
+                unavailable_reason=None,
             )
 
     def metadata(self) -> SnapshotMetadata:
-        with self._lock:
-            try:
-                metadata = self._active_metadata_if_integrity_valid()
-            except (OSError, SnapshotUpdateError):
-                self.ensure_initial_snapshot()
-                metadata = self._active_metadata_if_integrity_valid()
-            try:
-                LudusaviIndex.open(
-                    self.active_index,
-                    manifest_sha256=metadata.sha256,
-                )
-            except InvalidLudusaviIndex as error:
-                raise SnapshotUpdateError(f"Ludusavi 索引不可用：{error}") from error
-            return metadata
+        status = self.status()
+        if not status.available or status.metadata is None:
+            raise SnapshotUpdateError(
+                status.unavailable_reason or "没有可用的 Ludusavi 清单。"
+            )
+        return status.metadata
 
     @contextmanager
     def index_session(self) -> Iterator[LudusaviIndex]:
         with self._lock:
-            metadata = self._validated_or_recovered_source_metadata()
+            self._prepare_directories()
+            selected = self._select_bundle(rebuild_active_index=True)
             try:
                 index = LudusaviIndex.open(
-                    self.active_index,
-                    manifest_sha256=metadata.sha256,
+                    selected.bundle.index,
+                    manifest_sha256=selected.metadata.sha256,
                 )
-            except InvalidLudusaviIndex:
-                matching_index = self._activate_matching_resource_index(metadata)
-                index = (
-                    matching_index
-                    if matching_index is not None
-                    else self._rebuild_active_index(metadata)
-                )
+            except InvalidLudusaviIndex as error:
+                raise SnapshotUpdateError("Ludusavi 索引不可用。") from error
             yield index
 
-    def _validated_or_recovered_source_metadata(self) -> SnapshotMetadata:
-        try:
-            return self._active_metadata_if_integrity_valid()
-        except (OSError, SnapshotUpdateError):
-            self.ensure_initial_snapshot()
-            return self._active_metadata_if_integrity_valid()
-
-    def _rebuild_active_index(self, metadata: SnapshotMetadata) -> LudusaviIndex:
-        index_temporary = self.temp_dir / f"manifest-index-{uuid4().hex}.tmp.sqlite"
-        try:
-            manifest = _parse_manifest_file(self.active_manifest)
-            build_ludusavi_index(
-                index_temporary,
-                manifest,
-                manifest_sha256=metadata.sha256,
+    def restore_bundled(self) -> LudusaviStatus:
+        with self._lock:
+            self._prepare_directories()
+            self._validate_bundled()
+            backups: dict[Path, Path] = {}
+            try:
+                for target in self._active_paths():
+                    if not target.exists():
+                        continue
+                    backup = self.temp_dir / f"restore-{uuid4().hex}-{target.name}"
+                    _copy_file_fsynced(target, backup)
+                    backups[target] = backup
+            except OSError as error:
+                for backup in backups.values():
+                    with suppress(OSError):
+                        backup.unlink(missing_ok=True)
+                raise SnapshotUpdateError(
+                    "恢复随包 Ludusavi 版本失败，无法建立活动文件临时副本。"
+                ) from error
+            try:
+                for target in self._active_paths():
+                    target.unlink(missing_ok=True)
+            except OSError as error:
+                restore_errors = self._restore_copies(backups)
+                message = (
+                    "恢复随包 Ludusavi 版本失败，活动文件恢复也失败。"
+                    if restore_errors
+                    else "恢复随包 Ludusavi 版本失败，活动文件已恢复。"
+                )
+                raise SnapshotUpdateError(message) from error
+            finally:
+                for backup in backups.values():
+                    with suppress(OSError):
+                        backup.unlink(missing_ok=True)
+            selected = self._select_bundle(rebuild_active_index=False)
+            return LudusaviStatus(
+                available=True,
+                source=selected.source,
+                metadata=selected.metadata,
+                bundled_sha256=self._bundled_sha256(),
+                unavailable_reason=None,
             )
-            LudusaviIndex.open(
-                index_temporary,
-                manifest_sha256=metadata.sha256,
-            )
-            os.replace(index_temporary, self.active_index)
-            return LudusaviIndex.open(
-                self.active_index,
-                manifest_sha256=metadata.sha256,
-            )
-        except (
-            InvalidLudusaviIndex,
-            InvalidLudusaviManifest,
-            OSError,
-            UnicodeError,
-            ValueError,
-        ) as error:
-            raise SnapshotUpdateError(f"无法重建 Ludusavi 索引：{error}") from error
-        finally:
-            with suppress(OSError):
-                index_temporary.unlink(missing_ok=True)
-
-    def _activate_matching_resource_index(
-        self,
-        metadata: SnapshotMetadata,
-    ) -> LudusaviIndex | None:
-        resource = SnapshotBundle(
-            self.resource_dir / "manifest.yaml",
-            self.resource_dir / "manifest-meta.json",
-            self.resource_dir / "manifest-index.sqlite",
-        )
-        try:
-            resource_metadata, _ = self._validate_bundle(
-                resource,
-                allow_crlf_repair=True,
-                allow_missing_index=False,
-            )
-        except SnapshotUpdateError:
-            return None
-        if resource_metadata.sha256 != metadata.sha256:
-            return None
-        assert resource.index is not None
-        index_temporary = self.temp_dir / f"resource-index-{uuid4().hex}.tmp.sqlite"
-        try:
-            _copy_file_fsynced(resource.index, index_temporary)
-            LudusaviIndex.open(
-                index_temporary,
-                manifest_sha256=metadata.sha256,
-            )
-            os.replace(index_temporary, self.active_index)
-            return LudusaviIndex.open(
-                self.active_index,
-                manifest_sha256=metadata.sha256,
-            )
-        except (InvalidLudusaviIndex, OSError):
-            return None
-        finally:
-            with suppress(OSError):
-                index_temporary.unlink(missing_ok=True)
-
-    def _active_metadata_if_integrity_valid(self) -> SnapshotMetadata:
-        if not self.active_manifest.is_file() or not self.active_metadata.is_file():
-            raise SnapshotUpdateError("Ludusavi 清单文件组不完整。")
-        metadata = _read_metadata(self.active_metadata)
-        if _sha256_file(self.active_manifest) != metadata.sha256:
-            raise SnapshotUpdateError("Ludusavi 清单的 SHA-256 与元数据不一致。")
-        return metadata
 
     def update_explicitly(
         self,
         report: ProgressReporter | None = None,
     ) -> UpdateResult:
         with self._lock:
-            try:
-                self.ensure_initial_snapshot()
-                current: SnapshotMetadata | None = _read_metadata(
-                    self.active_metadata
-                )
-            except SnapshotUpdateError:
-                current = None
-            headers = {"User-Agent": "GameShelf/0.1 Ludusavi snapshot updater"}
+            self._prepare_directories()
+            current_status = self.status()
+            current = current_status.metadata if current_status.available else None
+            headers = {"User-Agent": "GameShelf/0.3 Ludusavi snapshot updater"}
             if current is not None and current.etag:
                 headers["If-None-Match"] = current.etag
             _report(report, "connecting")
@@ -314,11 +271,10 @@ class LudusaviProvider:
                             "下载内容超过 64 MiB 限制。",
                             current,
                         )
-                    etag = response.getheader("ETag")
                     return self._download_and_replace(
                         response,
                         current,
-                        etag,
+                        response.getheader("ETag"),
                         report,
                     )
             except (OSError, urllib.error.URLError) as error:
@@ -336,7 +292,7 @@ class LudusaviProvider:
         report: ProgressReporter | None,
     ) -> UpdateResult:
         download = self.temp_dir / f"ludusavi-download-{uuid4().hex}.yaml"
-        metadata_temporary = self.temp_dir / f"ludusavi-metadata-{uuid4().hex}.json"
+        metadata_temporary = self.temp_dir / f"ludusavi-meta-{uuid4().hex}.json"
         index_temporary = self.temp_dir / f"ludusavi-index-{uuid4().hex}.sqlite"
         digest = hashlib.sha256()
         total = 0
@@ -346,7 +302,11 @@ class LudusaviProvider:
                 while chunk := response.read(_CHUNK_BYTES):
                     total += len(chunk)
                     if total > MAX_DOWNLOAD_BYTES:
-                        return UpdateResult("invalid", "下载内容超过 64 MiB 限制。", current)
+                        return UpdateResult(
+                            "invalid",
+                            "下载内容超过 64 MiB 限制。",
+                            current,
+                        )
                     digest.update(chunk)
                     stream.write(chunk)
                 stream.flush()
@@ -358,6 +318,7 @@ class LudusaviProvider:
                     "下载内容落盘后的 SHA-256 校验失败。",
                     current,
                 )
+
             _report(report, "validating")
             try:
                 manifest = _parse_manifest_file(download)
@@ -371,14 +332,16 @@ class LudusaviProvider:
                     manifest,
                     manifest_sha256=downloaded_sha256,
                 )
-                LudusaviIndex.open(
+                index = LudusaviIndex.open(
                     index_temporary,
                     manifest_sha256=downloaded_sha256,
                 )
+                _report(report, "probing")
+                index.probe()
             except (InvalidLudusaviIndex, OSError, sqlite3.Error, ValueError) as error:
                 return UpdateResult(
                     "failed",
-                    _failure_message(f"构建 Ludusavi 索引失败：{error}", current),
+                    _failure_message(f"构建或冷查询 Ludusavi 索引失败：{error}", current),
                     current,
                 )
 
@@ -390,24 +353,13 @@ class LudusaviProvider:
                 upstream_commit=None,
             )
             try:
-                backup = self._backup_active_pair()
-            except OSError as error:
-                return UpdateResult(
-                    "failed",
-                    _failure_message(f"备份当前清单失败：{error}", current),
-                    current,
-                )
-            try:
                 _write_bytes_fsynced(
                     metadata_temporary,
                     _metadata_json_bytes(metadata),
                 )
                 _report(report, "replacing")
-                self._replace_bundle(
-                    download,
-                    metadata_temporary,
-                    index_temporary,
-                    backup,
+                self._replace_active_bundle(
+                    SnapshotBundle(download, metadata_temporary, index_temporary)
                 )
             except (OSError, SnapshotUpdateError) as error:
                 return UpdateResult(
@@ -415,41 +367,45 @@ class LudusaviProvider:
                     _failure_message(f"替换清单失败：{error}", current),
                     current,
                 )
-            self._prune_previous()
             return UpdateResult("updated", "Ludusavi 清单已更新。", metadata)
         finally:
-            with suppress(OSError):
-                download.unlink(missing_ok=True)
-            with suppress(OSError):
-                metadata_temporary.unlink(missing_ok=True)
+            for temporary in (download, metadata_temporary, index_temporary):
+                with suppress(OSError):
+                    temporary.unlink(missing_ok=True)
 
-    def _replace_bundle(
-        self,
-        new_manifest: Path,
-        new_metadata: Path,
-        new_index: Path,
-        backup: SnapshotBundle | None,
-    ) -> None:
+    def _select_bundle(self, *, rebuild_active_index: bool) -> _SelectedBundle:
+        errors: list[str] = []
+        if any(path.exists() for path in self._active_paths()):
+            try:
+                metadata, _ = self._validate_source(
+                    self._active,
+                    allow_crlf_repair=False,
+                )
+                try:
+                    LudusaviIndex.open(
+                        self.active_index,
+                        manifest_sha256=metadata.sha256,
+                    )
+                except InvalidLudusaviIndex as error:
+                    if not rebuild_active_index:
+                        raise SnapshotUpdateError(
+                            "活动 Ludusavi 索引不可用。"
+                        ) from error
+                    self._rebuild_active_index(metadata)
+                return _SelectedBundle("active", self._active, metadata)
+            except (OSError, SnapshotUpdateError) as error:
+                errors.append(f"活动快照不可用：{error}")
         try:
-            os.replace(new_manifest, self.active_manifest)
-            os.replace(new_metadata, self.active_metadata)
-            os.replace(new_index, self.active_index)
-            self._validate_bundle(
-                SnapshotBundle(
-                    self.active_manifest,
-                    self.active_metadata,
-                    self.active_index,
-                ),
-                allow_crlf_repair=False,
-                allow_missing_index=False,
-            )
+            metadata, _ = self._validate_bundled()
+            return _SelectedBundle("bundled", self._bundled, metadata)
         except (OSError, SnapshotUpdateError) as error:
-            self._unlink_active_bundle()
-            if backup is not None and not self._restore_bundle(backup):
-                raise SnapshotUpdateError(
-                    "新清单替换失败，旧清单恢复也失败。"
-                ) from error
-            raise SnapshotUpdateError("新清单替换失败，已恢复旧清单。") from error
+            errors.append(f"随包快照不可用：{error}")
+        raise SnapshotUpdateError("；".join(errors) or "没有可用的 Ludusavi 快照。")
+
+    def _validate_bundled(self) -> tuple[SnapshotMetadata, bytes]:
+        if not (self.resource_dir / "LICENSE").is_file():
+            raise SnapshotUpdateError("Ludusavi 随包许可证缺失。")
+        return self._validate_bundle(self._bundled, allow_crlf_repair=True)
 
     def _validate_source(
         self,
@@ -472,177 +428,112 @@ class LudusaviProvider:
         bundle: SnapshotBundle,
         *,
         allow_crlf_repair: bool,
-        allow_missing_index: bool,
     ) -> tuple[SnapshotMetadata, bytes]:
         metadata, manifest_bytes = self._validate_source(
             bundle,
             allow_crlf_repair=allow_crlf_repair,
         )
-        if bundle.index is None or not bundle.index.is_file():
-            if not allow_missing_index:
-                raise SnapshotUpdateError("Ludusavi 索引文件缺失。")
-            _validate_manifest_bytes(manifest_bytes)
-            return metadata, manifest_bytes
         try:
             LudusaviIndex.open(bundle.index, manifest_sha256=metadata.sha256)
         except InvalidLudusaviIndex as error:
-            raise SnapshotUpdateError(f"Ludusavi 索引不可用：{error}") from error
+            raise SnapshotUpdateError("Ludusavi 索引不可用。") from error
         return metadata, manifest_bytes
 
-    def _backup_active_pair(self) -> SnapshotBundle | None:
-        with self._lock:
-            active = SnapshotBundle(
-                self.active_manifest,
-                self.active_metadata,
-                self.active_index,
-            )
-            try:
-                metadata, _ = self._validate_source(
-                    active,
-                    allow_crlf_repair=False,
-                )
-            except SnapshotUpdateError:
-                return None
-            include_index = False
-            try:
-                LudusaviIndex.open(
-                    self.active_index,
-                    manifest_sha256=metadata.sha256,
-                )
-                include_index = True
-            except InvalidLudusaviIndex:
-                pass
-            self.previous_dir.mkdir(parents=True, exist_ok=True)
-            key = f"{datetime.now(UTC):%Y%m%dT%H%M%SZ}-{uuid4().hex[:8]}"
-            backup_index = self.previous_dir / f"manifest-{key}.sqlite"
-            backup = SnapshotBundle(
-                self.previous_dir / f"manifest-{key}.yaml",
-                self.previous_dir / f"manifest-{key}.json",
-                backup_index if include_index else None,
-            )
-            try:
-                shutil.copy2(active.manifest, backup.manifest)
-                shutil.copy2(active.metadata, backup.metadata)
-                if backup.index is not None:
-                    shutil.copy2(self.active_index, backup.index)
-            except OSError:
-                for path in (backup.manifest, backup.metadata, backup_index):
-                    with suppress(OSError):
-                        path.unlink(missing_ok=True)
-                raise
-            return backup
-
-    def _restore_bundle(self, bundle: SnapshotBundle) -> bool:
+    def _rebuild_active_index(self, metadata: SnapshotMetadata) -> None:
+        temporary = self.temp_dir / f"active-index-{uuid4().hex}.sqlite"
         try:
-            _, manifest_bytes = self._validate_bundle(
-                bundle,
-                allow_crlf_repair=False,
-                allow_missing_index=True,
+            manifest = _parse_manifest_file(self.active_manifest)
+            build_ludusavi_index(
+                temporary,
+                manifest,
+                manifest_sha256=metadata.sha256,
             )
-            index_bytes = (
-                bundle.index.read_bytes()
-                if bundle.index is not None and bundle.index.is_file()
-                else None
-            )
-            self._install_pair_bytes(
-                manifest_bytes,
-                bundle.metadata.read_bytes(),
-                index_bytes,
-            )
-        except (OSError, SnapshotUpdateError):
-            return False
-        return True
-
-    def _restore_latest_valid_backup(self) -> bool:
-        return any(self._restore_bundle(bundle) for bundle in self._previous_bundles())
-
-    def _previous_bundles(self) -> list[SnapshotBundle]:
-        bundles: list[SnapshotBundle] = []
-        for manifest in self.previous_dir.glob("manifest-*.yaml"):
-            metadata = manifest.with_suffix(".json")
-            if metadata.is_file():
-                index = manifest.with_suffix(".sqlite")
-                bundles.append(
-                    SnapshotBundle(
-                        manifest,
-                        metadata,
-                        index if index.is_file() else None,
-                    )
-                )
-        return sorted(
-            bundles,
-            key=lambda bundle: (
-                max(
-                    path.stat().st_mtime_ns
-                    for path in (
-                        bundle.manifest,
-                        bundle.metadata,
-                        bundle.index,
-                    )
-                    if path is not None
-                ),
-                bundle.manifest.name,
-            ),
-            reverse=True,
-        )
-
-    def _prune_previous(self) -> None:
-        bundles = self._previous_bundles()
-        keep = {
-            path
-            for bundle in bundles[:2]
-            for path in (bundle.manifest, bundle.metadata, bundle.index)
-            if path is not None
-        }
-        for path in self.previous_dir.glob("manifest-*.*"):
-            if path not in keep and path.suffix in {".yaml", ".json", ".sqlite"}:
-                path.unlink()
-
-    def _unlink_active_bundle(self) -> None:
-        for path in (self.active_manifest, self.active_metadata, self.active_index):
-            with suppress(OSError):
-                path.unlink(missing_ok=True)
-
-    def _install_pair_bytes(
-        self,
-        manifest_bytes: bytes,
-        metadata_bytes: bytes,
-        index_bytes: bytes | None = None,
-    ) -> None:
-        manifest_temporary = self.temp_dir / f"manifest-{uuid4().hex}.tmp"
-        metadata_temporary = self.temp_dir / f"metadata-{uuid4().hex}.tmp"
-        index_temporary = self.temp_dir / f"index-{uuid4().hex}.tmp"
-        replaced_manifest = False
-        try:
-            _write_bytes_fsynced(manifest_temporary, manifest_bytes)
-            _write_bytes_fsynced(metadata_temporary, metadata_bytes)
-            if index_bytes is not None:
-                _write_bytes_fsynced(index_temporary, index_bytes)
-            os.replace(manifest_temporary, self.active_manifest)
-            replaced_manifest = True
-            os.replace(metadata_temporary, self.active_metadata)
-            if index_bytes is None:
-                self.active_index.unlink(missing_ok=True)
-            else:
-                os.replace(index_temporary, self.active_index)
-        except OSError:
-            if replaced_manifest:
-                with suppress(OSError):
-                    self.active_manifest.unlink(missing_ok=True)
-                with suppress(OSError):
-                    self.active_metadata.unlink(missing_ok=True)
-                with suppress(OSError):
-                    self.active_index.unlink(missing_ok=True)
-            raise
+            index = LudusaviIndex.open(temporary, manifest_sha256=metadata.sha256)
+            index.probe()
+            os.replace(temporary, self.active_index)
+        except (
+            InvalidLudusaviIndex,
+            InvalidLudusaviManifest,
+            OSError,
+            sqlite3.Error,
+            UnicodeError,
+            ValueError,
+        ) as error:
+            raise SnapshotUpdateError("无法重建活动 Ludusavi 索引。") from error
         finally:
             with suppress(OSError):
-                manifest_temporary.unlink(missing_ok=True)
-            with suppress(OSError):
-                metadata_temporary.unlink(missing_ok=True)
-            with suppress(OSError):
-                index_temporary.unlink(missing_ok=True)
-            with suppress(OSError):
-                index_temporary.unlink(missing_ok=True)
+                temporary.unlink(missing_ok=True)
+
+    def _replace_active_bundle(self, staged: SnapshotBundle) -> None:
+        backups: dict[Path, Path] = {}
+        try:
+            for target in self._active_paths():
+                if not target.exists():
+                    continue
+                backup = self.temp_dir / f"replace-{uuid4().hex}-{target.name}"
+                _copy_file_fsynced(target, backup)
+                backups[target] = backup
+        except OSError:
+            for backup in backups.values():
+                with suppress(OSError):
+                    backup.unlink(missing_ok=True)
+            raise
+
+        try:
+            for source, target in zip(
+                (staged.manifest, staged.metadata, staged.index),
+                self._active_paths(),
+                strict=True,
+            ):
+                os.replace(source, target)
+            self._validate_bundle(self._active, allow_crlf_repair=False)
+        except (OSError, SnapshotUpdateError) as error:
+            restore_errors = self._restore_replaced_targets(backups)
+            if restore_errors:
+                raise SnapshotUpdateError(
+                    "新清单替换失败，旧活动快照恢复也失败。"
+                ) from error
+            raise SnapshotUpdateError("新清单替换失败，旧活动快照已恢复。") from error
+        finally:
+            for backup in backups.values():
+                with suppress(OSError):
+                    backup.unlink(missing_ok=True)
+
+    def _restore_replaced_targets(self, backups: Mapping[Path, Path]) -> bool:
+        failed = False
+        for target in self._active_paths():
+            backup = backups.get(target)
+            try:
+                if backup is None:
+                    target.unlink(missing_ok=True)
+                else:
+                    os.replace(backup, target)
+            except OSError:
+                failed = True
+        return failed
+
+    def _restore_copies(self, backups: Mapping[Path, Path]) -> bool:
+        failed = False
+        for target, backup in backups.items():
+            try:
+                _copy_file_replacing(backup, target)
+            except OSError:
+                failed = True
+        return failed
+
+    def _prepare_directories(self) -> None:
+        self.active_dir.mkdir(parents=True, exist_ok=True)
+        self.temp_dir.mkdir(parents=True, exist_ok=True)
+
+    def _active_paths(self) -> tuple[Path, Path, Path]:
+        return self.active_manifest, self.active_metadata, self.active_index
+
+    def _bundled_sha256(self) -> str | None:
+        try:
+            return _read_metadata(self._bundled.metadata).sha256
+        except SnapshotUpdateError:
+            return None
+
 
 def _urllib_open(url: str, headers: dict[str, str], timeout: float) -> HttpResponse:
     request = urllib.request.Request(url, headers=headers, method="GET")
@@ -681,13 +572,6 @@ def _failure_message(detail: str, current: SnapshotMetadata | None) -> str:
 def _parse_manifest_file(path: Path) -> LudusaviManifest:
     with path.open(encoding="utf-8") as stream:
         return parse_manifest(stream, skip_invalid_paths=True)
-
-
-def _validate_manifest_bytes(content: bytes) -> None:
-    try:
-        parse_manifest(io.StringIO(content.decode("utf-8")), skip_invalid_paths=True)
-    except (InvalidLudusaviManifest, UnicodeError) as error:
-        raise SnapshotUpdateError(f"Ludusavi 清单内容无效：{error}") from error
 
 
 def _validated_manifest_bytes(
@@ -732,11 +616,21 @@ def _copy_file_fsynced(source: Path, destination: Path) -> None:
         os.fsync(destination_stream.fileno())
 
 
+def _copy_file_replacing(source: Path, destination: Path) -> None:
+    temporary = destination.parent / f".{destination.name}-{uuid4().hex}.tmp"
+    try:
+        _copy_file_fsynced(source, temporary)
+        os.replace(temporary, destination)
+    finally:
+        with suppress(OSError):
+            temporary.unlink(missing_ok=True)
+
+
 def _read_metadata(path: Path) -> SnapshotMetadata:
     try:
         loaded: Any = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
-        raise SnapshotUpdateError(f"无法读取 Ludusavi 元数据：{path}") from error
+        raise SnapshotUpdateError("无法读取 Ludusavi 元数据文件。") from error
     if not isinstance(loaded, dict):
         raise SnapshotUpdateError("Ludusavi 元数据必须是 JSON 对象。")
     data = cast(Mapping[str, Any], loaded)
@@ -747,7 +641,7 @@ def _read_metadata(path: Path) -> SnapshotMetadata:
     upstream_commit = data.get("upstreamCommit")
     if (
         not isinstance(sha256, str)
-        or re_full_sha256(sha256) is False
+        or not re_full_sha256(sha256)
         or not isinstance(downloaded_at, str)
         or not isinstance(source_url, str)
         or (etag is not None and not isinstance(etag, str))

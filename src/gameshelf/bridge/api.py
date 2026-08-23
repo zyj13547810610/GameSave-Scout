@@ -112,6 +112,7 @@ from gameshelf.saves.guided_service import (
 )
 from gameshelf.saves.ludusavi_provider import (
     LudusaviProvider,
+    LudusaviStatus,
     SnapshotUpdateError,
     UpdateResult,
 )
@@ -1565,35 +1566,20 @@ class BridgeApi:
             return failure("guided_operation_failed", "引导式寻找操作失败。")
 
     def ludusavi_status(self) -> ApiResult:
+        if self._rule_controller is not None:
+            return self._rule_controller.ludusavi_status()
         try:
-            metadata = self._require_ludusavi_provider().metadata()
+            status = self._require_ludusavi_provider().status()
         except (SnapshotUpdateError, OSError) as error:
-            available = False
-            unavailable_reason: str | None = str(error)
-            source_url = downloaded_at = sha256 = etag = upstream_commit = None
-        else:
-            available = True
-            unavailable_reason = None
-            source_url = metadata.source_url
-            downloaded_at = metadata.downloaded_at
-            sha256 = metadata.sha256
-            etag = metadata.etag
-            upstream_commit = metadata.upstream_commit
-        return success(
-            {
-                "available": available,
-                "unavailableReason": unavailable_reason,
-                "sourceUrl": source_url,
-                "downloadedAt": downloaded_at,
-                "sha256": sha256,
-                "etag": etag,
-                "upstreamCommit": upstream_commit,
-            }
-        )
+            status = LudusaviStatus(False, None, None, None, str(error))
+        return success(_ludusavi_status_dto(status))
 
     def update_ludusavi(self, request: object) -> ApiResult:
+        if self._rule_controller is not None:
+            return self._rule_controller.update_ludusavi(request)
         try:
-            _payload(request)
+            payload = _payload(request)
+            _only_keys(payload, set())
             provider = self._require_ludusavi_provider()
             discovery = self._require_static_discovery()
 
@@ -1603,6 +1589,7 @@ class BridgeApi:
                     "downloading": "正在下载 Ludusavi 清单……",
                     "validating": "正在验证下载的清单……",
                     "indexing": "正在生成 Ludusavi 查找索引……",
+                    "probing": "正在冷查询 Ludusavi 索引……",
                     "replacing": "正在替换当前有效清单……",
                 }
 
@@ -1619,6 +1606,20 @@ class BridgeApi:
             return success({"taskId": task_id})
         except InvalidRequest as error:
             return failure("invalid_request", str(error))
+
+    def restore_bundled_ludusavi(self, request: object) -> ApiResult:
+        if self._rule_controller is not None:
+            return self._rule_controller.restore_bundled_ludusavi(request)
+        try:
+            payload = _payload(request)
+            _only_keys(payload, set())
+            status = self._require_ludusavi_provider().restore_bundled()
+            self._require_static_discovery().invalidate_ludusavi()
+            return success(_ludusavi_status_dto(status))
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except SnapshotUpdateError as error:
+            return failure("ludusavi_restore_failed", str(error))
 
     def choose_directory(self) -> ApiResult:
         return success(self._choose_native_path(directory=True))
@@ -2229,6 +2230,21 @@ def _update_result_dto(result: UpdateResult) -> dict[str, JSONValue]:
                 "upstreamCommit": result.metadata.upstream_commit,
             }
         ),
+    }
+
+
+def _ludusavi_status_dto(status: LudusaviStatus) -> dict[str, JSONValue]:
+    metadata = status.metadata
+    return {
+        "available": status.available,
+        "source": status.source,
+        "bundledSha256": status.bundled_sha256,
+        "unavailableReason": status.unavailable_reason,
+        "sourceUrl": None if metadata is None else metadata.source_url,
+        "downloadedAt": None if metadata is None else metadata.downloaded_at,
+        "sha256": None if metadata is None else metadata.sha256,
+        "etag": None if metadata is None else metadata.etag,
+        "upstreamCommit": None if metadata is None else metadata.upstream_commit,
     }
 
 

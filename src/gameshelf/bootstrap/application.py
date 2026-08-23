@@ -312,6 +312,9 @@ def build_application(
         user_rule_directory=paths.user_rules_dir,
         legacy_manifest_directory=paths.legacy_manifests_dir,
         directory_opener=shell.open_directory,
+        tasks=tasks,
+        ludusavi_provider=ludusavi_provider,
+        ludusavi_invalidator=static_discovery.invalidate_ludusavi,
     )
     api = BridgeApi(
         paths,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 import webview
 
@@ -9,6 +10,12 @@ from gameshelf.bridge.api import BridgeApi
 from gameshelf.bridge.rule_controller import RuleBridgeController
 from gameshelf.bridge.tasks import TaskRegistry
 from gameshelf.rules.import_export import RuleImportExportService
+from gameshelf.saves.ludusavi_provider import (
+    LudusaviProvider,
+    LudusaviStatus,
+    SnapshotMetadata,
+    UpdateResult,
+)
 from tests.unit.rules.test_rule_management import _service
 
 
@@ -28,6 +35,42 @@ class DirectoryOpener:
 
     def __call__(self, path: Path) -> None:
         self.paths.append(path)
+
+
+class FakeLudusaviProvider:
+    def __init__(self) -> None:
+        self.restore_calls = 0
+        self.update_calls = 0
+        self.reported_stages: list[str] = []
+        self.metadata = SnapshotMetadata(
+            etag='"active"',
+            sha256="a" * 64,
+            downloaded_at="2026-08-23T00:00:00+00:00",
+            source_url="https://example.test/manifest.yaml",
+            upstream_commit=None,
+        )
+
+    def status(self) -> LudusaviStatus:
+        return LudusaviStatus(True, "active", self.metadata, "b" * 64, None)
+
+    def restore_bundled(self) -> LudusaviStatus:
+        self.restore_calls += 1
+        return LudusaviStatus(True, "bundled", self.metadata, "b" * 64, None)
+
+    def update_explicitly(self, report=None) -> UpdateResult:
+        self.update_calls += 1
+        for stage in (
+            "connecting",
+            "downloading",
+            "validating",
+            "indexing",
+            "probing",
+            "replacing",
+        ):
+            self.reported_stages.append(stage)
+            if report is not None:
+                report(stage)
+        return UpdateResult("updated", "已更新", self.metadata)
 
 
 def test_rule_api_rejects_unknown_fields_and_maps_management_dtos(
@@ -198,14 +241,74 @@ def test_rule_api_cancelled_dialogs_are_successful(tmp_path: Path) -> None:
     assert exported == {"ok": True, "data": {"cancelled": True}}
 
 
+def test_rule_api_reports_source_and_restores_bundled_snapshot_strictly(
+    tmp_path: Path,
+) -> None:
+    provider = FakeLudusaviProvider()
+    invalidations: list[str] = []
+    api, tasks, _, _ = _api(
+        tmp_path,
+        snapshot_provider=provider,
+        invalidations=invalidations,
+    )
+    try:
+        status = api.ludusavi_status()
+        rejected = api.restore_bundled_ludusavi({"extra": True})
+        restored = api.restore_bundled_ludusavi({})
+    finally:
+        tasks.close()
+
+    assert status["data"]["source"] == "active"
+    assert status["data"]["bundledSha256"] == "b" * 64
+    assert rejected["error"]["code"] == "invalid_request"
+    assert restored["data"]["source"] == "bundled"
+    assert provider.restore_calls == 1
+    assert invalidations == ["invalidated"]
+
+
+def test_rule_api_runs_explicit_ludusavi_update_with_cold_probe_progress(
+    tmp_path: Path,
+) -> None:
+    provider = FakeLudusaviProvider()
+    invalidations: list[str] = []
+    api, tasks, _, _ = _api(
+        tmp_path,
+        snapshot_provider=provider,
+        invalidations=invalidations,
+    )
+    try:
+        rejected = api.update_ludusavi({"extra": True})
+        started = api.update_ludusavi({})
+        snapshot = tasks.wait(started["data"]["taskId"], timeout=2)
+    finally:
+        tasks.close()
+
+    assert rejected["error"]["code"] == "invalid_request"
+    assert snapshot.status == "completed"
+    assert snapshot.message == "已更新"
+    assert provider.update_calls == 1
+    assert provider.reported_stages == [
+        "connecting",
+        "downloading",
+        "validating",
+        "indexing",
+        "probing",
+        "replacing",
+    ]
+    assert invalidations == ["invalidated"]
+
+
 def _api(
     tmp_path: Path,
     *,
     selections: list[tuple[str, ...]] | None = None,
+    snapshot_provider: FakeLudusaviProvider | None = None,
+    invalidations: list[str] | None = None,
 ) -> tuple[BridgeApi, TaskRegistry, FakeWindow, DirectoryOpener]:
     management, catalog, repository, _ = _service(tmp_path)
     paths = AppPaths.from_root(tmp_path / "portable")
     opener = DirectoryOpener()
+    tasks = TaskRegistry(max_workers=1)
     controller = RuleBridgeController(
         management=management,
         catalog=catalog,
@@ -216,8 +319,18 @@ def _api(
         user_rule_directory=paths.user_rules_dir,
         legacy_manifest_directory=paths.legacy_manifests_dir,
         directory_opener=opener,
+        tasks=tasks,
+        ludusavi_provider=(
+            None
+            if snapshot_provider is None
+            else cast(LudusaviProvider, snapshot_provider)
+        ),
+        ludusavi_invalidator=(
+            None
+            if invalidations is None
+            else lambda: invalidations.append("invalidated")
+        ),
     )
-    tasks = TaskRegistry(max_workers=1)
     api = BridgeApi(paths, tasks, schema_version=4, rule_controller=controller)
     window = FakeWindow(selections or [])
     api.attach_window(window)

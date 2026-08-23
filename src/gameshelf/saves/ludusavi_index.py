@@ -169,6 +169,28 @@ class LudusaviIndex:
         except (OSError, sqlite3.Error, UnicodeError, ValueError) as error:
             raise InvalidLudusaviIndex("无法读取 Ludusavi 索引名称目录。") from error
 
+    def probe(self) -> None:
+        """Run one bounded cold lookup without loading or parsing the source YAML."""
+        try:
+            with closing(_connect_read_only(self._path)) as connection:
+                row = connection.execute(
+                    "SELECT game_id, display_name FROM names "
+                    "ORDER BY game_id, candidate_order LIMIT 1"
+                ).fetchone()
+        except (OSError, sqlite3.Error) as error:
+            raise InvalidLudusaviIndex("Ludusavi 索引冷查询失败。") from error
+        if self.metadata.name_count == 0:
+            if row is not None or self.metadata.game_count != 0:
+                raise InvalidLudusaviIndex("Ludusavi 索引冷查询计数不一致。")
+            return
+        if row is None:
+            raise InvalidLudusaviIndex("Ludusavi 索引冷查询缺少名称条目。")
+        game_id = _positive_int(row[0], "冷查询游戏 ID")
+        _non_empty_string(row[1], "冷查询显示名称")
+        games = self.load_games({game_id})
+        if game_id not in games:
+            raise InvalidLudusaviIndex("Ludusavi 索引冷查询缺少游戏规则。")
+
     def load_games(self, game_ids: Collection[int]) -> Mapping[int, ManifestGame]:
         requested = tuple(sorted(set(game_ids)))
         if not requested:

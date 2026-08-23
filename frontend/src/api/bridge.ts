@@ -21,6 +21,7 @@ export const ruleBridgeMethods = [
   'confirm_rule_import',
   'export_rule',
   'open_rule_directory',
+  'restore_bundled_ludusavi',
 ] as const satisfies readonly (keyof GameShelfBridge)[]
 
 export function createBridge(options: BridgeOptions = {}): GameShelfBridge {

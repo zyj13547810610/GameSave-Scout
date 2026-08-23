@@ -346,6 +346,8 @@ export type GuidedSaveDiscovery = {
 
 export type LudusaviStatus = {
   available: boolean
+  source: 'bundled' | 'active' | null
+  bundledSha256: string | null
   unavailableReason: string | null
   sourceUrl: string | null
   downloadedAt: string | null
@@ -775,6 +777,7 @@ export interface GameShelfBridge {
   }): Promise<ApiResult<{ resolved: boolean }>>
   ludusavi_status(): Promise<ApiResult<LudusaviStatus>>
   update_ludusavi(input: Record<string, never>): Promise<ApiResult<{ taskId: string }>>
+  restore_bundled_ludusavi(input: Record<string, never>): Promise<ApiResult<LudusaviStatus>>
   choose_directory(): Promise<ApiResult<string | null>>
   task_snapshot(taskId: string): Promise<ApiResult<TaskSnapshot>>
   cancel_task(taskId: string): Promise<ApiResult<{ cancelled: boolean }>>

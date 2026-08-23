@@ -12,6 +12,8 @@ describe('LudusaviSettings', () => {
     const bridge = createMockBridge({
       ludusavi_status: async () => ok({
         available: true,
+        source: 'bundled',
+        bundledSha256: '1234567890abcdef'.repeat(4),
         unavailableReason: null,
         sourceUrl: 'https://example.test/manifest.yaml',
         downloadedAt: '2026-08-12T00:00:00+00:00',
@@ -61,6 +63,8 @@ describe('LudusaviSettings', () => {
     const bridge = createMockBridge({
       ludusavi_status: async () => ok({
         available: true,
+        source: 'active',
+        bundledSha256: 'abcdef1234567890'.repeat(4),
         unavailableReason: null,
         sourceUrl: 'https://example.test/manifest.yaml',
         downloadedAt: '2026-08-12T00:00:00+00:00',
@@ -99,6 +103,8 @@ describe('LudusaviSettings', () => {
       .fn()
       .mockResolvedValueOnce(ok({
         available: true,
+        source: 'bundled',
+        bundledSha256: '1234567890abcdef'.repeat(4),
         unavailableReason: null,
         sourceUrl: 'https://example.test/manifest.yaml',
         downloadedAt: '2026-08-12T00:00:00+00:00',
@@ -141,6 +147,8 @@ describe('LudusaviSettings', () => {
     const bridge = createMockBridge({
       ludusavi_status: async () => ok({
         available: false,
+        source: null,
+        bundledSha256: null,
         unavailableReason: '内置清单损坏',
         sourceUrl: null,
         downloadedAt: null,
