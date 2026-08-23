@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import subprocess
 import sys
 from pathlib import Path
@@ -92,16 +93,25 @@ def test_json_smoke_writes_success_without_creating_desktop_window(
         "ui": True,
         "engineRules": True,
         "saveRules": True,
+        "builtinRules": True,
         "ruleSchemas": True,
         "ludusavi": True,
+        "ludusaviLicense": True,
         "desktopDependencies": True,
         "webviewRuntime": True,
         "windows10Permissions": True,
         "applicationBootstrap": True,
+        "ruleCatalog": True,
     }
     assert payload["error"] is None
     assert reporter.calls == []
     assert allow_manual_guide_calls == [False]
+    assert not any((app_root / "data" / "rules" / "user" / "engines").iterdir())
+    assert not any((app_root / "data" / "rules" / "user" / "saves").iterdir())
+    assert not any((app_root / "data" / "rules" / "ludusavi").iterdir())
+    assert not (app_root / "data" / "manifests").exists()
+    with sqlite3.connect(app_root / "data" / "library.db") as connection:
+        assert connection.execute("PRAGMA user_version").fetchone() == (4,)
 
 
 @pytest.mark.parametrize(
@@ -181,8 +191,10 @@ def test_json_smoke_writes_failure_without_showing_frozen_dialog(
         "ui": False,
         "engineRules": False,
         "saveRules": False,
+        "builtinRules": False,
         "ruleSchemas": False,
         "ludusavi": False,
+        "ludusaviLicense": False,
     }
     assert "ui/index.html" in payload["error"]
     assert reporter.calls == []
@@ -323,6 +335,9 @@ def test_evergreen_smoke_records_detection_and_bootstrapper_checks(
         "build_application",
         lambda _paths, *, resources: SimpleNamespace(
             schema_version=1,
+            rule_catalog=SimpleNamespace(
+                snapshot=lambda: SimpleNamespace(catalog_version="test")
+            ),
             close=lambda: None,
         ),
     )

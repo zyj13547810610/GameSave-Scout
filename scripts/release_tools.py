@@ -28,6 +28,8 @@ from uuid import uuid4
 
 import yaml
 
+from gameshelf.saves.ludusavi_index import InvalidLudusaviIndex, LudusaviIndex
+
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 _VERSION_PATTERN = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?")
 _WEBVIEW_ARCHIVE_CONFIG_KEYS = {
@@ -99,6 +101,7 @@ class ReleaseMetadata:
     pywebview_version: str
     database_schema_version: int
     engine_rules_version: str
+    save_rules_version: str
     ludusavi_sha256: str
     ludusavi_upstream_commit: str
     webview2_version: str
@@ -459,6 +462,7 @@ def build_release_manifest(
         "pywebviewVersion": metadata.pywebview_version,
         "databaseSchemaVersion": metadata.database_schema_version,
         "engineRulesVersion": metadata.engine_rules_version,
+        "saveRulesVersion": metadata.save_rules_version,
         "ludusaviSha256": metadata.ludusavi_sha256,
         "ludusaviUpstreamCommit": metadata.ludusavi_upstream_commit,
         "webview2Version": (
@@ -917,6 +921,22 @@ def collect_release_metadata(
     if not isinstance(engine_rules_version, str) or not engine_rules_version:
         raise ReleaseToolError("引擎规则版本无效。")
     try:
+        save_document = yaml.safe_load(
+            (root / "resources" / "rules" / "builtin" / "saves.yaml").read_text(
+                encoding="utf-8"
+            )
+        )
+    except (OSError, yaml.YAMLError) as error:
+        raise ReleaseToolError(f"无法读取存档规则版本：{error}") from error
+    if not isinstance(save_document, dict):
+        raise ReleaseToolError("存档规则文件必须是映射。")
+    save_rules_version = save_document.get("version")
+    if not isinstance(save_rules_version, str) or not save_rules_version:
+        raise ReleaseToolError("存档规则版本无效。")
+    ludusavi_dir = root / "resources" / "rules" / "ludusavi"
+    if not (ludusavi_dir / "LICENSE").is_file():
+        raise ReleaseToolError("Ludusavi 许可证缺失。")
+    try:
         ludusavi_loaded = json.loads(
             (
                 root
@@ -938,6 +958,14 @@ def collect_release_metadata(
         r"[0-9a-f]{40}", ludusavi_commit
     ) is None:
         raise ReleaseToolError("Ludusavi 上游提交号无效。")
+    try:
+        ludusavi_index = LudusaviIndex.open(
+            ludusavi_dir / "manifest-index.sqlite",
+            manifest_sha256=cast(str, ludusavi_sha256),
+        )
+        ludusavi_index.probe()
+    except (InvalidLudusaviIndex, OSError, ValueError) as error:
+        raise ReleaseToolError(f"Ludusavi 索引冷查询失败：{error}") from error
     return ReleaseMetadata(
         app_version=versions.version,
         build_utc=datetime.now(UTC).isoformat(timespec="seconds").replace(
@@ -952,6 +980,7 @@ def collect_release_metadata(
         pywebview_version=importlib.metadata.version("pywebview"),
         database_schema_version=database_schema_version,
         engine_rules_version=engine_rules_version,
+        save_rules_version=save_rules_version,
         ludusavi_sha256=cast(str, ludusavi_sha256),
         ludusavi_upstream_commit=ludusavi_commit,
         webview2_version=config.version,
@@ -1172,9 +1201,14 @@ def _validate_release_layout(
     critical_files = [
         "_internal/resources/ui/index.html",
         "_internal/resources/rules/builtin/engines.yaml",
+        "_internal/resources/rules/builtin/saves.yaml",
+        "_internal/resources/rules/schemas/engines.schema.json",
+        "_internal/resources/rules/schemas/saves.schema.json",
+        "_internal/resources/rules/schemas/README.md",
         "_internal/resources/rules/ludusavi/manifest.yaml",
         "_internal/resources/rules/ludusavi/manifest-meta.json",
         "_internal/resources/rules/ludusavi/manifest-index.sqlite",
+        "_internal/resources/rules/ludusavi/LICENSE",
         "_internal/gameshelf/db/migrations/0001_initial.sql",
         "_internal/gameshelf/db/migrations/0002_initial.sql",
         "_internal/gameshelf/db/migrations/0003_initial.sql",
@@ -1200,8 +1234,15 @@ def _release_payload_files(release_root: Path) -> tuple[tuple[str, Path], ...]:
             if _is_reparse_point(child):
                 raise ReleaseToolError(f"发布目录不能包含重解析点或链接：{child}")
             relative = child.relative_to(release_root).as_posix()
-            if any(part.casefold() == "data" for part in child.relative_to(release_root).parts):
+            parts = tuple(
+                part.casefold() for part in child.relative_to(release_root).parts
+            )
+            if "data" in parts:
                 raise ReleaseToolError(f"发布目录不能包含 data：{relative}")
+            if parts[:3] == ("_internal", "resources", "manifests"):
+                raise ReleaseToolError(f"发布目录不能包含旧 manifests：{relative}")
+            if parts[:4] == ("_internal", "resources", "rules", "user"):
+                raise ReleaseToolError(f"发布目录不能包含用户规则：{relative}")
             if child.suffix.casefold() == ".cab":
                 raise ReleaseToolError(f"发布目录不能包含输入 CAB：{relative}")
             if child.is_dir():

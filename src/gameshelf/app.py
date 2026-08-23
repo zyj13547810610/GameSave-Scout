@@ -66,6 +66,13 @@ def main(
                 "saveRules": (
                     "rules/builtin/saves.yaml" not in missing_resources
                 ),
+                "builtinRules": all(
+                    path not in missing_resources
+                    for path in (
+                        "rules/builtin/engines.yaml",
+                        "rules/builtin/saves.yaml",
+                    )
+                ),
                 "ruleSchemas": all(
                     path not in missing_resources
                     for path in (
@@ -80,8 +87,10 @@ def main(
                         "rules/ludusavi/manifest.yaml",
                         "rules/ludusavi/manifest-meta.json",
                         "rules/ludusavi/manifest-index.sqlite",
-                        "rules/ludusavi/LICENSE",
                     )
+                ),
+                "ludusaviLicense": (
+                    "rules/ludusavi/LICENSE" not in missing_resources
                 ),
             }
         )
@@ -114,6 +123,9 @@ def main(
         checks["windows10Permissions"] = True
         application = build_application(paths, resources=resources)
         checks["applicationBootstrap"] = True
+        checks["ruleCatalog"] = bool(
+            application.rule_catalog.snapshot().catalog_version
+        )
         if args.smoke_test:
             schema_version = application.schema_version
             application.close()

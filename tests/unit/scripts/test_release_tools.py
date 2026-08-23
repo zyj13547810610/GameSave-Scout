@@ -41,7 +41,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 def test_repository_versions_are_consistent() -> None:
     versions = ReleaseVersions.load(REPOSITORY_ROOT)
 
-    assert versions.version == "0.3.0"
+    assert versions.version == "0.3.1"
 
 
 def test_release_versions_reject_mismatched_project_files(tmp_path: Path) -> None:
@@ -390,6 +390,7 @@ def test_release_manifest_records_environment_and_every_payload_file(
     assert manifest["pywebviewVersion"] == "6.2.1"
     assert manifest["databaseSchemaVersion"] == 4
     assert manifest["engineRulesVersion"] == "2026.08.13-2"
+    assert manifest["saveRulesVersion"] == "2026.08.21-2"
     assert manifest["ludusaviSha256"] == "b" * 64
     assert manifest["ludusaviUpstreamCommit"] == "c" * 40
     assert manifest["webview2Version"] == "139.0.3405.125"
@@ -411,9 +412,14 @@ def test_release_manifest_records_environment_and_every_payload_file(
         "_internal/gameshelf/db/migrations/0003_initial.sql",
         "_internal/gameshelf/db/migrations/0004_initial.sql",
         "_internal/resources/rules/builtin/engines.yaml",
+        "_internal/resources/rules/builtin/saves.yaml",
+        "_internal/resources/rules/ludusavi/LICENSE",
         "_internal/resources/rules/ludusavi/manifest-index.sqlite",
         "_internal/resources/rules/ludusavi/manifest-meta.json",
         "_internal/resources/rules/ludusavi/manifest.yaml",
+        "_internal/resources/rules/schemas/README.md",
+        "_internal/resources/rules/schemas/engines.schema.json",
+        "_internal/resources/rules/schemas/saves.schema.json",
         "_internal/resources/ui/index.html",
         "runtime/LICENSE.txt",
         "runtime/msedgewebview2.exe",
@@ -519,6 +525,31 @@ def test_verify_release_tree_detects_payload_changes(tmp_path: Path) -> None:
         verify_release_tree(
             release_root,
             ReleaseVersions("0.1.0"),
+            ReleaseMode.FIXED,
+        )
+
+
+@pytest.mark.parametrize(
+    "relative",
+    (
+        "_internal/resources/manifests/manifest.yaml",
+        "_internal/resources/rules/user/engines/custom.yaml",
+        "_internal/data/library.db",
+    ),
+)
+def test_build_release_manifest_rejects_retired_or_user_state(
+    relative: str,
+    tmp_path: Path,
+) -> None:
+    release_root = _minimal_release_tree(tmp_path)
+    unexpected = release_root.joinpath(*relative.split("/"))
+    unexpected.parent.mkdir(parents=True, exist_ok=True)
+    unexpected.write_text("unexpected", encoding="utf-8")
+
+    with pytest.raises(ReleaseToolError, match="manifests|用户规则|data"):
+        build_release_manifest(
+            release_root,
+            _release_metadata(),
             ReleaseMode.FIXED,
         )
 
@@ -790,6 +821,9 @@ def _minimal_release_tree(
     (root / "_internal" / "resources" / "rules" / "ludusavi").mkdir(
         parents=True
     )
+    (root / "_internal" / "resources" / "rules" / "schemas").mkdir(
+        parents=True
+    )
     (root / "_internal" / "gameshelf" / "db" / "migrations").mkdir(
         parents=True
     )
@@ -813,10 +847,26 @@ def _minimal_release_tree(
         'version: "2026.08.13-2"\nrules: []\n',
         encoding="utf-8",
     )
+    (
+        root
+        / "_internal"
+        / "resources"
+        / "rules"
+        / "builtin"
+        / "saves.yaml"
+    ).write_text(
+        'version: "2026.08.21-2"\nrules: []\n',
+        encoding="utf-8",
+    )
+    schemas = root / "_internal" / "resources" / "rules" / "schemas"
+    (schemas / "engines.schema.json").write_text("{}\n", encoding="utf-8")
+    (schemas / "saves.schema.json").write_text("{}\n", encoding="utf-8")
+    (schemas / "README.md").write_text("schemas\n", encoding="utf-8")
     ludusavi = root / "_internal" / "resources" / "rules" / "ludusavi"
     (ludusavi / "manifest.yaml").write_text("{}\n", encoding="utf-8")
     (ludusavi / "manifest-meta.json").write_text("{}\n", encoding="utf-8")
     (ludusavi / "manifest-index.sqlite").write_bytes(b"sqlite")
+    (ludusavi / "LICENSE").write_text("license\n", encoding="utf-8")
     (root / "_internal" / "gameshelf" / "db" / "migrations" / "0001_initial.sql").write_text(
         "PRAGMA user_version = 1;\n",
         encoding="utf-8",
@@ -867,6 +917,7 @@ def _release_metadata() -> ReleaseMetadata:
         pywebview_version="6.2.1",
         database_schema_version=4,
         engine_rules_version="2026.08.13-2",
+        save_rules_version="2026.08.21-2",
         ludusavi_sha256="b" * 64,
         ludusavi_upstream_commit="c" * 40,
         webview2_version="139.0.3405.125",

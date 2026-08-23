@@ -16,6 +16,7 @@ from typing import Any, Protocol, cast
 from urllib.parse import urlsplit
 from uuid import uuid4
 
+from gameshelf import __version__
 from gameshelf.covers.candidate_images import stage_candidate_file
 from gameshelf.covers.candidates import (
     MATCH_PRIORITY,
@@ -31,7 +32,7 @@ VNDB_FIELDS = (
     "id,title,alttitle,titles{lang,title,latin,official,main},"
     "aliases,image{id,url,dims}"
 )
-USER_AGENT = "GameShelf/0.3.0"
+USER_AGENT = f"GameShelf/{__version__}"
 REQUEST_TIMEOUT_SECONDS = 20.0
 MINIMUM_REQUEST_INTERVAL_SECONDS = 2.0
 MAX_API_RESPONSE_BYTES = 8 * 1024 * 1024
