@@ -17,8 +17,6 @@ describe('LudusaviSettings', () => {
         downloadedAt: '2026-08-12T00:00:00+00:00',
         sha256: '1234567890abcdef'.repeat(4),
         etag: '"etag"',
-        customDirectory: 'D:\\GameShelf\\data\\manifests\\custom',
-        customErrors: [],
       }),
       update_ludusavi: update,
     })
@@ -30,16 +28,6 @@ describe('LudusaviSettings', () => {
     expect(update).not.toHaveBeenCalled()
     await wrapper.get('[data-test="update-ludusavi"]').trigger('click')
     expect(update).toHaveBeenCalledTimes(1)
-  })
-
-  it('opens the custom manifest directory on request', async () => {
-    const open = vi.fn(async () => ok({ opened: true }))
-    const bridge = createMockBridge({ open_custom_manifest_directory: open })
-    const wrapper = mount(LudusaviSettings, { props: { bridge } })
-    await flushPromises()
-
-    await wrapper.get('[data-test="open-custom-manifests"]').trigger('click')
-    expect(open).toHaveBeenCalledTimes(1)
   })
 
   it('shows the provider result after the update task completes', async () => {
@@ -79,8 +67,6 @@ describe('LudusaviSettings', () => {
         sha256: '1234567890abcdef'.repeat(4),
         etag: '"etag"',
         upstreamCommit: null,
-        customDirectory: 'D:\\GameShelf\\data\\manifests\\custom',
-        customErrors: [],
       }),
       update_ludusavi: async () => ok({ taskId: 'task-1' }),
       task_snapshot: async () => ok({
@@ -119,8 +105,6 @@ describe('LudusaviSettings', () => {
         sha256: '1234567890abcdef'.repeat(4),
         etag: null,
         upstreamCommit: null,
-        customDirectory: 'D:\\GameShelf\\data\\manifests\\custom',
-        customErrors: [],
       }))
       .mockResolvedValueOnce({
         ok: false,
@@ -163,8 +147,6 @@ describe('LudusaviSettings', () => {
         sha256: null,
         etag: null,
         upstreamCommit: null,
-        customDirectory: 'D:\\GameShelf\\data\\manifests\\custom',
-        customErrors: [],
       }),
     })
     const wrapper = mount(LudusaviSettings, { props: { bridge } })

@@ -124,7 +124,7 @@ describe('SaveSuggestionList', () => {
         suggestions: [fixtureSuggestion({
           group: 'experimental',
           sourceEvidence: [
-            { source: 'custom', detail: '用户规则' },
+            { source: 'user', detail: '用户规则' },
             { source: 'builtin', detail: '内置规则' },
             { source: 'ludusavi', detail: '清单规则' },
             { source: 'engine', detail: '引擎元数据' },
@@ -135,7 +135,7 @@ describe('SaveSuggestionList', () => {
     })
 
     expect(wrapper.text()).toContain('实验性')
-    expect(wrapper.text()).toContain('自定义清单：用户规则')
+    expect(wrapper.text()).toContain('用户规则：用户规则')
     expect(wrapper.text()).toContain('内置规则：内置规则')
     expect(wrapper.text()).toContain('Ludusavi：清单规则')
     expect(wrapper.text()).toContain('引擎规则：引擎元数据')

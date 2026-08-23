@@ -73,11 +73,6 @@ async function pollTask(taskId: string) {
   pollTimer = window.setTimeout(() => void pollTask(taskId), 350)
 }
 
-async function openCustomDirectory() {
-  const result = await props.bridge.open_custom_manifest_directory()
-  if (!result.ok) message.value = result.error.message
-}
-
 function parseUpdateResult(value: unknown): LudusaviUpdateResult | null {
   if (typeof value !== 'object' || value === null) return null
   if (!('status' in value) || !('message' in value)) return null
@@ -102,20 +97,9 @@ function parseUpdateResult(value: unknown): LudusaviUpdateResult | null {
       <strong>Ludusavi 官方规则暂不可用</strong><br>
       {{ status.unavailableReason ?? '未找到可用的官方清单。' }}
     </p>
-    <dl v-if="status" class="manifest-metadata">
-      <dt>自定义清单目录</dt><dd>{{ status.customDirectory }}</dd>
-    </dl>
-    <ul v-if="status?.customErrors.length" class="manifest-errors">
-      <li v-for="error in status.customErrors" :key="`${error.sourceName}:${error.message}`">
-        {{ error.sourceName }}：{{ error.message }}
-      </li>
-    </ul>
     <div class="compact-actions">
       <button data-test="update-ludusavi" type="button" :disabled="loading" @click="updateManifest">
         检查并更新清单
-      </button>
-      <button data-test="open-custom-manifests" type="button" class="secondary" @click="openCustomDirectory">
-        打开自定义清单目录
       </button>
     </div>
     <p v-if="statusLoading" class="status-message" aria-live="polite">正在读取清单状态……</p>

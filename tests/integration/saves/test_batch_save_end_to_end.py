@@ -363,7 +363,7 @@ def _catalog(paths: dict[str, Path], documents: Path) -> BatchRuleCatalog:
         _identity("game-installed", "Installed One", source="builtin"),
         source="builtin",
     )
-    add("MissingGame", _identity("game-missing", "Missing Game"), source="custom")
+    add("MissingGame", _identity("game-missing", "Missing Game"), source="user")
     add("SharedA", _identity("game-installed", "Installed One"), source="ludusavi")
     add("SharedB", _identity("game-installed", "Installed One"), source="ludusavi")
     add(
@@ -397,7 +397,7 @@ def _catalog(paths: dict[str, Path], documents: Path) -> BatchRuleCatalog:
     candidates.append(registry)
     identities[("registry", registry.path_key)] = (
         RuleIdentity(
-            source="custom",
+            source="user",
             game_id=None,
             external_title="RegistryProduct",
             external_product_id=None,
@@ -420,7 +420,7 @@ def _identity(
     game_id: str,
     title: str,
     *,
-    source: BatchCandidateSource = "custom",
+    source: BatchCandidateSource = "user",
 ) -> RuleIdentity:
     return RuleIdentity(
         source=source,

@@ -101,7 +101,7 @@ function categoryLabel(category: SaveSuggestion['category']): string {
 
 function evidenceSourceLabel(source: SaveSuggestion['sourceEvidence'][number]['source']): string {
   return {
-    custom: '自定义清单',
+    user: '用户规则',
     builtin: '内置规则',
     ludusavi: 'Ludusavi',
     engine: '引擎规则',
@@ -129,7 +129,7 @@ function suggestionGroupLabel(group: SaveSuggestion['group']): string {
     </div>
 
     <p v-if="!hasSearched" class="empty-save-message">
-      点击后才会检查引擎规则、Ludusavi 和自定义清单。
+      点击后才会检查用户规则、内置规则、Ludusavi 和引擎提示。
     </p>
     <p v-else-if="!loading && items.length === 0" class="empty-save-message">
       暂未发现新的存档位置。

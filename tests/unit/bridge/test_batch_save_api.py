@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 from threading import Event
 
@@ -158,6 +159,21 @@ def test_batch_candidate_page_uses_complete_camel_case_dto(tmp_path: Path) -> No
         "lastSeenAt": "2026-08-19T01:00:00+00:00",
     }
     assert repository.queries[0].limit == 20
+
+
+def test_historical_custom_source_is_displayed_as_legacy_only(tmp_path: Path) -> None:
+    api, tasks, _, repository, _, _, _ = _api(tmp_path)
+    repository.candidate = replace(
+        repository.candidate,
+        sources=("custom",),  # type: ignore[arg-type]
+    )
+    try:
+        result = api.list_batch_save_candidates({"offset": 0, "limit": 20})
+    finally:
+        tasks.close()
+
+    assert result["ok"] is True
+    assert result["data"]["items"][0]["sources"] == ["旧自定义清单"]
 
 
 def test_batch_candidate_query_rejects_extra_fields_and_unsafe_page_size(

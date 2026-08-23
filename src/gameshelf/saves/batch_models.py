@@ -9,7 +9,7 @@ from typing import Literal
 type BatchCandidateKind = Literal["directory", "file", "glob", "registry"]
 type BatchCandidateSource = Literal[
     "recorded",
-    "custom",
+    "user",
     "builtin",
     "ludusavi",
     "engine",

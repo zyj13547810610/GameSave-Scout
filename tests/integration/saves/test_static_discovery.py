@@ -7,18 +7,17 @@ from io import StringIO
 from pathlib import Path
 
 import pytest
+import yaml
 
 from gameshelf.db.connection import ConnectionFactory
 from gameshelf.db.migrator import Migrator
 from gameshelf.db.writer import DbWriter
+from gameshelf.engines.service import EngineDetectionService
 from gameshelf.library.models import Game
 from gameshelf.library.repository import LibraryRepository
 from gameshelf.library.service import LibraryService
 from gameshelf.platform.windows.known_folders import KnownFolders
-from gameshelf.saves.custom_manifest_provider import (
-    CustomManifestLoadResult,
-    LoadedCustomManifest,
-)
+from gameshelf.saves.builtin_rules import SaveRuleProvider
 from gameshelf.saves.engine_hints import EngineSaveHintProvider, load_engine_metadata
 from gameshelf.saves.ludusavi_index import LudusaviIndex
 from gameshelf.saves.ludusavi_index_builder import build_ludusavi_index
@@ -26,6 +25,8 @@ from gameshelf.saves.ludusavi_parser import parse_manifest
 from gameshelf.saves.ludusavi_provider import SnapshotUpdateError
 from gameshelf.saves.models import SaveLocationSuggestion, SuggestionEvidence
 from gameshelf.saves.repository import SaveLocationRepository
+from gameshelf.saves.rule_probe import BoundedRuleProbe
+from gameshelf.saves.rule_schema import parse_save_rule_document
 from gameshelf.saves.service import SaveLocationService
 from gameshelf.saves.static_discovery import StaticSaveDiscovery
 from gameshelf.saves.templates import PathTemplateResolver
@@ -47,14 +48,6 @@ class UnavailableLudusaviProvider:
     def index_session(self) -> Iterator[LudusaviIndex]:
         raise SnapshotUpdateError("内置清单损坏")
         yield
-
-
-@dataclass
-class FakeCustomProvider:
-    result: CustomManifestLoadResult
-
-    def load_all(self) -> CustomManifestLoadResult:
-        return self.result
 
 
 class NoopShell:
@@ -105,15 +98,6 @@ class RecordingEngineHints:
         return ()
 
 
-@dataclass
-class RecordingCustomProvider:
-    events: list[str]
-
-    def load_all(self) -> CustomManifestLoadResult:
-        self.events.append("custom")
-        return CustomManifestLoadResult((), ())
-
-
 class RecordingLudusaviProvider:
     def __init__(self, events: list[str], provider: FakeLudusaviProvider) -> None:
         self._events = events
@@ -137,6 +121,41 @@ class StaticHarness:
     save_service: SaveLocationService
     game_id: str
     official_provider: FakeLudusaviProvider
+    snapshot: MutableSnapshot
+
+
+@dataclass
+class MutableSnapshot:
+    engine_detection: EngineDetectionService
+    save_rules: object
+
+
+@dataclass
+class MutableSnapshotProvider:
+    current: MutableSnapshot
+    calls: int = 0
+
+    def __call__(self) -> MutableSnapshot:
+        self.calls += 1
+        return self.current
+
+
+@dataclass
+class PublishingRules:
+    provider: MutableSnapshotProvider
+    replacement: MutableSnapshot
+    suggestion: SaveLocationSuggestion
+
+    def suggest_game_specific(
+        self, _game: Game, _install_dir: Path, _metadata: object
+    ) -> tuple[SaveLocationSuggestion, ...]:
+        self.provider.current = self.replacement
+        return (self.suggestion,)
+
+    def suggest_engine(
+        self, _game: Game, _install_dir: Path, _metadata: object
+    ) -> tuple[SaveLocationSuggestion, ...]:
+        return ()
 
 
 @pytest.fixture
@@ -177,8 +196,6 @@ def static_harness(tmp_path: Path) -> Iterator[StaticHarness]:
         LudusaviIndex.open(index_path, manifest_sha256="d" * 64)
     )
     (folders.app_data / "RenPy" / "Alice").mkdir(parents=True)
-    custom = parse_manifest(StringIO(document))
-    custom_result = CustomManifestLoadResult((LoadedCustomManifest("local.yaml", custom),), ())
     save_repository = SaveLocationRepository(factory)
     save_service = SaveLocationService(
         save_repository,
@@ -188,16 +205,20 @@ def static_harness(tmp_path: Path) -> Iterator[StaticHarness]:
         NoopShell(),
         NoopRegistry(),
     )
+    snapshot = MutableSnapshot(
+        EngineDetectionService.builtins_only(),
+        _declarative_rules(resolver),
+    )
     discovery = StaticSaveDiscovery(
         library=library,
         save_repository=save_repository,
         resolver=resolver,
         ludusavi_provider=official_provider,
-        custom_provider=FakeCustomProvider(custom_result),
         engine_hints=EngineSaveHintProvider(resolver),
+        rule_snapshot_provider=lambda: snapshot,  # type: ignore[arg-type]
     )
     try:
-        yield StaticHarness(discovery, save_service, game.id, official_provider)
+        yield StaticHarness(discovery, save_service, game.id, official_provider, snapshot)
     finally:
         writer.close()
 
@@ -210,7 +231,8 @@ def test_static_discovery_merges_same_path_and_keeps_all_source_evidence(
     assert len(suggestions) == 1
     assert suggestions[0].confidence == 1.0
     assert {item.source for item in suggestions[0].source_evidence} == {
-        "custom",
+        "user",
+        "builtin",
         "ludusavi",
         "engine",
     }
@@ -219,13 +241,55 @@ def test_static_discovery_merges_same_path_and_keeps_all_source_evidence(
     assert static_harness.save_service.list_for_game(static_harness.game_id) == ()
 
 
+def test_static_discovery_keeps_captured_snapshot_until_next_click(
+    static_harness: StaticHarness,
+) -> None:
+    resolver = static_harness.discovery._resolver
+    old_path = resolver.expand(r"<winDocuments>\Snapshot\Old", None)
+    new_path = resolver.expand(r"<winDocuments>\Snapshot\New", None)
+    old_path.mkdir(parents=True)
+    new_path.mkdir(parents=True)
+
+    def suggestion(path: Path, detail: str) -> SaveLocationSuggestion:
+        template = resolver.collapse(path, None)
+        return SaveLocationSuggestion(
+            kind="directory",
+            path_template=template,
+            display_path=str(path),
+            source="engine",
+            confidence=0.95,
+            evidence=(detail,),
+            source_evidence=(SuggestionEvidence("user", detail),),
+            suggestion_id=f"user:{detail}:0",
+            group="exact",
+        )
+
+    replacement = MutableSnapshot(
+        EngineDetectionService.builtins_only(),
+        RecordingBuiltinRules([], game_suggestions=(suggestion(new_path, "new"),)),
+    )
+    provider = MutableSnapshotProvider(replacement)
+    provider.current = MutableSnapshot(
+        EngineDetectionService.builtins_only(),
+        PublishingRules(provider, replacement, suggestion(old_path, "old")),
+    )
+    static_harness.discovery._rule_snapshot_provider = provider  # type: ignore[assignment]
+
+    first = static_harness.discovery.suggest_for_game(static_harness.game_id)
+    second = static_harness.discovery.suggest_for_game(static_harness.game_id)
+
+    assert provider.calls == 2
+    assert any(item.display_path == str(old_path) for item in first)
+    assert not any(item.display_path == str(new_path) for item in first)
+    assert any(item.display_path == str(new_path) for item in second)
+
+
 def test_static_discovery_runs_all_sources_only_after_explicit_call(
     static_harness: StaticHarness,
 ) -> None:
     events: list[str] = []
     discovery = static_harness.discovery
-    discovery._custom_provider = RecordingCustomProvider(events)
-    discovery._builtin_rules = RecordingBuiltinRules(events)
+    static_harness.snapshot.save_rules = RecordingBuiltinRules(events)
     discovery._ludusavi_provider = RecordingLudusaviProvider(
         events, static_harness.official_provider
     )
@@ -235,7 +299,6 @@ def test_static_discovery_runs_all_sources_only_after_explicit_call(
     discovery.suggest_for_game(static_harness.game_id)
 
     assert events == [
-        "custom",
         "builtin_game",
         "ludusavi",
         "builtin_engine",
@@ -248,8 +311,7 @@ def test_broken_builtin_rules_do_not_block_ludusavi_or_code_hints(
 ) -> None:
     events: list[str] = []
     discovery = static_harness.discovery
-    discovery._custom_provider = RecordingCustomProvider(events)
-    discovery._builtin_rules = RecordingBuiltinRules(events, fail=True)
+    static_harness.snapshot.save_rules = RecordingBuiltinRules(events, fail=True)
     discovery._ludusavi_provider = RecordingLudusaviProvider(
         events, static_harness.official_provider
     )
@@ -291,11 +353,14 @@ def test_availability_probe_failure_keeps_candidate_with_diagnostic(
         group="exact",
         preselected=True,
     )
-    static_harness.discovery._builtin_rules = RecordingBuiltinRules(
+    static_harness.snapshot.save_rules = RecordingBuiltinRules(
         events,
         game_suggestions=(registry_suggestion,),
     )
-    static_harness.discovery._registry = FailingRegistry()
+    static_harness.discovery._rule_probe = BoundedRuleProbe(
+        static_harness.discovery._resolver,
+        FailingRegistry(),
+    )
 
     suggestions = static_harness.discovery.suggest_for_game(static_harness.game_id)
     registry = next(item for item in suggestions if item.kind == "registry")
@@ -328,7 +393,7 @@ def test_game_specific_display_wins_while_formal_engine_evidence_is_retained(
         source_evidence=(SuggestionEvidence("builtin", "引擎正式规则"),),
         group="exact",
     )
-    static_harness.discovery._builtin_rules = RecordingBuiltinRules(
+    static_harness.snapshot.save_rules = RecordingBuiltinRules(
         events,
         game_suggestions=(game_specific,),
         engine_suggestions=(engine_generic,),
@@ -365,7 +430,8 @@ def test_static_discovery_skips_unavailable_official_manifest(
 
     assert suggestions
     assert {evidence.source for item in suggestions for evidence in item.source_evidence} == {
-        "custom",
+        "user",
+        "builtin",
         "engine",
     }
 
@@ -508,3 +574,47 @@ def _unity_game(engine_id: str = "unity") -> Game:
         last_launched_at=None,
         missing_since=None,
     )
+
+
+def _declarative_rules(resolver: PathTemplateResolver) -> SaveRuleProvider:
+    builtin = parse_save_rule_document(
+        yaml.safe_load(
+            """\
+version: test
+rules:
+  - id: alice_builtin
+    label: Alice 内置存档
+    type: save_game
+    references: [https://example.com/alice]
+    titles: [Alice]
+    locations:
+      - kind: directory
+        path: <winAppData>/RenPy/Alice
+        category: save
+        confidence: 1.0
+"""
+        ),
+        source="builtin",
+        require_single=True,
+    )
+    user = parse_save_rule_document(
+        yaml.safe_load(
+            """\
+version: test
+rules:
+  - id: alice_user
+    label: Alice 用户存档
+    type: save_game
+    status: formal
+    titles: [Alice]
+    locations:
+      - kind: directory
+        path: <winAppData>/RenPy/Alice
+        category: save
+        confidence: 1.0
+"""
+        ),
+        source="user",
+        require_single=True,
+    )
+    return SaveRuleProvider((*builtin, *user), resolver)

@@ -124,13 +124,6 @@ class UnavailableSnapshotProvider(FakeSnapshotProvider):
         raise SnapshotUpdateError("内置清单损坏")
 
 
-class FakeCustomProvider:
-    def load_all(self):
-        from gameshelf.saves.custom_manifest_provider import CustomManifestLoadResult
-
-        return CustomManifestLoadResult((), ())
-
-
 def test_manual_api_requires_supported_kind(tmp_path: Path) -> None:
     api, tasks = _api(tmp_path)
     try:
@@ -316,7 +309,5 @@ def _api(
         save_locations=cast(SaveLocationService, save_service or FakeSaveService()),
         static_discovery=discovery,
         ludusavi_provider=snapshot_provider,
-        custom_provider=FakeCustomProvider(),
-        custom_manifest_directory=tmp_path / "custom",
     )
     return api, tasks

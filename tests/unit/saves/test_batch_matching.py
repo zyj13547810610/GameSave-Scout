@@ -37,7 +37,7 @@ def test_unique_existing_game_rule_precedes_external_rules() -> None:
     alice = _game("alice", "Alice", "installed", engine_id="renpy")
     candidate = _candidate(r"D:\Saves\Alice")
     local = _identity(
-        source="custom",
+        source="user",
         game_id="alice",
         title="Alice",
         strong_group_key="game:alice",
@@ -98,7 +98,7 @@ def test_conflicting_rules_only_create_weak_alternatives() -> None:
         strong_group_key="ludusavi:1",
     )
     two = _identity(
-        source="custom",
+        source="user",
         title="Game Two",
         strong_group_key="custom:user:gametwo",
     )
@@ -117,7 +117,7 @@ def test_conflicting_existing_game_rules_are_not_decided_by_title_similarity() -
     other = _game("other", "Other", "missing")
     candidate = _candidate(r"D:\Saves\Alice\SaveData")
     alice_rule = _identity(
-        source="custom",
+        source="user",
         game_id="alice",
         title="Alice",
         strong_group_key="game:alice",
@@ -144,7 +144,7 @@ def test_new_rules_do_not_automatically_target_save_only_cards() -> None:
     archive = _game("archive", "Archived Alice", "save_only")
     candidate = _candidate(r"D:\Saves\Archived Alice\SaveData")
     archive_rule = _identity(
-        source="custom",
+        source="user",
         game_id="archive",
         title="Archived Alice",
         strong_group_key="game:archive",

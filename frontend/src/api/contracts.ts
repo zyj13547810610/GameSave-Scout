@@ -59,7 +59,7 @@ export type BatchSaveCandidateFilters = {
   status?: 'all' | 'pending' | 'installed' | 'missing' | 'unknown' | 'recorded' | 'ignored' | 'unavailable'
   keyword?: string
   confidence?: 'all' | 'high' | 'medium' | 'low'
-  source?: 'all' | 'recorded' | 'custom' | 'builtin' | 'ludusavi' | 'engine' | 'bounded_scan' | 'registry'
+  source?: 'all' | 'recorded' | 'user' | 'builtin' | 'ludusavi' | 'engine' | 'bounded_scan' | 'registry'
 }
 
 export type BatchSaveScanSummary = {
@@ -253,7 +253,7 @@ export type SaveLocation = {
 }
 
 export type SaveSuggestionEvidence = {
-  source: 'custom' | 'builtin' | 'ludusavi' | 'engine'
+  source: 'user' | 'builtin' | 'ludusavi' | 'engine'
   detail: string
 }
 
@@ -352,8 +352,6 @@ export type LudusaviStatus = {
   sha256: string | null
   etag: string | null
   upstreamCommit?: string | null
-  customDirectory: string
-  customErrors: { sourceName: string; message: string }[]
 }
 
 export type LudusaviUpdateResult = {
@@ -591,7 +589,6 @@ export interface GameShelfBridge {
   }): Promise<ApiResult<{ resolved: boolean }>>
   ludusavi_status(): Promise<ApiResult<LudusaviStatus>>
   update_ludusavi(input: Record<string, never>): Promise<ApiResult<{ taskId: string }>>
-  open_custom_manifest_directory(): Promise<ApiResult<{ opened: boolean }>>
   choose_directory(): Promise<ApiResult<string | null>>
   task_snapshot(taskId: string): Promise<ApiResult<TaskSnapshot>>
   cancel_task(taskId: string): Promise<ApiResult<{ cancelled: boolean }>>

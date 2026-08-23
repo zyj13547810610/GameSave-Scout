@@ -179,7 +179,7 @@ def test_queries_use_latest_observation_and_select_only_safe_candidates(
             (_scope("completed"),),
             (
                 _candidate("Alice", "high", "game-alice", ("ludusavi",)),
-                _candidate("Manual", "medium", None, ("custom",)),
+                _candidate("Manual", "medium", None, ("user",)),
                 _candidate("Unknown", "low", None, ("bounded_scan",)),
             ),
         )
@@ -199,7 +199,7 @@ def test_queries_use_latest_observation_and_select_only_safe_candidates(
         assert repository.list_candidates(BatchCandidateQuery(status="installed")).total == 1
         assert (
             repository.list_candidates(
-                BatchCandidateQuery(keyword="manual", confidence="medium", source="custom")
+                BatchCandidateQuery(keyword="manual", confidence="medium", source="user")
             ).total
             == 1
         )

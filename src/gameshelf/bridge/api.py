@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import base64
 import binascii
-from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
@@ -92,7 +91,6 @@ from gameshelf.saves.batch_review import (
     SaveOnlyDraft,
 )
 from gameshelf.saves.batch_service import BatchSaveDiscoveryService, BatchScanRequest
-from gameshelf.saves.custom_manifest_provider import CustomManifestProvider
 from gameshelf.saves.guided_models import (
     GuidedSaveDiscovery,
     GuidedSavePreview,
@@ -164,9 +162,6 @@ class BridgeApi:
         batch_external: BatchExternalLookup | None = None,
         batch_candidate_opener: BatchCandidateOpener | None = None,
         ludusavi_provider: LudusaviProvider | None = None,
-        custom_provider: CustomManifestProvider | None = None,
-        custom_manifest_directory: Path | None = None,
-        directory_opener: Callable[[Path], None] | None = None,
         asset_session_token: str | None = None,
     ) -> None:
         self._paths = paths
@@ -192,9 +187,6 @@ class BridgeApi:
         self._batch_external = batch_external
         self._batch_candidate_opener = batch_candidate_opener
         self._ludusavi_provider = ludusavi_provider
-        self._custom_provider = custom_provider
-        self._custom_manifest_directory = custom_manifest_directory
-        self._directory_opener = directory_opener
         self._asset_session_token = asset_session_token
         self._window: Any | None = None
 
@@ -1526,8 +1518,6 @@ class BridgeApi:
             return failure("guided_operation_failed", "引导式寻找操作失败。")
 
     def ludusavi_status(self) -> ApiResult:
-        custom = self._require_custom_provider().load_all()
-        directory = self._require_custom_manifest_directory()
         try:
             metadata = self._require_ludusavi_provider().metadata()
         except (SnapshotUpdateError, OSError) as error:
@@ -1551,14 +1541,6 @@ class BridgeApi:
                 "sha256": sha256,
                 "etag": etag,
                 "upstreamCommit": upstream_commit,
-                "customDirectory": str(directory),
-                "customErrors": [
-                    {
-                        "sourceName": error.source_name,
-                        "message": error.message,
-                    }
-                    for error in custom.errors
-                ],
             }
         )
 
@@ -1590,17 +1572,6 @@ class BridgeApi:
             return success({"taskId": task_id})
         except InvalidRequest as error:
             return failure("invalid_request", str(error))
-
-    def open_custom_manifest_directory(self) -> ApiResult:
-        try:
-            directory = self._require_custom_manifest_directory()
-            directory.mkdir(parents=True, exist_ok=True)
-            if self._directory_opener is None:
-                raise OSError("未配置目录打开器。")
-            self._directory_opener(directory)
-            return success({"opened": True})
-        except OSError as error:
-            return failure("open_failed", str(error))
 
     def choose_directory(self) -> ApiResult:
         return success(self._choose_native_path(directory=True))
@@ -1814,16 +1785,6 @@ class BridgeApi:
             raise RuntimeError("Ludusavi provider is not configured.")
         return self._ludusavi_provider
 
-    def _require_custom_provider(self) -> CustomManifestProvider:
-        if self._custom_provider is None:
-            raise RuntimeError("Custom manifest provider is not configured.")
-        return self._custom_provider
-
-    def _require_custom_manifest_directory(self) -> Path:
-        if self._custom_manifest_directory is None:
-            raise RuntimeError("Custom manifest directory is not configured.")
-        return self._custom_manifest_directory
-
     def _engine_label(
         self,
         engine_id: str | None,
@@ -2001,7 +1962,10 @@ def _batch_candidate_dto(candidate: PersistedBatchCandidate) -> dict[str, JSONVa
         "reviewGameId": candidate.review_game_id,
         "reviewStatus": candidate.review_status,
         "saveLocationId": candidate.save_location_id,
-        "sources": list(candidate.sources),
+        "sources": [
+            "旧自定义清单" if source == "custom" else source
+            for source in candidate.sources
+        ],
         "evidence": list(candidate.evidence),
         "representativeFiles": [
             {

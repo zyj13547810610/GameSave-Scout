@@ -9,9 +9,7 @@ type SaveLocationKind = Literal["directory", "file", "glob", "registry"]
 type SaveLocationSource = Literal[
     "manual", "dynamic", "ludusavi", "engine", "legacy_scan"
 ]
-type SuggestionEvidenceSource = Literal[
-    "custom", "builtin", "user", "ludusavi", "engine"
-]
+type SuggestionEvidenceSource = Literal["user", "builtin", "ludusavi", "engine"]
 type SuggestionCategory = Literal["save", "config", "other"]
 type SuggestionGroup = Literal["exact", "possible", "experimental"]
 type SuggestionAvailability = Literal["found", "predicted"]

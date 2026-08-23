@@ -304,12 +304,9 @@ export function createMockBridge(overrides: Partial<GameShelfBridge> = {}): Game
         sha256: '0'.repeat(64),
         etag: null,
         upstreamCommit: null,
-        customDirectory: 'data\\manifests\\custom',
-        customErrors: [],
       })
     },
     async update_ludusavi() { return ok({ taskId: 'ludusavi-update-1' }) },
-    async open_custom_manifest_directory() { return ok({ opened: true }) },
     async choose_directory() { return ok(null) },
     async task_snapshot() { return { ok: false, error: { code: 'task_not_found', message: '没有找到对应的后台任务。' } } },
     async cancel_task() { return ok({ cancelled: false }) },

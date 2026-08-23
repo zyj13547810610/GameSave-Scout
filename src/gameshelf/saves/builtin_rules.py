@@ -72,20 +72,40 @@ class SaveRuleProvider:
     def rules(self) -> tuple[SaveRule, ...]:
         return self._rules
 
+    def suggest_rule(
+        self,
+        rule: SaveRule,
+        install_dir: Path | None,
+        metadata: Mapping[str, object],
+    ) -> tuple[SaveLocationSuggestion, ...]:
+        if rule not in self._rules:
+            return ()
+        return self._suggest((rule,), install_dir, metadata)
+
     def suggest_game_specific(
         self,
         game: Game,
         install_dir: Path | None,
         metadata: Mapping[str, object],
     ) -> tuple[SaveLocationSuggestion, ...]:
-        title_key = _normalize_title(game.title)
+        exact_titles = {game.title}
+        metadata_titles = metadata.get("exact_titles", ())
+        if isinstance(metadata_titles, (list, tuple, set, frozenset)):
+            exact_titles.update(
+                value for value in metadata_titles if isinstance(value, str)
+            )
+        title_keys = {_normalize_title(value) for value in exact_titles}
         product_ids = _metadata_product_ids(metadata)
         matches = (
             rule
             for rule in self._rules
             if rule.metadata.rule_type == "save_game"
             and (
-                title_key in {_normalize_title(title) for title in rule.titles}
+                bool(
+                    title_keys.intersection(
+                        _normalize_title(title) for title in rule.titles
+                    )
+                )
                 or bool(product_ids.intersection(rule.product_ids))
             )
         )
@@ -212,7 +232,8 @@ def _evidence_detail(rule: SaveRule) -> str:
         reference_summary = f"{references[0]}（另 {len(references) - 1} 项）"
     source_label = "内置规则" if rule.metadata.source == "builtin" else "用户规则"
     return (
-        f"{source_label} {rule.metadata.qualified_id}"
+        f"{source_label} · {rule.metadata.verification_label} "
+        f"{rule.metadata.qualified_id}"
         f"（{rule.metadata.status}；依据：{reference_summary}）"
     )
 

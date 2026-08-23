@@ -288,7 +288,7 @@ class BatchCandidateMatcher:
     ) -> tuple[str, tuple[RuleIdentity, ...]] | None:
         groups: dict[str, list[RuleIdentity]] = {}
         for identity in identities:
-            if identity.source not in {"custom", "ludusavi"}:
+            if identity.source not in {"user", "ludusavi"}:
                 continue
             if identity.game_id is not None:
                 game = self._games_by_id.get(identity.game_id)

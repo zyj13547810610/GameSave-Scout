@@ -44,13 +44,14 @@ type BatchConfidenceFilter = Literal["all", "high", "medium", "low"]
 type BatchSourceFilter = Literal[
     "all",
     "recorded",
-    "custom",
+    "user",
     "builtin",
     "ludusavi",
     "engine",
     "bounded_scan",
     "registry",
 ]
+type BatchObservedSource = BatchCandidateSource | Literal["custom"]
 
 _VALID_STATUS_FILTERS = frozenset(
     {
@@ -69,7 +70,7 @@ _VALID_SOURCE_FILTERS = frozenset(
     {
         "all",
         "recorded",
-        "custom",
+        "user",
         "builtin",
         "ludusavi",
         "engine",
@@ -143,7 +144,7 @@ class PersistedBatchCandidate:
     first_seen_at: str
     last_seen_at: str
     updated_at: str
-    sources: tuple[BatchCandidateSource, ...]
+    sources: tuple[BatchObservedSource, ...]
     evidence: tuple[str, ...]
     representative_files: tuple[RepresentativeFile, ...]
     matched_file_count: int
@@ -659,7 +660,7 @@ def _candidate_from_row(row: sqlite3.Row) -> PersistedBatchCandidate:
         first_seen_at=cast(str, row["first_seen_at"]),
         last_seen_at=cast(str, row["last_seen_at"]),
         updated_at=cast(str, row["updated_at"]),
-        sources=cast(tuple[BatchCandidateSource, ...], sources),
+        sources=cast(tuple[BatchObservedSource, ...], sources),
         evidence=evidence,
         representative_files=representatives,
         matched_file_count=int(row["matched_file_count"] or 0),

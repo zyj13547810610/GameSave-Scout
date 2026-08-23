@@ -7,25 +7,18 @@ from io import StringIO
 from pathlib import Path
 
 import pytest
+import yaml
 
 from gameshelf.library.models import Game
 from gameshelf.platform.windows.known_folders import KnownFolders
-from gameshelf.saves.batch_rules import (
-    BatchRuleContext,
-    BatchRuleProvider,
-)
+from gameshelf.saves.batch_rules import BatchRuleContext, BatchRuleProvider
 from gameshelf.saves.builtin_rules import SaveRuleProvider
-from gameshelf.saves.custom_manifest_provider import (
-    CustomManifestError,
-    CustomManifestLoadResult,
-    LoadedCustomManifest,
-)
 from gameshelf.saves.engine_hints import EngineSaveHintProvider
 from gameshelf.saves.ludusavi_index import LudusaviIndex
 from gameshelf.saves.ludusavi_index_builder import build_ludusavi_index
 from gameshelf.saves.ludusavi_parser import parse_manifest
 from gameshelf.saves.models import SaveLocation
-from gameshelf.saves.rule_schema import load_save_rules
+from gameshelf.saves.rule_schema import parse_save_rule_document
 from gameshelf.saves.templates import PathTemplateResolver
 from gameshelf.scanning.path_keys import windows_path_key
 
@@ -65,26 +58,11 @@ class _Ludusavi:
         yield self.index
 
 
-@dataclass
-class _Custom:
-    result: CustomManifestLoadResult
-    load_calls: int = 0
-
-    def load_all(self) -> CustomManifestLoadResult:
-        self.load_calls += 1
-        return self.result
-
-
 class _BrokenLudusavi:
     @contextmanager
     def index_session(self) -> Iterator[LudusaviIndex]:
         raise OSError("索引损坏")
         yield  # pragma: no cover
-
-
-class _BrokenCustom:
-    def load_all(self) -> CustomManifestLoadResult:
-        raise ValueError("清单损坏")
 
 
 @dataclass
@@ -97,6 +75,22 @@ class _Registry:
         return key.casefold() in {item.casefold() for item in self.existing}
 
 
+@dataclass
+class _Snapshot:
+    catalog_version: str
+    save_rules: SaveRuleProvider
+
+
+@dataclass
+class _SnapshotProvider:
+    snapshot: _Snapshot
+    calls: int = 0
+
+    def __call__(self) -> _Snapshot:
+        self.calls += 1
+        return self.snapshot
+
+
 def test_batch_rule_provider_collects_all_sources_once_without_reading_saves(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -104,14 +98,13 @@ def test_batch_rule_provider_collects_all_sources_once_without_reading_saves(
     folders = _folders(tmp_path)
     resolver = PathTemplateResolver(folders)
     alice_dir = tmp_path / "Games" / "Alice"
-    missing_dir = tmp_path / "Games" / "Missing"
     app_info = alice_dir / "Alice_Data" / "app.info"
     app_info.parent.mkdir(parents=True)
     app_info.write_text("Studio\nProduct\n", encoding="utf-8")
     local_save = alice_dir / "local-save.dat"
     local_save.write_bytes(b"private local body")
-    custom_local_save = alice_dir / "custom-save.dat"
-    custom_local_save.write_bytes(b"private custom body")
+    user_local_save = alice_dir / "user-save.dat"
+    user_local_save.write_bytes(b"private user body")
     shared = folders.documents / "Shared"
     shared.mkdir(parents=True)
     save_file = shared / "slot.sav"
@@ -124,10 +117,7 @@ def test_batch_rule_provider_collects_all_sources_once_without_reading_saves(
 
     alice = _game("game-alice", "Alice", "installed", "unity")
     missing = _game("game-missing", "Missing", "missing", None)
-    library = _Library(
-        (alice, missing),
-        {alice.id: alice_dir, missing.id: missing_dir},
-    )
+    library = _Library((alice, missing), {alice.id: alice_dir})
     recorded = SaveLocation(
         id="location-1",
         game_id=alice.id,
@@ -143,9 +133,10 @@ def test_batch_rule_provider_collects_all_sources_once_without_reading_saves(
         last_verified_at=None,
     )
     saves = _SaveLocations((recorded,))
-    official = _index(
-        tmp_path,
-        r"""
+    ludusavi = _Ludusavi(
+        _index(
+            tmp_path,
+            r"""
 Alice:
   files:
     <winDocuments>/Shared: {tags: [save]}
@@ -155,29 +146,35 @@ External Work:
     <winAppData>/External/save.dat: {tags: [save]}
     <winAppData>/External/*.sav: {tags: [save]}
 """,
-    )
-    ludusavi = _Ludusavi(official)
-    custom_manifest = parse_manifest(
-        StringIO(
-            r"""
-Alice:
-  files:
-    <winDocuments>/Shared: {tags: [save]}
-    <game>/custom-save.dat: {tags: [save]}
-  registry:
-    HKEY_CURRENT_USER/Software/Custom/Alice: {tags: [save]}
-"""
         )
     )
-    custom = _Custom(
-        CustomManifestLoadResult(
-            (LoadedCustomManifest("local.yaml", custom_manifest),),
-            (CustomManifestError("broken.yaml", "YAML 无效"),),
-        )
+    save_rules = _rule_provider(
+        resolver,
+        r"""
+version: batch-user-v1
+rules:
+  - id: alice_user
+    label: Alice 用户规则
+    type: save_game
+    status: experimental
+    priority: 20
+    enabled: true
+    references: []
+    titles: [Alice]
+    locations:
+      - {kind: directory, path: '<winDocuments>\Shared', category: save, confidence: 0.95}
+      - {kind: file, path: '<game>\user-save.dat', category: save, confidence: 0.95}
+      - kind: registry
+        path: 'HKEY_CURRENT_USER\Software\User\Alice'
+        category: config
+        confidence: 0.9
+""",
+        source="user",
     )
+    snapshots = _SnapshotProvider(_Snapshot("catalog-v1", save_rules))
     registry = _Registry(
         {
-            r"HKEY_CURRENT_USER\Software\Custom\Alice",
+            r"HKEY_CURRENT_USER\Software\User\Alice",
             r"HKEY_CURRENT_USER\Software\Studio\Product",
         },
         [],
@@ -185,7 +182,7 @@ Alice:
     real_open = Path.open
 
     def guarded_open(path: Path, *args: object, **kwargs: object) -> object:
-        if path in {save_file, external, local_save, custom_local_save}:
+        if path in {save_file, external, local_save, user_local_save}:
             raise AssertionError("不得读取存档正文")
         return real_open(path, *args, **kwargs)
 
@@ -195,43 +192,51 @@ Alice:
         save_repository=saves,
         resolver=resolver,
         ludusavi_provider=ludusavi,
-        custom_provider=custom,
         engine_hints=EngineSaveHintProvider(resolver),
+        rule_snapshot_provider=snapshots,  # type: ignore[arg-type]
         registry=registry,
     )
 
     catalog = provider.collect(
         BatchRuleContext(
-            root_tokens=(
-                "<winDocuments>",
-                "<winAppData>",
-                "<winLocalAppDataLow>",
-            )
+            ("<winDocuments>", "<winAppData>", "<winLocalAppDataLow>")
         )
     )
 
+    assert snapshots.calls == 1
     assert library.list_calls == 1
     assert saves.list_calls == 1
     assert ludusavi.session_calls == 1
-    assert custom.load_calls == 1
-    assert any("broken.yaml" in warning for warning in catalog.warnings)
     shared_candidate = next(
         item for item in catalog.candidates if item.path_key == windows_path_key(shared)
     )
-    assert shared_candidate.sources == ("recorded", "custom", "ludusavi")
+    assert shared_candidate.sources == ("recorded", "user", "ludusavi")
     assert {
-        item.game_id for item in catalog.identities_by_path[("directory", windows_path_key(shared))]
+        item.game_id
+        for item in catalog.identities_by_path[
+            ("directory", windows_path_key(shared))
+        ]
     } == {alice.id}
     assert any(item.display_path == str(external) for item in catalog.candidates)
     assert any(item.display_path == str(local_save) for item in catalog.candidates)
-    assert any(item.display_path == str(custom_local_save) for item in catalog.candidates)
+    assert any(item.display_path == str(user_local_save) for item in catalog.candidates)
     assert any(item.display_path == str(unity_directory) for item in catalog.candidates)
     assert any(item.kind == "registry" for item in catalog.candidates)
-    assert any(item.relative_pattern == r"External\*.sav" for item in catalog.reverse_path_rules)
+    assert any(
+        item.relative_pattern == r"External\*.sav"
+        for item in catalog.reverse_path_rules
+    )
+    user_identity = next(
+        identity
+        for values in catalog.identities_by_path.values()
+        for identity in values
+        if identity.source == "user"
+    )
+    assert user_identity.confidence == "low"
     assert catalog.rules_version
 
 
-def test_batch_rule_provider_degrades_when_official_and_custom_rules_are_broken(
+def test_batch_rule_provider_degrades_when_ludusavi_rules_are_broken(
     tmp_path: Path,
 ) -> None:
     resolver = PathTemplateResolver(_folders(tmp_path))
@@ -240,86 +245,60 @@ def test_batch_rule_provider_degrades_when_official_and_custom_rules_are_broken(
         save_repository=_SaveLocations(()),
         resolver=resolver,
         ludusavi_provider=_BrokenLudusavi(),
-        custom_provider=_BrokenCustom(),
         engine_hints=EngineSaveHintProvider(resolver),
+        rule_snapshot_provider=lambda: _Snapshot(
+            "empty",
+            SaveRuleProvider.empty(resolver),
+        ),  # type: ignore[arg-type]
         registry=_Registry(set(), []),
     )
 
     catalog = provider.collect(BatchRuleContext(("<winDocuments>",)))
 
     assert catalog.candidates == ()
-    assert any("自定义存档清单" in warning for warning in catalog.warnings)
     assert any("Ludusavi" in warning for warning in catalog.warnings)
     assert catalog.rules_version
 
 
-def test_batch_rule_provider_reuses_only_found_builtin_rules(
+def test_batch_rule_provider_uses_latest_snapshot_on_next_collect(
     tmp_path: Path,
 ) -> None:
     folders = _folders(tmp_path)
     resolver = PathTemplateResolver(folders)
     game_dir = tmp_path / "Games" / "Alice"
     game_dir.mkdir(parents=True)
-    game_found = folders.documents / "Alice" / "GameFound"
-    engine_found = folders.documents / "Alice" / "EngineFound"
-    game_found.mkdir(parents=True)
-    engine_found.mkdir(parents=True)
-    game = _game("game-alice", "Alice", "installed", "godot")
-    builtin = _builtin_provider(
-        tmp_path,
-        resolver,
-        version="batch-test-v1",
+    first = folders.documents / "Alice" / "First"
+    second = folders.documents / "Alice" / "Second"
+    first.mkdir(parents=True)
+    second.mkdir(parents=True)
+    game = _game("game-alice", "Alice", "installed", None)
+    initial = _Snapshot(
+        "catalog-v1",
+        _one_path_provider(resolver, "first", r"<winDocuments>\Alice\First"),
     )
-    registry = _Registry(set(), [])
+    changed = _Snapshot(
+        "catalog-v2",
+        _one_path_provider(resolver, "second", r"<winDocuments>\Alice\Second"),
+    )
+    snapshots = _SnapshotProvider(initial)
     provider = BatchRuleProvider(
         library=_Library((game,), {game.id: game_dir}),
         save_repository=_SaveLocations(()),
         resolver=resolver,
         ludusavi_provider=_Ludusavi(_index(tmp_path, "{}")),
-        custom_provider=_Custom(CustomManifestLoadResult((), ())),
         engine_hints=EngineSaveHintProvider(resolver),
-        builtin_rules=builtin,
-        registry=registry,
-    )
-
-    catalog = provider.collect(BatchRuleContext(("<winDocuments>",)))
-
-    builtin_candidates = tuple(
-        candidate for candidate in catalog.candidates if "builtin" in candidate.sources
-    )
-    assert {candidate.display_path for candidate in builtin_candidates} == {
-        str(game_found),
-        str(engine_found),
-    }
-    assert not any("Missing" in candidate.display_path for candidate in catalog.candidates)
-    assert not any(rule.source == "builtin" for rule in catalog.reverse_path_rules)
-    assert registry.calls == [r"HKEY_CURRENT_USER\Software\Alice\Missing"]
-    game_identity = catalog.identities_by_path[
-        ("directory", windows_path_key(game_found))
-    ][0]
-    assert game_identity.source == "builtin"
-    assert game_identity.game_id == game.id
-    assert any("builtin:alice_game" in item for item in game_identity.evidence)
-    assert any("formal" in item for item in game_identity.evidence)
-    assert any("https://example.com/alice-save" in item for item in game_identity.evidence)
-
-    changed_provider = BatchRuleProvider(
-        library=_Library((game,), {game.id: game_dir}),
-        save_repository=_SaveLocations(()),
-        resolver=resolver,
-        ludusavi_provider=_Ludusavi(_index(tmp_path / "changed", "{}")),
-        custom_provider=_Custom(CustomManifestLoadResult((), ())),
-        engine_hints=EngineSaveHintProvider(resolver),
-        builtin_rules=_builtin_provider(
-            tmp_path / "changed",
-            resolver,
-            version="batch-test-v2",
-        ),
+        rule_snapshot_provider=snapshots,  # type: ignore[arg-type]
         registry=_Registry(set(), []),
     )
-    changed_catalog = changed_provider.collect(BatchRuleContext(("<winDocuments>",)))
 
-    assert changed_catalog.rules_version != catalog.rules_version
+    first_catalog = provider.collect(BatchRuleContext(("<winDocuments>",)))
+    snapshots.snapshot = changed
+    second_catalog = provider.collect(BatchRuleContext(("<winDocuments>",)))
+
+    assert snapshots.calls == 2
+    assert {item.display_path for item in first_catalog.candidates} == {str(first)}
+    assert {item.display_path for item in second_catalog.candidates} == {str(second)}
+    assert first_catalog.rules_version != second_catalog.rules_version
 
 
 def _folders(tmp_path: Path) -> KnownFolders:
@@ -348,60 +327,49 @@ def _index(tmp_path: Path, document: str) -> LudusaviIndex:
     return LudusaviIndex.open(path, manifest_sha256="e" * 64)
 
 
-def _builtin_provider(
-    tmp_path: Path,
+def _rule_provider(
     resolver: PathTemplateResolver,
+    document: str,
     *,
-    version: str,
+    source: str,
 ) -> SaveRuleProvider:
-    tmp_path.mkdir(parents=True, exist_ok=True)
-    path = tmp_path / "builtin-saves.yaml"
-    path.write_text(
-        f"""\
-version: {version}
-rules:
-  - id: alice_game
-    label: Alice 游戏存档
-    type: save_game
-    status: formal
-    priority: 20
-    enabled: true
-    references: [https://example.com/alice-save]
-    titles: [Alice]
-    locations:
-      - kind: directory
-        path: <winDocuments>\\Alice\\GameFound
-        category: save
-        confidence: 0.96
-      - kind: directory
-        path: <winDocuments>\\Alice\\GameMissing
-        category: save
-        confidence: 0.96
-      - kind: registry
-        path: HKEY_CURRENT_USER\\Software\\Alice\\Missing
-        category: config
-        confidence: 0.9
-  - id: godot_generic
-    label: Godot 通用存档
-    type: save_engine
-    status: experimental
-    priority: 10
-    enabled: true
-    references: [https://example.com/godot-save]
-    engine_ids: [godot]
-    locations:
-      - kind: directory
-        path: <winDocuments>\\Alice\\EngineFound
-        category: save
-        confidence: 0.8
-      - kind: directory
-        path: <winDocuments>\\Alice\\EngineMissing
-        category: save
-        confidence: 0.8
-""",
-        encoding="utf-8",
+    rules = parse_save_rule_document(
+        yaml.safe_load(document),
+        source=source,  # type: ignore[arg-type]
+        require_single=False,
     )
-    return SaveRuleProvider(load_save_rules(path), resolver)
+    return SaveRuleProvider(rules, resolver)
+
+
+def _one_path_provider(
+    resolver: PathTemplateResolver,
+    rule_id: str,
+    path: str,
+) -> SaveRuleProvider:
+    document = {
+        "version": "1",
+        "rules": [
+            {
+                "id": rule_id,
+                "label": rule_id,
+                "type": "save_game",
+                "status": "experimental",
+                "titles": ["Alice"],
+                "locations": [
+                    {
+                        "kind": "directory",
+                        "path": path,
+                        "category": "save",
+                        "confidence": 0.8,
+                    }
+                ],
+            }
+        ],
+    }
+    return SaveRuleProvider(
+        parse_save_rule_document(document, source="user", require_single=False),
+        resolver,
+    )
 
 
 def _game(

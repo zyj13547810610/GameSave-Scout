@@ -2,19 +2,18 @@
 
 from __future__ import annotations
 
-import glob
 import hashlib
 import json
 import re
 from collections.abc import Callable, Mapping
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, replace
-from itertools import islice
 from pathlib import Path, PureWindowsPath
 from types import MappingProxyType
 from typing import Literal, Protocol
 
 from gameshelf.library.models import Game
+from gameshelf.rules.catalog import RuleSnapshot
 from gameshelf.saves.batch_candidates import (
     BatchCandidateAccumulator,
     candidate_path_key,
@@ -25,7 +24,6 @@ from gameshelf.saves.batch_models import (
     BatchConfidence,
     RawBatchCandidate,
 )
-from gameshelf.saves.custom_manifest_provider import CustomManifestLoadResult
 from gameshelf.saves.engine_hints import (
     EngineSaveHintProvider,
     load_engine_metadata,
@@ -37,25 +35,17 @@ from gameshelf.saves.ludusavi_index import (
     LudusaviIndex,
 )
 from gameshelf.saves.ludusavi_matcher import normalize_ludusavi_name
-from gameshelf.saves.ludusavi_models import (
-    LudusaviManifest,
-    ManifestCondition,
-    ManifestLocationRule,
-)
+from gameshelf.saves.ludusavi_models import ManifestCondition, ManifestLocationRule
 from gameshelf.saves.ludusavi_provider import SnapshotUpdateError
 from gameshelf.saves.models import SaveLocation, SaveLocationSuggestion
+from gameshelf.saves.rule_identity import collect_rule_identity
+from gameshelf.saves.rule_probe import BoundedRuleProbe
 from gameshelf.saves.templates import InvalidPathTemplate, PathTemplateResolver
 from gameshelf.scanning.path_keys import windows_path_key
 
 _FILE_RULE_PATTERN = re.compile(r"^(<[^<>\\/]+>)(?:[\\/](.*))?$")
 _EMBEDDED_TOKEN = re.compile(r"<[^<>\\/]+>")
 _PRODUCT_ID = re.compile(r"(?i)(?<![A-Z0-9])((?:RJ|VJ)[0-9]+)(?![A-Z0-9])")
-_REGISTRY_ROOTS = {
-    "HKCU": "HKEY_CURRENT_USER",
-    "HKEY_CURRENT_USER": "HKEY_CURRENT_USER",
-    "HKLM": "HKEY_LOCAL_MACHINE",
-    "HKEY_LOCAL_MACHINE": "HKEY_LOCAL_MACHINE",
-}
 _SCOPE_BY_TOKEN = {
     "<winDocuments>": "documents",
     "<winSavedGames>": "saved_games",
@@ -118,56 +108,12 @@ class BatchLudusaviProvider(Protocol):
     def index_session(self) -> AbstractContextManager[LudusaviIndex]: ...
 
 
-class BatchCustomManifestProvider(Protocol):
-    def load_all(self) -> CustomManifestLoadResult: ...
-
-
 class BatchRegistry(Protocol):
     def key_exists(self, key: str) -> bool: ...
 
 
-class BatchBuiltinRules(Protocol):
-    @property
-    def rules_version(self) -> str | None: ...
-
-    def suggest_game_specific(
-        self,
-        game: Game,
-        install_dir: Path | None,
-        metadata: Mapping[str, object],
-    ) -> tuple[SaveLocationSuggestion, ...]: ...
-
-    def suggest_engine(
-        self,
-        game: Game,
-        install_dir: Path | None,
-        metadata: Mapping[str, object],
-    ) -> tuple[SaveLocationSuggestion, ...]: ...
-
-
-class _EmptyBuiltinRules:
-    @property
-    def rules_version(self) -> str | None:
-        return None
-
-    def suggest_game_specific(
-        self,
-        _game: Game,
-        _install_dir: Path | None,
-        _metadata: Mapping[str, object],
-    ) -> tuple[SaveLocationSuggestion, ...]:
-        return ()
-
-    def suggest_engine(
-        self,
-        _game: Game,
-        _install_dir: Path | None,
-        _metadata: Mapping[str, object],
-    ) -> tuple[SaveLocationSuggestion, ...]:
-        return ()
-
-
 type AddCandidate = Callable[[RawBatchCandidate, RuleIdentity], None]
+type RuleSnapshotProvider = Callable[[], RuleSnapshot]
 
 
 class BatchRuleProvider:
@@ -178,21 +124,22 @@ class BatchRuleProvider:
         save_repository: BatchSaveLocations,
         resolver: PathTemplateResolver,
         ludusavi_provider: BatchLudusaviProvider,
-        custom_provider: BatchCustomManifestProvider,
         engine_hints: EngineSaveHintProvider,
-        builtin_rules: BatchBuiltinRules | None = None,
+        rule_snapshot_provider: RuleSnapshotProvider,
         registry: BatchRegistry,
+        rule_probe: BoundedRuleProbe | None = None,
     ) -> None:
         self._library = library
         self._save_repository = save_repository
         self._resolver = resolver
         self._ludusavi_provider = ludusavi_provider
-        self._custom_provider = custom_provider
         self._engine_hints = engine_hints
-        self._builtin_rules = builtin_rules or _EmptyBuiltinRules()
+        self._rule_snapshot_provider = rule_snapshot_provider
         self._registry = registry
+        self._rule_probe = rule_probe or BoundedRuleProbe(resolver, registry)
 
     def collect(self, context: BatchRuleContext) -> BatchRuleCatalog:
+        snapshot = self._rule_snapshot_provider()
         games = self._library.list_games()
         games_by_id = {game.id: game for game in games}
         local_names = _local_names(games)
@@ -201,7 +148,7 @@ class BatchRuleProvider:
         identities: dict[tuple[str, str], list[RuleIdentity]] = {}
         reverse_rules: list[BatchPathRule] = []
         warnings: list[str] = []
-        version_parts: list[object] = []
+        version_parts: list[object] = [("catalog", snapshot.catalog_version)]
 
         def add(candidate: RawBatchCandidate, identity: RuleIdentity) -> None:
             accumulator.add(candidate)
@@ -233,24 +180,6 @@ class BatchRuleProvider:
                     evidence=identity.evidence,
                 ),
                 identity,
-            )
-
-        try:
-            custom_result = self._custom_provider.load_all()
-        except (OSError, UnicodeError, ValueError) as error:
-            custom_result = CustomManifestLoadResult((), ())
-            warnings.append(f"无法加载自定义存档清单：{error}")
-        for custom_error in custom_result.errors:
-            warnings.append(f"自定义清单 {custom_error.source_name}：{custom_error.message}")
-        for loaded in custom_result.manifests:
-            version_parts.append(_manifest_version_part(loaded.source_name, loaded.manifest))
-            self._collect_custom_manifest(
-                loaded.source_name,
-                loaded.manifest,
-                context,
-                local_names,
-                add,
-                reverse_rules,
             )
 
         official_digest = "unavailable"
@@ -321,98 +250,153 @@ class BatchRuleProvider:
         except (InvalidLudusaviIndex, SnapshotUpdateError, OSError, ValueError) as error:
             warnings.append(f"Ludusavi 规则不可用：{error}")
         version_parts.append(("ludusavi", official_digest))
-        version_parts.append(("builtin", self._builtin_rules.rules_version))
+
+        locations_by_game: dict[str, list[SaveLocation]] = {}
+        for location in locations:
+            locations_by_game.setdefault(location.game_id, []).append(location)
+        matched_rule_ids: set[str] = set()
 
         for game in games:
-            if game.status != "installed":
+            if game.status == "save_only":
                 continue
+            per_game_install_dir: Path | None = None
+            engine_metadata: Mapping[str, str] = {}
+            metadata: dict[str, object] = collect_rule_identity(
+                game,
+                tuple(locations_by_game.get(game.id, ())),
+            ).as_rule_metadata()
+            if game.status == "installed":
+                try:
+                    per_game_install_dir = self._library.install_directory(game.id)
+                except (OSError, ValueError):
+                    per_game_install_dir = None
+                if per_game_install_dir is not None:
+                    engine_metadata = load_engine_metadata(game, per_game_install_dir)
+                    metadata = {**engine_metadata, **metadata}
             try:
-                install_dir = self._library.install_directory(game.id)
-            except (OSError, ValueError):
-                continue
-            metadata = load_engine_metadata(game, install_dir)
-            try:
-                builtin_suggestions = (
-                    *self._builtin_rules.suggest_game_specific(
+                game_suggestions = snapshot.save_rules.suggest_game_specific(
+                    game,
+                    per_game_install_dir,
+                    metadata,
+                )
+                engine_suggestions = (
+                    snapshot.save_rules.suggest_engine(
                         game,
-                        install_dir,
+                        per_game_install_dir,
                         metadata,
-                    ),
-                    *self._builtin_rules.suggest_engine(
-                        game,
-                        install_dir,
-                        metadata,
-                    ),
+                    )
+                    if per_game_install_dir is not None
+                    else ()
                 )
             except Exception as error:
-                warnings.append(f"内置存档规则不可用：{error}")
-                builtin_suggestions = ()
-            for suggestion in builtin_suggestions:
-                found_suggestion = self._with_availability(suggestion, install_dir)
-                if found_suggestion.availability != "found":
+                warnings.append(f"声明式存档规则不可用：{error}")
+                game_suggestions = ()
+                engine_suggestions = ()
+            for suggestion in (*game_suggestions, *engine_suggestions):
+                source = _declarative_source(suggestion)
+                if source is None or not _allowed_rule_scope(
+                    suggestion.path_template,
+                    context,
+                ):
                     continue
+                rule_id = _suggestion_rule_id(suggestion)
+                if rule_id is not None:
+                    matched_rule_ids.add(rule_id)
+                identity_metadata = collect_rule_identity(
+                    game,
+                    tuple(locations_by_game.get(game.id, ())),
+                )
                 identity = RuleIdentity(
-                    source="builtin",
+                    source=source,
                     game_id=game.id,
                     external_title=game.title,
-                    external_product_id=_product_id(found_suggestion.display_path),
-                    engine_id=game.engine_id,
-                    confidence=(
-                        "high" if found_suggestion.confidence >= 0.9 else "medium"
+                    external_product_id=(
+                        identity_metadata.product_ids[0]
+                        if identity_metadata.product_ids
+                        else _product_id(suggestion.display_path)
                     ),
-                    strong_group_key=f"game:{game.id}",
-                    evidence=found_suggestion.evidence,
-                )
-                add(
-                    _raw_candidate(
-                        scope_key=_scope_key(found_suggestion.path_template),
-                        kind=found_suggestion.kind,
-                        path_template=found_suggestion.path_template,
-                        display_path=found_suggestion.display_path,
-                        path_key=candidate_path_key(
-                            found_suggestion.kind,
-                            found_suggestion.display_path,
-                        ),
-                        source="builtin",
-                        evidence=found_suggestion.evidence,
-                    ),
-                    identity,
-                )
-            for suggestion in self._engine_hints.suggest(game, install_dir, metadata):
-                if suggestion.kind == "registry":
-                    if not self._registry.key_exists(suggestion.path_template):
-                        continue
-                    path_key = candidate_path_key("registry", suggestion.path_template)
-                else:
-                    if suggestion.kind != "glob" and not Path(suggestion.display_path).exists():
-                        continue
-                    path_key = candidate_path_key(
-                        suggestion.kind,
-                        suggestion.display_path,
-                    )
-                identity = RuleIdentity(
-                    source="engine",
-                    game_id=game.id,
-                    external_title=game.title,
-                    external_product_id=_product_id(suggestion.display_path),
                     engine_id=game.engine_id,
-                    confidence=("high" if suggestion.confidence >= 0.9 else "medium"),
+                    confidence=_declarative_confidence(suggestion),
                     strong_group_key=f"game:{game.id}",
                     evidence=suggestion.evidence,
                 )
-                add(
-                    _raw_candidate(
-                        scope_key=_scope_key(suggestion.path_template),
-                        kind=suggestion.kind,
-                        path_template=suggestion.path_template,
-                        display_path=suggestion.display_path,
-                        path_key=path_key,
-                        source="engine",
-                        evidence=suggestion.evidence,
-                    ),
+                self._add_probed_suggestion(
+                    suggestion,
+                    per_game_install_dir,
+                    source,
                     identity,
+                    add,
+                    warnings,
                 )
+
+            if per_game_install_dir is not None:
+                for suggestion in self._engine_hints.suggest(
+                    game,
+                    per_game_install_dir,
+                    engine_metadata,
+                ):
+                    if not _allowed_rule_scope(suggestion.path_template, context):
+                        continue
+                    identity = RuleIdentity(
+                        source="engine",
+                        game_id=game.id,
+                        external_title=game.title,
+                        external_product_id=_product_id(suggestion.display_path),
+                        engine_id=game.engine_id,
+                        confidence=(
+                            "high" if suggestion.confidence >= 0.9 else "medium"
+                        ),
+                        strong_group_key=f"game:{game.id}",
+                        evidence=suggestion.evidence,
+                    )
+                    self._add_probed_suggestion(
+                        suggestion,
+                        per_game_install_dir,
+                        "engine",
+                        identity,
+                        add,
+                        warnings,
+                    )
             version_parts.append((game.id, game.engine_id, game.engine_rules_version))
+
+        for save_rule in snapshot.save_rules.rules:
+            if save_rule.metadata.rule_type != "save_game":
+                continue
+            if save_rule.metadata.qualified_id in matched_rule_ids:
+                continue
+            for suggestion in snapshot.save_rules.suggest_rule(save_rule, None, {}):
+                source = _declarative_source(suggestion)
+                if source is None or not _allowed_rule_scope(
+                    suggestion.path_template,
+                    context,
+                ):
+                    continue
+                title = save_rule.titles[0] if save_rule.titles else save_rule.label
+                product_id = (
+                    save_rule.product_ids[0] if save_rule.product_ids else None
+                )
+                identity = RuleIdentity(
+                    source=source,
+                    game_id=None,
+                    external_title=title,
+                    external_product_id=product_id,
+                    engine_id=None,
+                    confidence=_declarative_confidence(suggestion),
+                    strong_group_key=(
+                        f"product:{product_id.casefold()}"
+                        if product_id is not None
+                        else f"rule:{save_rule.metadata.qualified_id}"
+                    ),
+                    evidence=suggestion.evidence,
+                )
+                self._add_probed_suggestion(
+                    suggestion,
+                    None,
+                    source,
+                    identity,
+                    add,
+                    warnings,
+                )
 
         rules_version = hashlib.sha256(
             json.dumps(
@@ -423,127 +407,57 @@ class BatchRuleProvider:
             ).encode("utf-8")
         ).hexdigest()
         return BatchRuleCatalog(
-            candidates=accumulator.snapshot(),
+            candidates=tuple(
+                replace(candidate, sources=_ordered_sources(candidate.sources))
+                for candidate in accumulator.snapshot()
+            ),
             identities_by_path=MappingProxyType(
-                {key: tuple(value) for key, value in identities.items()}
+                {
+                    key: tuple(sorted(value, key=_identity_rank))
+                    for key, value in identities.items()
+                }
             ),
             reverse_path_rules=tuple(reverse_rules),
             warnings=tuple(warnings),
             rules_version=rules_version,
         )
 
-    def _with_availability(
+    def _add_probed_suggestion(
         self,
         suggestion: SaveLocationSuggestion,
-        install_dir: Path,
-    ) -> SaveLocationSuggestion:
-        try:
-            if suggestion.kind == "registry":
-                found = self._registry.key_exists(suggestion.path_template)
-            else:
-                path = self._resolver.expand(suggestion.path_template, install_dir)
-                if suggestion.kind == "directory":
-                    found = path.is_dir()
-                elif suggestion.kind == "file":
-                    found = path.is_file()
-                else:
-                    found = next(islice(glob.iglob(str(path)), 1), None) is not None
-        except (OSError, RuntimeError, ValueError):
-            found = False
-        return replace(suggestion, availability="found" if found else "predicted")
-
-    def _collect_custom_manifest(
-        self,
-        source_name: str,
-        manifest: LudusaviManifest,
-        context: BatchRuleContext,
-        local_names: Mapping[str, tuple[str, ...]],
+        install_dir: Path | None,
+        source: BatchCandidateSource,
+        identity: RuleIdentity,
         add: AddCandidate,
-        reverse_rules: list[BatchPathRule],
+        warnings: list[str],
     ) -> None:
-        aliases = _custom_aliases(manifest)
-        for canonical_name, game in manifest.games.items():
-            if game.alias is not None:
-                continue
-            matching_game_ids = {
-                game_id
-                for name in (
-                    canonical_name,
-                    *game.install_dirs,
-                    *aliases.get(canonical_name, ()),
-                )
-                for game_id in local_names.get(normalize_ludusavi_name(name), ())
-            }
-            game_id = next(iter(matching_game_ids)) if len(matching_game_ids) == 1 else None
-            for kind, rules in (("file", game.files), ("registry", game.registry)):
-                for rule in rules:
-                    parts = _manifest_path_parts(kind, rule.path)
-                    if parts is None or not _supports_windows(rule.conditions):
-                        continue
-                    root_token, relative_pattern = parts
-                    if kind == "file" and root_token not in context.root_tokens:
-                        continue
-                    identity = RuleIdentity(
-                        source="custom",
-                        game_id=game_id,
-                        external_title=canonical_name,
-                        external_product_id=_product_id(f"{canonical_name} {relative_pattern}"),
-                        engine_id=None,
-                        confidence=_rule_confidence(rule.conditions),
-                        strong_group_key=(
-                            f"game:{game_id}"
-                            if game_id is not None
-                            else "custom:"
-                            f"{source_name.casefold()}:"
-                            f"{normalize_ludusavi_name(canonical_name)}"
-                        ),
-                        evidence=(
-                            f"自定义清单 {source_name}：{canonical_name}",
-                            *_condition_evidence(rule.conditions),
-                        ),
-                    )
-                    path_rule = BatchPathRule(
-                        source="custom",
-                        kind=kind,  # type: ignore[arg-type]
-                        root_token=root_token,
-                        relative_pattern=relative_pattern,
-                        first_segment_key=_first_segment_key(relative_pattern),
-                        identity=identity,
-                    )
-                    if kind == "file" and not _is_literal(relative_pattern):
-                        reverse_rules.append(path_rule)
-                        continue
-                    candidate = self._candidate_from_rule(path_rule)
-                    if candidate is not None:
-                        add(candidate, identity)
-            if game_id is None:
-                continue
-            try:
-                install_dir = self._library.install_directory(game_id)
-            except (OSError, ValueError):
-                continue
-            for rule in game.files:
-                identity = RuleIdentity(
-                    source="custom",
-                    game_id=game_id,
-                    external_title=canonical_name,
-                    external_product_id=_product_id(f"{canonical_name} {rule.path}"),
-                    engine_id=None,
-                    confidence=_rule_confidence(rule.conditions),
-                    strong_group_key=f"game:{game_id}",
-                    evidence=(
-                        f"自定义清单 {source_name} 的游戏目录规则：{canonical_name}",
-                        *_condition_evidence(rule.conditions),
-                    ),
-                )
-                candidate = self._candidate_from_install_rule(
-                    rule,
-                    install_dir,
-                    "custom",
-                    identity,
-                )
-                if candidate is not None:
-                    add(candidate, identity)
+        result = self._rule_probe.probe(
+            suggestion.kind,
+            suggestion.path_template,
+            install_dir,
+        )
+        if not result.found:
+            return
+        evidence = (*suggestion.evidence, *_probe_evidence(result.diagnostics))
+        if result.truncated:
+            warnings.append(f"规则探测已受限：{suggestion.path_template}")
+        display_path = (
+            result.matches[0]
+            if suggestion.kind != "glob"
+            else suggestion.display_path
+        )
+        add(
+            _raw_candidate(
+                scope_key=_scope_key(suggestion.path_template),
+                kind=suggestion.kind,
+                path_template=suggestion.path_template,
+                display_path=display_path,
+                path_key=candidate_path_key(suggestion.kind, display_path),
+                source=source,
+                evidence=evidence,
+            ),
+            replace(identity, evidence=evidence),
+        )
 
     def _candidate_from_install_rule(
         self,
@@ -706,30 +620,10 @@ def _indexed_game_matches(
     return MappingProxyType({key: tuple(value) for key, value in matches.items()})
 
 
-def _manifest_path_parts(kind: str, value: str) -> tuple[str, str] | None:
-    if kind == "file":
-        match = _FILE_RULE_PATTERN.fullmatch(value)
-        if match is None:
-            return None
-        root, relative = match.groups()
-        return root, (relative or "").replace("/", "\\").strip("\\")
-    clean = value.replace("/", "\\").strip("\\")
-    root, separator, relative = clean.partition("\\")
-    canonical_root = _REGISTRY_ROOTS.get(root.upper())
-    if canonical_root is None or not separator or not relative:
-        return None
-    return canonical_root, relative
-
-
 def _is_literal(value: str) -> bool:
     return not any(character in value for character in "*?[") and not bool(
         _EMBEDDED_TOKEN.search(value)
     )
-
-
-def _first_segment_key(value: str) -> str:
-    segment = value.partition("\\")[0]
-    return "" if not _is_literal(segment) else windows_path_key(segment)
 
 
 def _supports_windows(conditions: tuple[ManifestCondition, ...]) -> bool:
@@ -756,36 +650,6 @@ def _condition_evidence(
     return tuple(result)
 
 
-def _custom_aliases(manifest: LudusaviManifest) -> Mapping[str, tuple[str, ...]]:
-    result: dict[str, list[str]] = {}
-    for name, game in manifest.games.items():
-        if game.alias is None:
-            continue
-        current = game.alias
-        for _ in range(8):
-            target = manifest.games[current].alias
-            if target is None:
-                result.setdefault(current, []).append(name)
-                break
-            current = target
-    return MappingProxyType({key: tuple(value) for key, value in result.items()})
-
-
-def _manifest_version_part(source: str, manifest: LudusaviManifest) -> object:
-    return (
-        source,
-        tuple(
-            (
-                name,
-                tuple(rule.path for rule in game.files),
-                tuple(rule.path for rule in game.registry),
-                game.alias,
-            )
-            for name, game in manifest.games.items()
-        ),
-    )
-
-
 def _scope_key(path_template: str) -> str:
     token = path_template.replace("/", "\\").partition("\\")[0]
     return _SCOPE_BY_TOKEN.get(token, "registry" if token.startswith("HKEY_") else "recorded")
@@ -794,3 +658,73 @@ def _scope_key(path_template: str) -> str:
 def _product_id(value: str) -> str | None:
     match = _PRODUCT_ID.search(value)
     return None if match is None else match.group(1).upper()
+
+
+def _ordered_sources(
+    sources: tuple[BatchCandidateSource, ...],
+) -> tuple[BatchCandidateSource, ...]:
+    ranks = {
+        "recorded": -1,
+        "user": 0,
+        "builtin": 1,
+        "ludusavi": 2,
+        "engine": 5,
+        "bounded_scan": 6,
+        "registry": 7,
+    }
+    return tuple(sorted(sources, key=lambda source: ranks[source]))
+
+
+def _identity_rank(identity: RuleIdentity) -> tuple[int, str]:
+    ranks = {"recorded": -1, "user": 0, "builtin": 1, "ludusavi": 2, "engine": 5}
+    return ranks.get(identity.source, 9), identity.strong_group_key or ""
+
+
+def _declarative_source(
+    suggestion: SaveLocationSuggestion,
+) -> Literal["user", "builtin"] | None:
+    for evidence in suggestion.source_evidence:
+        if evidence.source == "user":
+            return "user"
+        if evidence.source == "builtin":
+            return "builtin"
+    return None
+
+
+def _declarative_confidence(
+    suggestion: SaveLocationSuggestion,
+) -> BatchConfidence:
+    if suggestion.group == "experimental":
+        return "low"
+    return "high" if suggestion.confidence >= 0.9 else "medium"
+
+
+def _suggestion_rule_id(suggestion: SaveLocationSuggestion) -> str | None:
+    if suggestion.suggestion_id is None:
+        return None
+    return suggestion.suggestion_id.rpartition(":")[0] or None
+
+
+def _allowed_rule_scope(
+    path_template: str,
+    context: BatchRuleContext,
+) -> bool:
+    normalized = path_template.replace("/", "\\")
+    if normalized.startswith(("HKEY_CURRENT_USER\\", "HKEY_LOCAL_MACHINE\\")):
+        return True
+    token = normalized.partition("\\")[0]
+    return token == "<game>" or token in context.root_tokens
+
+
+def _probe_evidence(diagnostics: tuple[str, ...]) -> tuple[str, ...]:
+    labels = {
+        "registry_probe_failed": "规则探测注册表失败",
+        "filesystem_probe_failed": "规则探测文件系统失败",
+        "reparse_point_skipped": "规则探测跳过链接或重解析点",
+        "network_or_device_root_rejected": "规则探测拒绝网络或设备路径",
+        "depth_limit_reached": "规则探测达到最大深度",
+        "entry_limit_reached": "规则探测达到条目上限",
+        "match_limit_reached": "规则探测达到结果上限",
+        "deadline_reached": "规则探测达到时间上限",
+    }
+    return tuple(labels.get(code, f"规则探测诊断：{code}") for code in diagnostics)

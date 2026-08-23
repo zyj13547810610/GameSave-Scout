@@ -45,7 +45,6 @@ from gameshelf.saves.batch_scanner import BatchFilesystemScanner
 from gameshelf.saves.batch_scope import BatchScopeBuilder
 from gameshelf.saves.batch_service import BatchSaveDiscoveryService
 from gameshelf.saves.builtin_rules import SaveRuleProvider
-from gameshelf.saves.custom_manifest_provider import CustomManifestProvider
 from gameshelf.saves.engine_hints import EngineSaveHintProvider
 from gameshelf.saves.guided_models import GuidedScopeOption
 from gameshelf.saves.guided_registry import RegistryMetadataReader
@@ -133,7 +132,6 @@ def build_application(
         logger=logger,
     )
     rule_snapshot = rule_catalog.snapshot()
-    engine_detection = rule_snapshot.engine_detection
     builtin_save_rules = rule_snapshot.save_rules
     for diagnostic in rule_snapshot.diagnostics:
         source_path = {
@@ -182,8 +180,6 @@ def build_application(
         shell,
         registry,
     )
-    custom_manifest_directory = paths.legacy_manifests_dir / "custom"
-    custom_provider = CustomManifestProvider(custom_manifest_directory)
     ludusavi_provider = LudusaviProvider(
         resource_dir=resource_paths.ludusavi_dir,
         active_dir=paths.ludusavi_active_dir,
@@ -194,11 +190,9 @@ def build_application(
         save_repository=save_repository,
         resolver=resolver,
         ludusavi_provider=ludusavi_provider,
-        custom_provider=custom_provider,
         engine_hints=EngineSaveHintProvider(resolver),
-        builtin_rules=builtin_save_rules,
+        rule_snapshot_provider=rule_catalog.snapshot,
         registry=registry,
-        engine_is_experimental=engine_detection.is_experimental,
     )
     guided_repository = GuidedSaveRepository(database, writer)
     guided_scope_builder = GuidedSaveScopeBuilder(
@@ -252,9 +246,8 @@ def build_application(
         save_repository=save_repository,
         resolver=resolver,
         ludusavi_provider=ludusavi_provider,
-        custom_provider=custom_provider,
         engine_hints=EngineSaveHintProvider(resolver),
-        builtin_rules=builtin_save_rules,
+        rule_snapshot_provider=rule_catalog.snapshot,
         registry=registry,
     )
     batch_saves = BatchSaveDiscoveryService(
@@ -318,9 +311,6 @@ def build_application(
         batch_external=batch_external,
         batch_candidate_opener=batch_candidate_opener,
         ludusavi_provider=ludusavi_provider,
-        custom_provider=custom_provider,
-        custom_manifest_directory=custom_manifest_directory,
-        directory_opener=shell.open_directory,
         asset_session_token=asset_address.session_token,
     )
     return Application(
