@@ -31,4 +31,46 @@ describe('RuleTestPanel', () => {
     expect(wrapper.text()).toContain('LocalLow')
     expect(wrapper.get('[data-test="mark-rule-verified"]').attributes('disabled')).toBeUndefined()
   })
+
+  it('filters installed games by title and clears a selection hidden by the filter', async () => {
+    const wrapper = mount(RuleTestPanel, {
+      props: {
+        games: [
+          { id: 'game-1', title: 'Summer Pockets', status: 'installed' },
+          { id: 'game-2', title: '千恋＊万花', status: 'installed' },
+          { id: 'game-3', title: 'Missing Game', status: 'missing' },
+        ],
+        result: null,
+        busy: false,
+        canMarkVerified: false,
+      },
+    })
+
+    await wrapper.get('[data-test="rule-test-game"]').setValue('game-1')
+    await wrapper.get('[data-test="rule-test-game-filter"]').setValue('千恋')
+
+    const options = wrapper.findAll('[data-test="rule-test-game"] option')
+    expect(options.map((option) => option.text())).toEqual(['请选择已安装游戏', '千恋＊万花'])
+    expect(wrapper.get('[data-test="rule-test-game"]').element).toHaveProperty('value', '')
+    expect(wrapper.get('[data-test="test-rule"]').attributes('disabled')).toBeDefined()
+  })
+
+  it('matches installed game titles case-insensitively and shows an empty result', async () => {
+    const wrapper = mount(RuleTestPanel, {
+      props: {
+        games: [{ id: 'game-1', title: 'Summer Pockets', status: 'installed' }],
+        result: null,
+        busy: false,
+        canMarkVerified: false,
+      },
+    })
+
+    await wrapper.get('[data-test="rule-test-game-filter"]').setValue('SUMMER')
+    expect(wrapper.findAll('[data-test="rule-test-game"] option').map((option) => option.text()))
+      .toEqual(['请选择已安装游戏', 'Summer Pockets'])
+
+    await wrapper.get('[data-test="rule-test-game-filter"]').setValue('不存在')
+    expect(wrapper.findAll('[data-test="rule-test-game"] option').map((option) => option.text()))
+      .toEqual(['没有匹配的已安装游戏'])
+  })
 })
