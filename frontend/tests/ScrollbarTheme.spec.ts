@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import '../src/styles/base.css'
 import '../src/features/saves/batch-save.css'
+import '../src/features/rules/rules.css'
 
 describe('scrollbar theme', () => {
   it('defines the GameShelf dark scrollbar palette', () => {
@@ -30,5 +31,17 @@ describe('scrollbar theme', () => {
     expect(style.getPropertyValue('scrollbar-color')).toContain('var(--scrollbar-thumb)')
     expect(style.getPropertyValue('scrollbar-gutter')).toBe('stable')
     element.remove()
+  })
+
+  it('uses the shared dark scrollbar in both rule panes', () => {
+    for (const className of ['rule-list-scroll', 'rule-detail-scroll']) {
+      const element = document.createElement('div')
+      element.className = className
+      document.body.append(element)
+      const style = getComputedStyle(element)
+      expect(style.overflowY).toBe('auto')
+      expect(style.getPropertyValue('scrollbar-color')).toContain('var(--scrollbar-thumb)')
+      element.remove()
+    }
   })
 })

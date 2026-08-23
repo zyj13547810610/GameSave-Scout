@@ -19,6 +19,8 @@ import { useBatchSaveStore } from './features/saves/batchSaveStore'
 import GuidedSaveCloseDialog from './features/saves/GuidedSaveCloseDialog.vue'
 import GuidedSaveStatusBar from './features/saves/GuidedSaveStatusBar.vue'
 import { useGuidedSaveStore } from './features/saves/guidedSaveStore'
+import RuleManagementWorkspace from './features/rules/RuleManagementWorkspace.vue'
+import { useRuleManagementStore } from './features/rules/ruleManagementStore'
 import { applyUiScale, type UiScale } from './features/preferences/uiScale'
 import ScanRootDialog from './features/scan-roots/ScanRootDialog.vue'
 import ScanRootList from './features/scan-roots/ScanRootList.vue'
@@ -30,6 +32,7 @@ const pinia = getActivePinia() ?? createPinia()
 const store = useLibraryStore(pinia)
 const guidedStore = useGuidedSaveStore(pinia)
 const batchSaveStore = useBatchSaveStore(pinia)
+const ruleManagementStore = useRuleManagementStore(pinia)
 const {
   roots,
   games,
@@ -41,7 +44,7 @@ const {
   selectedGameId,
 } = storeToRefs(store)
 const state = ref<'connecting' | 'ready' | 'failed'>('connecting')
-const activeView = ref<'library' | 'batch_saves'>('library')
+const activeView = ref<'library' | 'batch_saves' | 'rules'>('library')
 const errorMessage = ref('')
 const showAddRoot = ref(false)
 const editingRoot = ref<ScanRoot | null>(null)
@@ -60,6 +63,7 @@ const showGroupManager = ref(false)
 const groupManagerReturnFocus = ref<HTMLElement | null>(null)
 const coverWizardEntry = ref<HTMLButtonElement | null>(null)
 const gameContentScroll = ref<HTMLElement | null>(null)
+let libraryScrollTop = 0
 const coverWizardSettings = ref<CoverWizardSettings>({
   coverOnlineEnabled: false,
   coverVndbCandidateLimit: 5,
@@ -262,15 +266,30 @@ onBeforeUnmount(() => {
   batchSaveStore.clearPolling()
 })
 
-function changeView(view: 'library' | 'batch_saves') {
+function changeView(view: 'library' | 'batch_saves' | 'rules') {
   if (activeView.value === view) return
+  if (
+    activeView.value === 'rules'
+    && ruleManagementStore.dirty
+    && !window.confirm('当前规则草稿尚未保存，确认放弃并离开规则管理吗？')
+  ) return
+  if (activeView.value === 'rules') ruleManagementStore.discardDraft()
+  if (activeView.value === 'library' && gameContentScroll.value) {
+    libraryScrollTop = gameContentScroll.value.scrollTop
+  }
   selectedGameId.value = null
   showGroupManager.value = false
   showBatchGroup.value = false
   showAddRoot.value = false
   editingRoot.value = null
+  showCoverWizard.value = false
   exitBatchMode()
   activeView.value = view
+  if (view === 'library') {
+    void nextTick(() => {
+      if (gameContentScroll.value) gameContentScroll.value.scrollTop = libraryScrollTop
+    })
+  }
 }
 
 function openCoverWizard() {
@@ -322,6 +341,7 @@ function restoreGuidedSave(gameId: string) {
       <nav class="primary-navigation" aria-label="主要功能">
         <button data-test="nav-library" type="button" :aria-current="activeView === 'library' ? 'page' : undefined" @click="changeView('library')">游戏库</button>
         <button data-test="nav-batch-saves" type="button" :aria-current="activeView === 'batch_saves' ? 'page' : undefined" @click="changeView('batch_saves')">批量存档</button>
+        <button data-test="nav-rules" type="button" :aria-current="activeView === 'rules' ? 'page' : undefined" @click="changeView('rules')">规则管理</button>
       </nav>
       <ScanRootList
         v-if="state === 'ready' && activeView === 'library'"
@@ -350,7 +370,7 @@ function restoreGuidedSave(gameId: string) {
           <button v-if="state === 'ready' && activeView === 'library'" data-test="add-game-root" type="button" @click="showAddRoot = true">＋ 添加游戏目录</button>
         </div>
       </header>
-      <GuidedSaveStatusBar @restore="restoreGuidedSave" />
+      <GuidedSaveStatusBar v-if="activeView === 'library'" @restore="restoreGuidedSave" />
       <BatchSaveStatusBar v-if="activeView === 'library'" @restore="changeView('batch_saves')" />
 
       <section v-if="state === 'connecting'" class="empty-state" aria-live="polite"><h2>正在连接本地数据库…</h2></section>
@@ -426,6 +446,7 @@ function restoreGuidedSave(gameId: string) {
           </div>
           </section>
         </div>
+        <RuleManagementWorkspace v-else-if="activeView === 'rules'" :bridge="bridge" @leave="changeView('library')" />
         <BatchSaveWorkspace v-else :bridge="bridge" @library-changed="store.load(bridge)" />
         <div v-if="showAddRoot" class="dialog-backdrop" @click.self="showAddRoot = false"><ScanRootDialog :bridge="bridge" @saved="rootSaved" @close="showAddRoot = false" /></div>
         <div v-if="editingRoot" class="dialog-backdrop" @click.self="editingRoot = null"><ScanRootDialog :bridge="bridge" :root="editingRoot" @saved="rootSaved" @close="editingRoot = null" /></div>

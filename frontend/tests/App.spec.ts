@@ -5,6 +5,7 @@ import App from '../src/App.vue'
 import { bridgeKey } from '../src/api/bridge'
 import type { ApiResult, Game, GameShelfBridge, UiScaleValue } from '../src/api/contracts'
 import { createMockBridge, fixtureGame, fixtureGroup, fixtureGuidedSession, fixtureRoot, ok } from '../src/api/mockBridge'
+import { useRuleManagementStore } from '../src/features/rules/ruleManagementStore'
 import '../src/styles/base.css'
 
 beforeEach(() => {
@@ -28,7 +29,7 @@ describe('App', () => {
     expect(navigation.element.parentElement).toBe(sidebar.element)
     expect(getComputedStyle(shell.element).display).toBe('grid')
     expect(getComputedStyle(shell.element).gridTemplateColumns).toBe('15.625rem minmax(0, 1fr)')
-    expect(getComputedStyle(navigation.element).gridTemplateColumns).toBe('repeat(2, minmax(0, 1fr))')
+    expect(getComputedStyle(navigation.element).gridTemplateColumns).toBe('1fr')
     expect(getComputedStyle(libraryLayout.element).display).toBe('flex')
     wrapper.unmount()
   })
@@ -59,6 +60,91 @@ describe('App', () => {
     await wrapper.get('[data-test="nav-library"]').trigger('click')
     expect(wrapper.find('[data-test="root-scroll-region"]').exists()).toBe(true)
     expect(cancel).not.toHaveBeenCalled()
+  })
+
+  it('opens rule management as a third first-level page without rebootstrapping', async () => {
+    const bootstrap = vi.fn(createMockBridge().bootstrap)
+    const listRules = vi.fn(async () => ok({ items: [], total: 0 }))
+    const bridge = createMockBridge({ bootstrap, list_rules: listRules })
+    const wrapper = mount(App, {
+      global: { plugins: [createPinia()], provide: { [bridgeKey as symbol]: bridge } },
+    })
+    await flushPromises()
+
+    await wrapper.get('[data-test="nav-rules"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-test="nav-rules"]').attributes('aria-current')).toBe('page')
+    expect(wrapper.find('[data-test="rule-management-workspace"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="cover-wizard-workspace"]').exists()).toBe(false)
+    expect(listRules).toHaveBeenCalledTimes(1)
+
+    await wrapper.get('[data-test="nav-library"]').trigger('click')
+    await wrapper.get('[data-test="nav-rules"]').trigger('click')
+    await flushPromises()
+    expect(bootstrap).toHaveBeenCalledTimes(1)
+    expect(listRules).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('preserves library and rule workspace state and confirms a dirty rule draft', async () => {
+    const pinia = createPinia()
+    const bridge = createMockBridge({
+      async list_games() { return ok([fixtureGame({ title: 'Alice' })]) },
+      async list_rules() {
+        return ok({
+          items: [{
+            qualifiedId: 'builtin:kiri', ruleId: 'kiri', label: 'KiriKiri',
+            ruleType: 'engine', source: 'builtin', status: 'formal', enabled: true, priority: 100,
+          }],
+          total: 1,
+        })
+      },
+      async get_rule() {
+        return ok({
+          qualifiedId: 'builtin:kiri', ruleId: 'kiri', label: 'KiriKiri',
+          ruleType: 'engine', source: 'builtin', status: 'formal', enabled: true, priority: 100,
+          notes: null, references: [], sourceFile: 'engines.yaml', yamlPreview: 'id: kiri',
+          draft: {
+            version: '1', id: 'kiri', label: 'KiriKiri', type: 'engine', status: 'formal',
+            priority: 100, enabled: true, notes: null, references: [], threshold: 1,
+            all: [], any: [], negative: [],
+          },
+          capabilities: { edit: false, copy: true, test: true, toggle: false, delete: false, export: true },
+        })
+      },
+    })
+    const wrapper = mount(App, {
+      global: { plugins: [pinia], provide: { [bridgeKey as symbol]: bridge } },
+    })
+    await flushPromises()
+    await wrapper.get('input[aria-label="搜索游戏"]').setValue('Alice')
+    const libraryScroll = wrapper.get('[data-test="library-scroll-region"]').element
+    libraryScroll.scrollTop = 180
+
+    await wrapper.get('[data-test="nav-rules"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('.rule-list-item').trigger('click')
+    await wrapper.get('[data-test="rules-tab-save"]').trigger('click')
+    await flushPromises()
+    const ruleStore = useRuleManagementStore(pinia)
+    ruleStore.filters.query = 'custom'
+    ruleStore.dirty = true
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
+
+    await wrapper.get('[data-test="nav-library"]').trigger('click')
+    expect(wrapper.get('[data-test="nav-rules"]').attributes('aria-current')).toBe('page')
+    await wrapper.get('[data-test="nav-library"]').trigger('click')
+    await flushPromises()
+    expect((wrapper.get('input[aria-label="搜索游戏"]').element as HTMLInputElement).value).toBe('Alice')
+    expect(wrapper.get('[data-test="library-scroll-region"]').element.scrollTop).toBe(180)
+
+    await wrapper.get('[data-test="nav-rules"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-test="rules-tab-save"]').attributes('aria-selected')).toBe('true')
+    expect((wrapper.get('input[aria-label="搜索规则"]').element as HTMLInputElement).value).toBe('custom')
+    expect(ruleStore.selectedQualifiedId).toBe('builtin:kiri')
+    confirm.mockRestore()
+    wrapper.unmount()
   })
 
   it('shows an active batch scan return entry in the game library', async () => {

@@ -3,7 +3,7 @@
 .app-brand { flex: none; border: 1px solid #2d2a35; border-radius: .875rem; padding: 1rem; background: #17151e; }
 .app-brand h1, .app-brand p { margin: 0; }
 .app-brand p { margin-top: .25rem; color: #8d899a; font-size: .75rem; }
-.primary-navigation { display: grid; flex: none; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
+.primary-navigation { display: grid; flex: none; grid-template-columns: 1fr; gap: .5rem; }
 .primary-navigation button { border-color: #393641; color: #c8c2d2; background: #201d27; }
 .primary-navigation button[aria-current="page"] { border-color: #8064e5; color: white; background: #6548d1; }
 .app-sidebar .root-panel { flex: 1; }
