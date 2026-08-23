@@ -8,6 +8,7 @@ from gameshelf.bridge.tasks import TaskContext
 from gameshelf.db.connection import ConnectionFactory
 from gameshelf.db.migrator import Migrator
 from gameshelf.db.writer import DbWriter
+from gameshelf.engines.models import DetectionOutcome, EngineEvidence, EngineMatch
 from gameshelf.engines.registry import DetectorRegistry
 from gameshelf.engines.service import EngineDetectionService
 from gameshelf.library.models import Game
@@ -242,6 +243,61 @@ def test_scan_adopts_new_declarative_godot_engine(
     assert game.engine_is_manual is False
 
 
+def test_scan_captures_one_engine_service_and_reanalysis_uses_latest(
+    engine_scan_harness: "EngineScanHarness",
+) -> None:
+    first = engine_scan_harness.root_path / "First"
+    second = engine_scan_harness.root_path / "Second"
+    first.mkdir()
+    second.mkdir()
+    (first / "Game.exe").write_bytes(b"MZ")
+    (second / "Game.exe").write_bytes(b"MZ")
+    current: dict[str, EngineDetectionService] = {}
+    calls = 0
+
+    new_service = _VersionedEngineService("new_engine", "new-version")
+
+    def switch_after_first_detection() -> None:
+        current["service"] = new_service
+
+    old_service = _VersionedEngineService(
+        "old_engine",
+        "old-version",
+        on_first_detection=switch_after_first_detection,
+    )
+    current["service"] = old_service
+
+    def provider() -> EngineDetectionService:
+        nonlocal calls
+        calls += 1
+        return current["service"]
+
+    engine_scan_harness.scanner = ScanService(
+        LibraryRepository(engine_scan_harness.factory),
+        engine_scan_harness.writer,
+        engine_detection_provider=provider,
+    )
+
+    summary = engine_scan_harness.scanner.scan_root(
+        engine_scan_harness.root_id,
+        "full",
+        TaskContext(Event(), lambda *_: None),
+    )
+
+    assert calls == 1
+    assert {game.detected_engine_id for game in summary.games} == {"old_engine"}
+    assert {game.engine_rules_version for game in summary.games} == {"old-version"}
+
+    refreshed = engine_scan_harness.scanner.reanalyze_game(
+        summary.games[0].id,
+        TaskContext(Event(), lambda *_: None),
+    )
+
+    assert calls == 2
+    assert refreshed.detected_engine_id == "new_engine"
+    assert refreshed.engine_rules_version == "new-version"
+
+
 class EngineScanHarness:
     def __init__(
         self,
@@ -344,3 +400,37 @@ class BrokenDetector:
 
     def inspect(self, _context: object) -> None:
         raise OSError("synthetic detector failure")
+
+
+class _VersionedEngineService(EngineDetectionService):
+    def __init__(
+        self,
+        engine_id: str,
+        version: str,
+        *,
+        on_first_detection=None,
+    ) -> None:
+        self._engine_id = engine_id
+        self._version = version
+        self._on_first_detection = on_first_detection
+
+    @property
+    def cache_version(self) -> str:
+        return self._version
+
+    def detect(self, _game_dir: Path, _executable: Path | None) -> DetectionOutcome:
+        if self._on_first_detection is not None:
+            callback = self._on_first_detection
+            self._on_first_detection = None
+            callback()
+        return DetectionOutcome(
+            EngineMatch(
+                self._engine_id,
+                None,
+                0.99,
+                (EngineEvidence("test", "snapshot isolation", 0.99),),
+                self._version,
+            ),
+            (),
+            False,
+        )

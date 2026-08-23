@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,6 +18,7 @@ from gameshelf.engines.models import DetectionOutcome
 from gameshelf.engines.registry import DetectorRegistry
 from gameshelf.engines.rule_detector import RuleDetector
 from gameshelf.engines.rule_schema import EngineRule, load_engine_rules
+from gameshelf.rules.serialization import serialize_rule_document
 
 
 @dataclass(frozen=True)
@@ -97,10 +99,17 @@ class EngineDetectionService:
                 key=lambda option: (option.experimental, option.label.casefold()),
             )
         )
+        rules_digest = (
+            hashlib.sha256(
+                b"\0".join(serialize_rule_document(rule) for rule in all_rules)
+            ).hexdigest()
+            if all_rules
+            else "none"
+        )
         return cls(
             DetectorRegistry(detectors),
             options,
-            tuple(rule.version for rule in all_rules),
+            (rules_digest,),
         )
 
     @property

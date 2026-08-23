@@ -67,6 +67,24 @@ def test_declarative_rule_version_changes_engine_cache_version(tmp_path: Path) -
     assert first.cache_version != second.cache_version
 
 
+def test_declarative_rule_content_changes_engine_cache_version_without_version_bump(
+    tmp_path: Path,
+) -> None:
+    first_path = tmp_path / "first.yaml"
+    second_path = tmp_path / "second.yaml"
+    _rules(first_path, "same-version")
+    _rules(second_path, "same-version")
+    second_path.write_text(
+        second_path.read_text(encoding="utf-8").replace("data.bin", "changed.bin"),
+        encoding="utf-8",
+    )
+
+    first = EngineDetectionService.from_rules_file(first_path)
+    second = EngineDetectionService.from_rules_file(second_path)
+
+    assert first.cache_version != second.cache_version
+
+
 def test_disabled_declarative_rule_is_not_exposed_or_executed(tmp_path: Path) -> None:
     rules = tmp_path / "rules.yaml"
     rules.write_text(

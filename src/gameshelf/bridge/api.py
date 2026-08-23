@@ -72,6 +72,7 @@ from gameshelf.library.service import (
     LibraryService,
     RootNotFoundError,
 )
+from gameshelf.rules.catalog import RuleCatalogService
 from gameshelf.saves.batch_external import (
     BatchCandidateOpener,
     BatchCandidateOpenError,
@@ -151,6 +152,7 @@ class BridgeApi:
         covers: CoverService | None = None,
         cover_wizard: CoverWizardService | None = None,
         engine_detection: EngineDetectionService | None = None,
+        rule_catalog: RuleCatalogService | None = None,
         save_locations: SaveLocationService | None = None,
         static_discovery: StaticSaveDiscovery | None = None,
         guided_saves: GuidedSaveSessionService | None = None,
@@ -178,6 +180,7 @@ class BridgeApi:
         self._covers = covers
         self._cover_wizard = cover_wizard
         self._engine_detection = engine_detection
+        self._rule_catalog = rule_catalog
         self._save_locations = save_locations
         self._static_discovery = static_discovery
         self._guided_saves = guided_saves
@@ -1649,6 +1652,7 @@ class BridgeApi:
         return str(selected[0])
 
     def _game_dto(self, game: Game) -> dict[str, JSONValue]:
+        engine_detection = self._engine_detection_or_none()
         install_path: str | None
         try:
             install_path = str(self._require_library().install_directory(game.id))
@@ -1664,14 +1668,14 @@ class BridgeApi:
             "status": game.status,
             "engineId": game.engine_id,
             "engineVariant": game.engine_variant,
-            "engineLabel": self._engine_label(game.engine_id),
+            "engineLabel": self._engine_label(game.engine_id, engine_detection),
             "engineExperimental": (
-                self._engine_detection.is_experimental(game.engine_id)
-                if self._engine_detection is not None
+                engine_detection.is_experimental(game.engine_id)
+                if engine_detection is not None
                 else False
             ),
             "engineIsManual": game.engine_is_manual,
-            "detectedEngine": self._detected_engine_dto(game),
+            "detectedEngine": self._detected_engine_dto(game, engine_detection),
             "mainExeRelpath": game.main_exe_relpath,
             "mainExeIsManual": game.main_exe_is_manual,
             "workingDirRelpath": game.working_dir_relpath,
@@ -1745,8 +1749,14 @@ class BridgeApi:
         return self._config
 
     def _require_engine_detection(self) -> EngineDetectionService:
-        if self._engine_detection is None:
+        engine_detection = self._engine_detection_or_none()
+        if engine_detection is None:
             raise RuntimeError("Engine detection services are not configured.")
+        return engine_detection
+
+    def _engine_detection_or_none(self) -> EngineDetectionService | None:
+        if self._rule_catalog is not None:
+            return self._rule_catalog.snapshot().engine_detection
         return self._engine_detection
 
     def _require_save_locations(self) -> SaveLocationService:
@@ -1814,14 +1824,22 @@ class BridgeApi:
             raise RuntimeError("Custom manifest directory is not configured.")
         return self._custom_manifest_directory
 
-    def _engine_label(self, engine_id: str | None) -> str:
-        if self._engine_detection is not None:
-            return self._engine_detection.label_for(engine_id)
+    def _engine_label(
+        self,
+        engine_id: str | None,
+        engine_detection: EngineDetectionService | None,
+    ) -> str:
+        if engine_detection is not None:
+            return engine_detection.label_for(engine_id)
         if engine_id is None:
             return "未知引擎"
         return engine_id.removeprefix("custom:")
 
-    def _detected_engine_dto(self, game: Game) -> dict[str, JSONValue] | None:
+    def _detected_engine_dto(
+        self,
+        game: Game,
+        engine_detection: EngineDetectionService | None,
+    ) -> dict[str, JSONValue] | None:
         candidate_evidence = tuple(
             item for item in game.engine_evidence if item.code.startswith("candidate:")
         )
@@ -1835,7 +1853,9 @@ class BridgeApi:
         alternatives: list[JSONValue] = [
             {
                 "id": item.code.removeprefix("candidate:"),
-                "label": self._engine_label(item.code.removeprefix("candidate:")),
+                "label": self._engine_label(
+                    item.code.removeprefix("candidate:"), engine_detection
+                ),
             }
             for item in candidate_evidence
         ]
@@ -1851,14 +1871,18 @@ class BridgeApi:
         ]
         detected_id = game.detected_engine_id
         experimental = False
-        if self._engine_detection is not None:
-            experimental = self._engine_detection.is_experimental(detected_id) or any(
-                self._engine_detection.is_experimental(item.code.removeprefix("candidate:"))
+        if engine_detection is not None:
+            experimental = engine_detection.is_experimental(detected_id) or any(
+                engine_detection.is_experimental(item.code.removeprefix("candidate:"))
                 for item in candidate_evidence
             )
         return {
             "id": detected_id,
-            "label": "疑似多个引擎" if ambiguous else self._engine_label(detected_id),
+            "label": (
+                "疑似多个引擎"
+                if ambiguous
+                else self._engine_label(detected_id, engine_detection)
+            ),
             "variant": game.detected_engine_variant,
             "confidence": _confidence_label(game.engine_confidence),
             "evidence": evidence,

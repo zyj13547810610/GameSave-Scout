@@ -157,7 +157,9 @@ def build_application(
     scanner = ScanService(
         repository,
         writer,
-        engine_detection,
+        engine_detection_provider=lambda: (
+            rule_catalog.snapshot().engine_detection
+        ),
         analysis_pool=analysis_pool,
     )
     shell = WindowsShell()
@@ -267,7 +269,10 @@ def build_application(
         database,
         writer,
         batch_repository,
-        engine_ids=tuple(option.id for option in engine_detection.list_options()),
+        engine_ids_provider=lambda: tuple(
+            option.id
+            for option in rule_catalog.snapshot().engine_detection.list_options()
+        ),
     )
     batch_external = BatchExternalLookup(batch_repository, shell)
     batch_candidate_opener = BatchCandidateOpener(batch_repository, shell)
@@ -301,7 +306,7 @@ def build_application(
         launcher=launcher,
         covers=covers,
         cover_wizard=cover_wizard,
-        engine_detection=engine_detection,
+        rule_catalog=rule_catalog,
         save_locations=save_locations,
         static_discovery=static_discovery,
         guided_saves=guided_saves,

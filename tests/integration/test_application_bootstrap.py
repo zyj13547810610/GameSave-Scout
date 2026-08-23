@@ -384,6 +384,44 @@ def test_application_disables_only_invalid_builtin_save_rules(
         application.close()
 
 
+def test_rule_catalog_refresh_does_not_trigger_library_analysis(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    application = build_application(AppPaths.from_root(tmp_path / "便携应用"))
+    scanner = application.api._scanner
+    assert scanner is not None
+
+    def unexpected_analysis(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("刷新规则不应触发游戏扫描或重新检测")
+
+    monkeypatch.setattr(scanner, "scan_root", unexpected_analysis)
+    monkeypatch.setattr(scanner, "reanalyze_game", unexpected_analysis)
+    rule_file = application.paths.user_engine_rules_dir / "refresh_test.yaml"
+    rule_file.write_text(
+        """\
+version: test
+rules:
+  - id: refresh_test
+    label: 刷新测试引擎
+    type: engine
+    all:
+      - op: path_exists
+        path: marker.dat
+        weight: 1.0
+""",
+        encoding="utf-8",
+    )
+    try:
+        result = application.rule_catalog.refresh()
+        options = application.api.list_engine_options()
+
+        assert result.applied is True
+        assert any(item["id"] == "refresh_test" for item in options["data"])
+    finally:
+        application.close()
+
+
 def test_application_rejects_missing_save_rules_before_database_start(
     tmp_path: Path,
 ) -> None:

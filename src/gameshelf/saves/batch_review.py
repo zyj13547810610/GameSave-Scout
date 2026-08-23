@@ -58,13 +58,20 @@ class BatchSaveReviewService:
         writer: DbWriter,
         repository: BatchSaveRepository,
         *,
-        engine_ids: Sequence[str],
+        engine_ids_provider: Callable[[], Sequence[str]] | None = None,
+        engine_ids: Sequence[str] | None = None,
         utc_now: Callable[[], str] | None = None,
     ) -> None:
         self._factory = factory
         self._writer = writer
         self._repository = repository
-        self._engine_ids = frozenset(engine_ids)
+        if engine_ids_provider is not None and engine_ids is not None:
+            raise ValueError("不能同时提供固定引擎 ID 和动态引擎 ID 提供者。")
+        if engine_ids_provider is None and engine_ids is None:
+            raise ValueError("必须提供引擎 ID 或引擎 ID 提供者。")
+        self._engine_ids_provider = engine_ids_provider or (
+            lambda: engine_ids or ()
+        )
         self._utc_now = utc_now or (lambda: datetime.now(UTC).isoformat())
 
     def accept(
@@ -137,7 +144,11 @@ class BatchSaveReviewService:
         return self._writer.submit(operation).result()
 
     def create_save_only(self, draft: SaveOnlyDraft) -> Game:
-        title, version, group_ids, candidate_ids = self._validate_save_only(draft)
+        engine_ids = frozenset(self._engine_ids_provider())
+        title, version, group_ids, candidate_ids = self._validate_save_only(
+            draft,
+            engine_ids,
+        )
 
         def operation(connection: sqlite3.Connection) -> Game:
             rows = _candidate_rows(connection, candidate_ids)
@@ -277,6 +288,7 @@ class BatchSaveReviewService:
     def _validate_save_only(
         self,
         draft: SaveOnlyDraft,
+        engine_ids: frozenset[str],
     ) -> tuple[str, str | None, tuple[str, ...], tuple[str, ...]]:
         if not isinstance(draft.title, str) or "\x00" in draft.title:
             raise BatchReviewError(
@@ -298,7 +310,7 @@ class BatchSaveReviewService:
             )
         version = draft.version.strip() if draft.version else None
         version = version or None
-        if draft.engine_id is not None and draft.engine_id not in self._engine_ids:
+        if draft.engine_id is not None and draft.engine_id not in engine_ids:
             raise BatchReviewError(
                 "save_only_engine_invalid",
                 "仅存档卡片引擎不受支持。",

@@ -11,6 +11,7 @@ from gameshelf.db.connection import ConnectionFactory
 from gameshelf.db.migrator import Migrator
 from gameshelf.db.writer import DbWriter
 from gameshelf.engines.models import DetectionOutcome
+from gameshelf.engines.service import EngineDetectionService
 from gameshelf.library.models import Game, ScanRoot
 from gameshelf.library.repository import LibraryRepository
 from gameshelf.library.service import LibraryService
@@ -67,6 +68,32 @@ def test_successful_full_scan_adds_games_and_marks_removed_game_missing(
 
     assert second.missing == 1
     assert scan_harness.game(game.id).status == "missing"
+
+
+def test_full_and_quick_scan_capture_engine_provider_once_per_task(
+    scan_harness: "ScanHarness",
+) -> None:
+    root = scan_harness.add_root(mode="children")
+    scan_harness.mkdir("GameA")
+    scan_harness.mkdir("GameB")
+    calls = 0
+    service = EngineDetectionService.builtins_only()
+
+    def provider() -> EngineDetectionService:
+        nonlocal calls
+        calls += 1
+        return service
+
+    scanner = ScanService(
+        LibraryRepository(scan_harness.factory),
+        scan_harness.writer,
+        engine_detection_provider=provider,
+    )
+
+    scanner.scan_root(root.id, "full", TaskContext(Event(), lambda *_: None))
+    scanner.scan_root(root.id, "quick", TaskContext(Event(), lambda *_: None))
+
+    assert calls == 2
 
 
 def test_scan_splits_only_explicit_version_suffixes(

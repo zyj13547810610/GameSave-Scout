@@ -53,3 +53,31 @@ def test_create_save_only_validates_draft_before_writing(
 ) -> None:
     with pytest.raises(BatchReviewError, match=message):
         _service(tmp_path).create_save_only(draft)
+
+
+def test_create_save_only_captures_latest_engine_ids_for_each_command(
+    tmp_path: Path,
+) -> None:
+    current = [("unity",)]
+    calls = 0
+
+    def provider() -> tuple[str, ...]:
+        nonlocal calls
+        calls += 1
+        return current[0]
+
+    service = BatchSaveReviewService(
+        ConnectionFactory(tmp_path / "missing.db"),
+        _Writer(),  # type: ignore[arg-type]
+        _Repository(),  # type: ignore[arg-type]
+        engine_ids_provider=provider,
+    )
+    draft = SaveOnlyDraft("Game", None, "user_engine", (), ("one",), False)
+
+    with pytest.raises(BatchReviewError, match="引擎"):
+        service.create_save_only(draft)
+    current[0] = ("user_engine",)
+    with pytest.raises(AssertionError, match="提交数据库事务"):
+        service.create_save_only(draft)
+
+    assert calls == 2

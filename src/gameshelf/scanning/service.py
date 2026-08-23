@@ -96,15 +96,22 @@ class ScanService:
         writer: DbWriter,
         engine_detection: EngineDetectionService | None = None,
         *,
+        engine_detection_provider: (
+            Callable[[], EngineDetectionService | None] | None
+        ) = None,
         analysis_pool: ScanAnalysisPool | None = None,
         analyzer: GameAnalyzer | None = None,
         analysis_cache: AnalysisCacheRepository | None = None,
     ) -> None:
         self._repository = repository
         self._writer = writer
-        self._engine_detection = engine_detection
+        if engine_detection is not None and engine_detection_provider is not None:
+            raise ValueError("不能同时提供固定引擎服务和动态引擎服务提供者。")
+        self._engine_detection_provider = engine_detection_provider or (
+            lambda: engine_detection
+        )
         self._analysis_pool = analysis_pool
-        self._analyzer = analyzer or GameAnalyzer(engine_detection)
+        self._analyzer_override = analyzer
         self._analysis_cache = analysis_cache or AnalysisCacheRepository(
             repository.factory
         )
@@ -119,8 +126,9 @@ class ScanService:
             raise RootNotFoundError(root_id)
         if not root.enabled:
             raise RootDisabledError("该游戏目录未参与扫描。")
+        analyzer = self._analyzer_for_task()
         if scan_kind == "quick":
-            return self._scan_quick(root, context)
+            return self._scan_quick(root, context, analyzer)
         session_id = self._create_session(root_id, scan_kind)
         started_at = time.monotonic()
         discovered = 0
@@ -209,7 +217,7 @@ class ScanService:
             def analyze(item: _AnalysisWork) -> tuple[_AnalysisWork, AnalyzedCandidate]:
                 nonlocal checked, warnings, cache_hits, reanalyzed, full_analyses
                 nonlocal current_path
-                result = self._analyzer.analyze(
+                result = analyzer.analyze(
                     item.candidate,
                     item.existing,
                     item.cache,
@@ -305,7 +313,12 @@ class ScanService:
         )
         return summary
 
-    def _scan_quick(self, root: ScanRoot, context: TaskContext) -> ScanSummary:
+    def _scan_quick(
+        self,
+        root: ScanRoot,
+        context: TaskContext,
+        analyzer: GameAnalyzer,
+    ) -> ScanSummary:
         session_id = self._create_session(root.id, "quick")
         started_at = time.monotonic()
         known_games = self._repository.list_games_for_root(root.id)
@@ -415,7 +428,7 @@ class ScanService:
             def analyze(item: _QuickWork) -> tuple[_QuickWork, AnalyzedCandidate]:
                 nonlocal checked, discovered, warnings
                 nonlocal cache_hits, reanalyzed, full_analyses, current_path
-                result = self._analyzer.analyze(
+                result = analyzer.analyze(
                     item.candidate,
                     item.existing,
                     item.cache,
@@ -654,9 +667,10 @@ class ScanService:
             reason="direct_child",
         )
         context.report(0, 1, "正在重新检测主程序和引擎…")
+        analyzer_for_task = self._analyzer_for_task()
 
         def analyze(item: DirectoryCandidate) -> AnalyzedCandidate:
-            return self._analyzer.analyze(item, game, None, context)
+            return analyzer_for_task.analyze(item, game, None, context)
 
         analyzed = (
             self._analysis_pool.map_ordered((candidate,), analyze, context)[0]
@@ -725,6 +739,11 @@ class ScanService:
         result = self._writer.submit(operation).result()
         context.report(1, 1, "重新检测完成。")
         return result
+
+    def _analyzer_for_task(self) -> GameAnalyzer:
+        if self._analyzer_override is not None:
+            return self._analyzer_override
+        return GameAnalyzer(self._engine_detection_provider())
 
     def _candidates(
         self,

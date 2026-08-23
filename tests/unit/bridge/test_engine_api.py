@@ -1,6 +1,7 @@
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -10,7 +11,8 @@ from gameshelf.bridge.tasks import TaskRegistry
 from gameshelf.db.connection import ConnectionFactory
 from gameshelf.db.migrator import Migrator
 from gameshelf.db.writer import DbWriter
-from gameshelf.engines.service import EngineDetectionService
+from gameshelf.engines.registry import DetectorRegistry
+from gameshelf.engines.service import EngineDetectionService, EngineOption
 from gameshelf.library.repository import LibraryRepository
 from gameshelf.library.service import LibraryService
 
@@ -55,14 +57,15 @@ def engine_api(tmp_path: Path) -> Iterator["EngineApiHarness"]:
         / "builtin"
         / "engines.yaml"
     )
+    catalog = _MutableRuleCatalog(detector)
     api = BridgeApi(
         paths,
         tasks,
         schema_version=1,
         library=library,
-        engine_detection=detector,
+        rule_catalog=catalog,  # type: ignore[arg-type]
     )
-    harness = EngineApiHarness(api, tasks, writer, game.id)
+    harness = EngineApiHarness(api, tasks, writer, game.id, catalog)
     try:
         yield harness
     finally:
@@ -128,9 +131,39 @@ def test_engine_options_and_evidence_are_exposed(engine_api: "EngineApiHarness")
     }
 
 
+def test_engine_api_reads_the_latest_catalog_snapshot(
+    engine_api: "EngineApiHarness",
+) -> None:
+    replacement = EngineDetectionService(
+        DetectorRegistry(()),
+        options=(EngineOption("user_engine", "用户新引擎", True),),
+    )
+    engine_api.catalog.engine_detection = replacement
+
+    options = engine_api.api.list_engine_options()
+    selected = engine_api.api.set_game_engine(
+        {"gameId": engine_api.game_id, "engineId": "user_engine"}
+    )
+
+    assert options["data"] == [
+        {"id": "user_engine", "label": "用户新引擎", "experimental": True}
+    ]
+    assert selected["ok"] is True
+    assert selected["data"]["engineLabel"] == "用户新引擎"
+
+
 @dataclass
 class EngineApiHarness:
     api: BridgeApi
     tasks: TaskRegistry
     writer: DbWriter
     game_id: str
+    catalog: "_MutableRuleCatalog"
+
+
+class _MutableRuleCatalog:
+    def __init__(self, engine_detection: EngineDetectionService) -> None:
+        self.engine_detection = engine_detection
+
+    def snapshot(self) -> object:
+        return SimpleNamespace(engine_detection=self.engine_detection)
