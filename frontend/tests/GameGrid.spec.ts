@@ -97,4 +97,16 @@ describe('GameGrid', () => {
       .toBe('anywhere')
     wrapper.unmount()
   })
+
+  it('forwards a rule-management intent while App decides whether the drawer may close', async () => {
+    const game = fixtureGame({ id: 'rule-game' })
+    const wrapper = mount(GameGrid, {
+      props: { games: [game], bridge: createMockBridge(), selectedGameId: game.id },
+    })
+
+    await wrapper.get('[data-test="create-game-save-rule"]').trigger('click')
+
+    expect(wrapper.emitted('update:selectedGameId')).toBeUndefined()
+    expect(wrapper.emitted('openRules')).toEqual([[{ tab: 'save', gameId: game.id }]])
+  })
 })

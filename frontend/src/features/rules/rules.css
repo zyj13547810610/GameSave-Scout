@@ -188,6 +188,25 @@
 .rule-import-item > label { display: grid; gap: .3rem; }
 .rule-new-save-actions { flex-wrap: nowrap; }
 
+.ludusavi-rule-panel { overflow: hidden; border: 1px solid #302b3b; border-radius: .75rem; background: #17141e; }
+.ludusavi-rule-panel .rule-pane-heading p { margin: 0 0 .15rem; color: #9c94aa; font-size: .75rem; }
+.ludusavi-source { border: 1px solid #4d3d65; border-radius: 999px; padding: .2rem .55rem; color: #d2c3ff; white-space: nowrap; }
+.ludusavi-source.active { color: #9de0b9; border-color: #38694d; }
+.ludusavi-source.unavailable { color: #ffb0b0; border-color: #783f4d; }
+.ludusavi-panel-body { display: grid; gap: .8rem; padding: .9rem; }
+.ludusavi-panel-body > p { margin: 0; color: #aaa3b7; }
+.ludusavi-metadata { padding: .75rem; border: 1px solid #302b3b; border-radius: .6rem; background: #121018; }
+.ludusavi-source-url { overflow-wrap: anywhere; }
+.ludusavi-actions { flex-wrap: wrap; }
+.manifest-update-result { margin: 0; border-radius: .5rem; padding: .55rem .65rem; }
+.manifest-update-result.updated,
+.manifest-update-result.not_modified,
+.manifest-update-result.restored { color: #a9e6c4; background: #173226; }
+.manifest-update-result.invalid { color: #f1cc87; background: #332815; }
+.manifest-update-result.failed,
+.manifest-unavailable { color: #ffb0b0; background: #351d25; }
+.manifest-unavailable { margin: 0; border-radius: .5rem; padding: .55rem .65rem; }
+
 .rule-diagnostics { flex: none; margin: 0 .9rem .7rem; padding: .65rem .8rem; border: 1px solid #694f33; border-radius: .65rem; background: #211a16; }
 .rule-diagnostics summary { cursor: pointer; }
 .rule-diagnostics ul { max-height: 9rem; overflow: auto; }

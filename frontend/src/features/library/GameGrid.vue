@@ -22,6 +22,7 @@ const emit = defineEmits<{
   removed: [gameId: string]
   toggleSelection: [game: Game]
   manageGroups: [event: MouseEvent]
+  openRules: [intent: { tab: 'save' | 'ludusavi'; gameId?: string }]
   'update:selectedGameId': [gameId: string | null]
 }>()
 const selected = computed(
@@ -79,5 +80,6 @@ watch(() => props.batchMode, (enabled) => {
     @updated="updated"
     @removed="removed"
     @manage-groups="$emit('manageGroups', $event)"
+    @open-rules="$emit('openRules', $event)"
   />
 </template>

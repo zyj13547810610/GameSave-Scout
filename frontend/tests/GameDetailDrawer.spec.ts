@@ -14,6 +14,16 @@ afterEach(() => {
 })
 
 describe('GameDetailDrawer', () => {
+  it.each(['installed', 'missing', 'save_only'] as const)('opens a game-specific save rule from %s details', async (status) => {
+    const game = fixtureGame({ id: `game-${status}`, status })
+    const wrapper = mount(GameDetailDrawer, {
+      props: { game, bridge: createMockBridge() },
+    })
+
+    await wrapper.get('[data-test="create-game-save-rule"]').trigger('click')
+
+    expect(wrapper.emitted('openRules')).toEqual([[{ tab: 'save', gameId: game.id }]])
+  })
   it('uses the full original cover', () => {
     const wrapper = mount(GameDetailDrawer, {
       props: {

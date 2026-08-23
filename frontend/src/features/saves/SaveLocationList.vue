@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import type { GameShelfBridge, SaveLocation } from '../../api/contracts'
+import type { GameShelfBridge, LudusaviStatus, SaveLocation } from '../../api/contracts'
 import AddSaveLocationDialog from './AddSaveLocationDialog.vue'
-import LudusaviSettings from './LudusaviSettings.vue'
 import { confidenceLabel, saveKindLabel, saveSourceLabel } from './saveLocationLabels'
 import GuidedSavePanel from './GuidedSavePanel.vue'
 import SaveSuggestionList from './SaveSuggestionList.vue'
@@ -12,11 +11,20 @@ const props = defineProps<{
   bridge: GameShelfBridge
   locations?: SaveLocation[]
 }>()
+const emit = defineEmits<{ 'create-game-rule': []; 'open-ludusavi': [] }>()
 const items = ref<SaveLocation[]>(props.locations ? [...props.locations] : [])
 const loading = ref(false)
 const showAdd = ref(false)
 const message = ref('')
+const ludusaviStatus = ref<LudusaviStatus | null>(null)
 const visibleItems = computed(() => items.value.filter((item) => item.enabled))
+const ludusaviLabel = computed(() => {
+  if (!ludusaviStatus.value) return 'Ludusavi：正在读取本地状态'
+  if (!ludusaviStatus.value.available) return 'Ludusavi：规则不可用'
+  return ludusaviStatus.value.source === 'active'
+    ? 'Ludusavi：用户更新规则可用'
+    : 'Ludusavi：随包规则可用'
+})
 
 watch(() => props.locations, (locations) => {
   if (locations) items.value = [...locations]
@@ -24,7 +32,13 @@ watch(() => props.locations, (locations) => {
 
 onMounted(() => {
   if (props.locations === undefined) void refresh()
+  void loadLudusaviStatus()
 })
+
+async function loadLudusaviStatus() {
+  const result = await props.bridge.ludusavi_status()
+  if (result.ok) ludusaviStatus.value = result.data
+}
 
 async function refresh() {
   loading.value = true
@@ -115,10 +129,13 @@ function verifiedLabel(value: string | null): string {
       <p class="status-message" aria-live="polite">{{ loading ? '正在读取存档位置…' : message }}</p>
       <GuidedSavePanel :game-id="gameId" :bridge="bridge" @accepted="refresh" />
       <SaveSuggestionList :game-id="gameId" :bridge="bridge" @accepted="refresh" />
-      <details class="ludusavi-settings-details">
-        <summary>存档规则设置</summary>
-        <LudusaviSettings :bridge="bridge" />
-      </details>
+      <section class="save-rule-links">
+        <p>{{ ludusaviLabel }}</p>
+        <div class="compact-actions">
+          <button data-test="create-game-save-rule" type="button" @click="emit('create-game-rule')">为此游戏创建专属存档规则</button>
+          <button data-test="manage-ludusavi-rules" class="secondary" type="button" @click="emit('open-ludusavi')">管理 Ludusavi 规则</button>
+        </div>
+      </section>
       <AddSaveLocationDialog
         v-if="showAdd"
         :game-id="gameId"

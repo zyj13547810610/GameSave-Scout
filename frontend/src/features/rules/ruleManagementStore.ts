@@ -71,6 +71,11 @@ function cloneDraft(draft: RuleDraft): RuleDraft {
   return JSON.parse(JSON.stringify(draft)) as RuleDraft
 }
 
+function gameRuleId(gameId: string): string {
+  const normalized = gameId.toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '')
+  return `game_${normalized || 'save'}`.slice(0, 80)
+}
+
 export const useRuleManagementStore = defineStore('rule-management', {
   state: () => ({
     activeTab: 'engine' as RuleManagementTab,
@@ -102,6 +107,7 @@ export const useRuleManagementStore = defineStore('rule-management', {
     testing: false,
     mutating: false,
     importing: false,
+    prefilling: false,
     listError: '',
     detailError: '',
     refreshError: '',
@@ -109,6 +115,7 @@ export const useRuleManagementStore = defineStore('rule-management', {
     notice: '',
     importPreview: null as RuleImportPreview | null,
     importError: '',
+    prefillError: '',
     listRequestSequence: 0,
     detailRequestSequence: 0,
     validationRequestSequence: 0,
@@ -173,6 +180,46 @@ export const useRuleManagementStore = defineStore('rule-management', {
       this.filters.kind = tab
       this.filters.offset = 0
       await this.loadList(bridge)
+    },
+    async openIntent(
+      bridge: GameShelfBridge,
+      intent: { tab: RuleManagementTab; gameId?: string },
+    ) {
+      this.prefillError = ''
+      await this.setTab(bridge, intent.tab)
+      if (intent.tab !== 'save' || !intent.gameId) return
+      this.prefilling = true
+      const result = await bridge.get_game_save_rule_prefill({ gameId: intent.gameId })
+      this.prefilling = false
+      if (!result.ok) {
+        this.prefillError = result.error.message
+        return
+      }
+      const prefill = result.data
+      const titles = [...new Set([prefill.title, ...prefill.aliases].map((item) => item.trim()).filter(Boolean))]
+      const draft: RuleDraft = {
+        version: '1',
+        id: gameRuleId(prefill.gameId),
+        label: `${prefill.title} 存档`,
+        type: 'save_game',
+        status: 'experimental',
+        priority: 100,
+        enabled: true,
+        notes: null,
+        references: [],
+        titles,
+        product_ids: [...prefill.productIds],
+        locations: prefill.locations.map((location) => ({
+          kind: location.kind,
+          path: location.pathTemplate,
+          category: location.category,
+          confidence: location.confidence,
+        })),
+      }
+      this.startNew('save_game')
+      this.draft = draft
+      this.dirty = true
+      await this.validateDraft(bridge, draft)
     },
     async selectRule(bridge: GameShelfBridge, qualifiedId: string) {
       const requestId = ++this.detailRequestSequence

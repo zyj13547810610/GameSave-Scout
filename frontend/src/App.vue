@@ -292,6 +292,18 @@ function changeView(view: 'library' | 'batch_saves' | 'rules') {
   }
 }
 
+async function openRules(intent?: { tab: 'engine' | 'save' | 'ludusavi'; gameId?: string }) {
+  if (
+    intent
+    && ruleManagementStore.dirty
+    && !window.confirm('规则管理中还有未保存草稿，确认放弃并打开新的规则管理目标吗？')
+  ) return
+  if (intent && ruleManagementStore.dirty) ruleManagementStore.discardDraft()
+  changeView('rules')
+  if (activeView.value !== 'rules' || !intent) return
+  await ruleManagementStore.openIntent(bridge, intent)
+}
+
 function openCoverWizard() {
   showGroupManager.value = false
   exitBatchMode()
@@ -341,7 +353,7 @@ function restoreGuidedSave(gameId: string) {
       <nav class="primary-navigation" aria-label="主要功能">
         <button data-test="nav-library" type="button" :aria-current="activeView === 'library' ? 'page' : undefined" @click="changeView('library')">游戏库</button>
         <button data-test="nav-batch-saves" type="button" :aria-current="activeView === 'batch_saves' ? 'page' : undefined" @click="changeView('batch_saves')">批量存档</button>
-        <button data-test="nav-rules" type="button" :aria-current="activeView === 'rules' ? 'page' : undefined" @click="changeView('rules')">规则管理</button>
+        <button data-test="nav-rules" type="button" :aria-current="activeView === 'rules' ? 'page' : undefined" @click="openRules()">规则管理</button>
       </nav>
       <ScanRootList
         v-if="state === 'ready' && activeView === 'library'"
@@ -441,6 +453,7 @@ function restoreGuidedSave(gameId: string) {
                 @updated="store.updateGame"
                 @removed="gameRemoved"
                 @manage-groups="openGroupManager"
+                @open-rules="openRules"
               />
             </template>
           </div>

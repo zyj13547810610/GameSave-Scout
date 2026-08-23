@@ -65,7 +65,10 @@ describe('App', () => {
   it('opens rule management as a third first-level page without rebootstrapping', async () => {
     const bootstrap = vi.fn(createMockBridge().bootstrap)
     const listRules = vi.fn(async () => ok({ items: [], total: 0 }))
-    const bridge = createMockBridge({ bootstrap, list_rules: listRules })
+    const prefill = vi.fn(async () => ok({
+      gameId: 'unused', title: 'Unused', aliases: [], productIds: [], locations: [], engineId: null,
+    }))
+    const bridge = createMockBridge({ bootstrap, list_rules: listRules, get_game_save_rule_prefill: prefill })
     const wrapper = mount(App, {
       global: { plugins: [createPinia()], provide: { [bridgeKey as symbol]: bridge } },
     })
@@ -77,6 +80,7 @@ describe('App', () => {
     expect(wrapper.find('[data-test="rule-management-workspace"]').exists()).toBe(true)
     expect(wrapper.find('[data-test="cover-wizard-workspace"]').exists()).toBe(false)
     expect(listRules).toHaveBeenCalledTimes(1)
+    expect(prefill).not.toHaveBeenCalled()
 
     await wrapper.get('[data-test="nav-library"]').trigger('click')
     await wrapper.get('[data-test="nav-rules"]').trigger('click')
@@ -144,6 +148,64 @@ describe('App', () => {
     expect((wrapper.get('input[aria-label="搜索规则"]').element as HTMLInputElement).value).toBe('custom')
     expect(ruleStore.selectedQualifiedId).toBe('builtin:kiri')
     confirm.mockRestore()
+    wrapper.unmount()
+  })
+
+  it('opens a prefilled game-specific save rule without mixing the version into its title', async () => {
+    const prefill = vi.fn(async () => ok({
+      gameId: 'game-1', title: '千恋＊万花', aliases: ['Senren Banka'],
+      productIds: ['vndb:v19073'],
+      locations: [{ kind: 'directory' as const, pathTemplate: '<winDocuments>\\Yuzusoft', category: 'save' as const, confidence: 1 }],
+      engineId: 'kirikiri',
+    }))
+    const game = fixtureGame({ id: 'game-1', title: '千恋＊万花', version: 'v1.0' })
+    const bridge = createMockBridge({
+      async list_games() { return ok([game]) },
+      get_game_save_rule_prefill: prefill,
+    })
+    const wrapper = mount(App, {
+      global: { plugins: [createPinia()], provide: { [bridgeKey as symbol]: bridge } },
+    })
+    await flushPromises()
+    await wrapper.get('[data-test="game-card-game-1"]').trigger('click')
+    await wrapper.get('[data-test="create-game-save-rule"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="nav-rules"]').attributes('aria-current')).toBe('page')
+    expect(wrapper.get('[data-test="rules-tab-save"]').attributes('aria-selected')).toBe('true')
+    expect((wrapper.get('input[name="label"]').element as HTMLInputElement).value).toContain('千恋＊万花')
+    expect((wrapper.get('input[name="label"]').element as HTMLInputElement).value).not.toContain('v1.0')
+    expect(wrapper.findAll('[data-test="game-title-selectors"] input').map((input) => (input.element as HTMLInputElement).value))
+      .toEqual(['千恋＊万花', 'Senren Banka'])
+    expect((wrapper.get('[data-test="location-root"]').element as HTMLSelectElement).value).toBe('<winDocuments>')
+    expect(prefill).toHaveBeenCalledWith({ gameId: 'game-1' })
+    wrapper.unmount()
+  })
+
+  it('keeps the game drawer and dirty rule draft when a game intent is cancelled', async () => {
+    const pinia = createPinia()
+    const prefill = vi.fn(async () => ok({
+      gameId: 'game-1', title: 'Alice', aliases: [], productIds: [], locations: [], engineId: null,
+    }))
+    const bridge = createMockBridge({
+      async list_games() { return ok([fixtureGame({ id: 'game-1' })]) },
+      get_game_save_rule_prefill: prefill,
+    })
+    const wrapper = mount(App, {
+      global: { plugins: [pinia], provide: { [bridgeKey as symbol]: bridge } },
+    })
+    await flushPromises()
+    const ruleStore = useRuleManagementStore(pinia)
+    ruleStore.startNew('engine')
+    ruleStore.dirty = true
+    vi.spyOn(window, 'confirm').mockReturnValueOnce(false)
+    await wrapper.get('[data-test="game-card-game-1"]').trigger('click')
+    await wrapper.get('[data-test="create-game-save-rule"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="game-detail-drawer"]').exists()).toBe(true)
+    expect(ruleStore.dirty).toBe(true)
+    expect(prefill).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 

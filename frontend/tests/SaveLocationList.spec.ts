@@ -1,4 +1,4 @@
-import { enableAutoUnmount, mount } from '@vue/test-utils'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SaveLocation } from '../src/api/contracts'
@@ -92,5 +92,25 @@ describe('SaveLocationList', () => {
     await wrapper.get('[data-test="remove-save-location"]').trigger('click')
 
     expect(remove).not.toHaveBeenCalled()
+  })
+
+  it('shows compact rule links and emits game-rule and Ludusavi intents', async () => {
+    const update = vi.fn(async () => ({ ok: true as const, data: { taskId: 'unused' } }))
+    const wrapper = mount(SaveLocationList, {
+      props: {
+        gameId: 'game-1',
+        bridge: createMockBridge({ update_ludusavi: update }),
+        locations: [],
+      },
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Ludusavi：随包规则可用')
+    expect(update).not.toHaveBeenCalled()
+    await wrapper.get('[data-test="create-game-save-rule"]').trigger('click')
+    await wrapper.get('[data-test="manage-ludusavi-rules"]').trigger('click')
+    expect(wrapper.emitted('create-game-rule')).toHaveLength(1)
+    expect(wrapper.emitted('open-ludusavi')).toHaveLength(1)
+    expect(wrapper.find('.ludusavi-settings').exists()).toBe(false)
   })
 })

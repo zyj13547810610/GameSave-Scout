@@ -2,7 +2,7 @@
 import { storeToRefs } from 'pinia'
 import { nextTick, onMounted, ref } from 'vue'
 import type { Game, GameShelfBridge, RuleImportDecision, RuleType } from '../../api/contracts'
-import LudusaviSettings from '../saves/LudusaviSettings.vue'
+import LudusaviRulePanel from './LudusaviRulePanel.vue'
 import RuleDetailPane from './RuleDetailPane.vue'
 import RuleDiagnosticsPanel from './RuleDiagnosticsPanel.vue'
 import RuleListPane from './RuleListPane.vue'
@@ -20,7 +20,8 @@ const {
   activeTab, filters, items, total, selectedQualifiedId, focusQualifiedId, detail, draft, dirty,
   mobilePane, diagnostics, listLoading, detailLoading, refreshing,
   validation, testResult, testing, mutating, importing, canMarkVerified,
-  listError, detailError, refreshError, mutationError, notice, importPreview, importError,
+  prefilling, listError, detailError, refreshError, mutationError, notice,
+  importPreview, importError, prefillError,
 } = storeToRefs(store)
 const importButton = ref<HTMLButtonElement | null>(null)
 
@@ -136,6 +137,8 @@ defineExpose({ requestLeave })
     <p v-if="listError" class="inline-error rule-workspace-error" role="alert">{{ listError }}</p>
     <p v-if="refreshError" class="inline-error rule-workspace-error" role="alert">{{ refreshError }}</p>
     <p v-if="importError && !importPreview" class="inline-error rule-workspace-error" role="alert">{{ importError }}</p>
+    <p v-if="prefillError" class="inline-error rule-workspace-error" role="alert">{{ prefillError }}</p>
+    <p v-if="prefilling" class="status-message rule-workspace-error" aria-live="polite">正在为游戏准备专属存档规则…</p>
     <p v-if="notice && !detail" class="rule-operation-notice rule-workspace-error" role="status">{{ notice }}</p>
     <RuleDiagnosticsPanel :bridge="bridge" :diagnostics="diagnostics" />
 
@@ -180,7 +183,7 @@ defineExpose({ requestLeave })
       />
     </div>
     <div v-else data-test="ludusavi-settings" class="rule-ludusavi-scroll">
-      <LudusaviSettings :bridge="bridge" />
+      <LudusaviRulePanel :bridge="bridge" />
     </div>
     <RuleImportDialog
       v-if="importPreview"

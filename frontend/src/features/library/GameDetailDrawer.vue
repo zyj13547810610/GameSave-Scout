@@ -17,6 +17,7 @@ const emit = defineEmits<{
   updated: [game: Game]
   removed: [gameId: string]
   manageGroups: [event: MouseEvent]
+  openRules: [intent: { tab: 'save' | 'ludusavi'; gameId?: string }]
 }>()
 const drawer = ref<HTMLElement | null>(null)
 const quickBusy = ref(false)
@@ -156,7 +157,12 @@ onBeforeUnmount(() => {
         <CoverActions :game-id="game.id" :has-cover="Boolean(game.coverOriginalUrl)" :bridge="bridge" @updated="$emit('updated', $event)" />
       </section>
       <GameSettingsPanel :game="game" :bridge="bridge" @updated="$emit('updated', $event)" />
-      <SaveLocationList :game-id="game.id" :bridge="bridge" />
+      <SaveLocationList
+        :game-id="game.id"
+        :bridge="bridge"
+        @create-game-rule="$emit('openRules', { tab: 'save', gameId: game.id })"
+        @open-ludusavi="$emit('openRules', { tab: 'ludusavi' })"
+      />
       <GameGroupSection
         :game="game"
         :groups="groups"

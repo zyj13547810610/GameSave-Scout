@@ -147,7 +147,7 @@
 .path-picker-row { display: grid; gap: .45rem; }
 .path-picker-row span { color: #918b9d; overflow-wrap: anywhere; font-size: .75rem; }
 .save-suggestions { display: grid; gap: .7rem; border-top: 1px solid #302c38; padding-top: 1rem; }
-.save-suggestions h4, .save-suggestions h5, .ludusavi-settings h4 { margin: 0; }
+.save-suggestions h4, .save-suggestions h5 { margin: 0; }
 .suggestion-group { display: grid; gap: .5rem; }
 .suggestion-group h5 { color: #aaa3b7; }
 .save-suggestion-card { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .65rem; align-items: start; border: 1px solid #393641; border-radius: .65rem; padding: .7rem; background: #100f14; cursor: pointer; }
@@ -155,10 +155,9 @@
 .suggestion-content { display: grid; gap: .35rem; min-width: 0; }
 .suggestion-content small { color: #918b9d; overflow-wrap: anywhere; }
 .suggestion-content details { font-size: .75rem; }
-.suggestion-content summary, .ludusavi-settings-details > summary { color: #aaa3b7; cursor: pointer; }
-.ludusavi-settings-details { border-top: 1px solid #302c38; padding-top: .75rem; }
-.ludusavi-settings { display: grid; gap: .7rem; margin-top: .75rem; }
-.ludusavi-settings > p { margin: 0; color: #aaa3b7; font-size: .8rem; }
+.suggestion-content summary { color: #aaa3b7; cursor: pointer; }
+.save-rule-links { display: grid; gap: .55rem; border-top: 1px solid #302c38; padding-top: .8rem; }
+.save-rule-links p { margin: 0; color: #aaa3b7; font-size: .8rem; }
 .manifest-metadata { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .35rem .65rem; margin: 0; font-size: .75rem; }
 .manifest-metadata dt { color: #918b9d; }
 .manifest-metadata dd { margin: 0; overflow-wrap: anywhere; }
@@ -166,7 +165,7 @@
 .manifest-update-result { margin: 0; border-radius: .5rem; padding: .55rem .65rem; }
 .manifest-update-result.updated, .manifest-update-result.not_modified { color: #a9e6c4; background: #173226; }
 .manifest-update-result.invalid { color: #f1cc87; background: #332815; }
-.manifest-update-result.failed, .ludusavi-settings > p.manifest-unavailable { color: #ffb0b0; background: #351d25; }
+.manifest-update-result.failed, .manifest-unavailable { color: #ffb0b0; background: #351d25; }
 .manifest-unavailable { margin: 0; border-radius: .5rem; padding: .55rem .65rem; }
 .guided-save-status-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; margin: 0 0 1rem; border: 1px solid #5a477b; border-radius: .75rem; padding: .75rem 1rem; background: #211a2e; }
 .guided-save-status-bar div { display: grid; min-width: 0; gap: .2rem; }
