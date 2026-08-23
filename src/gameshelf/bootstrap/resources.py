@@ -24,8 +24,9 @@ class ResourcePaths:
 
     root: Path
     ui_dir: Path
-    engine_rules_file: Path
-    save_rules_file: Path
+    builtin_engine_rules_file: Path
+    builtin_save_rules_file: Path
+    rule_schemas_dir: Path
     ludusavi_dir: Path
 
     @classmethod
@@ -51,22 +52,41 @@ class ResourcePaths:
                 else source_root.resolve(strict=False)
             )
             root = repository_root / "resources"
+        rules_dir = root / "rules"
         return cls(
             root=root,
             ui_dir=root / "ui",
-            engine_rules_file=root / "rules" / "engines.yaml",
-            save_rules_file=root / "rules" / "saves.yaml",
-            ludusavi_dir=root / "manifests" / "ludusavi",
+            builtin_engine_rules_file=rules_dir / "builtin" / "engines.yaml",
+            builtin_save_rules_file=rules_dir / "builtin" / "saves.yaml",
+            rule_schemas_dir=rules_dir / "schemas",
+            ludusavi_dir=rules_dir / "ludusavi",
         )
 
     def status(self) -> ResourceStatus:
-        missing: list[str] = []
-        if not (self.ui_dir / "index.html").is_file():
-            missing.append("ui/index.html")
-        if not self.engine_rules_file.is_file():
-            missing.append("rules/engines.yaml")
-        if not self.save_rules_file.is_file():
-            missing.append("rules/saves.yaml")
-        if not self.ludusavi_dir.is_dir():
-            missing.append("manifests/ludusavi")
-        return ResourceStatus(missing=tuple(missing))
+        required = {
+            "ui/index.html": self.ui_dir / "index.html",
+            "rules/builtin/engines.yaml": self.builtin_engine_rules_file,
+            "rules/builtin/saves.yaml": self.builtin_save_rules_file,
+            "rules/schemas/engines.schema.json": (
+                self.rule_schemas_dir / "engines.schema.json"
+            ),
+            "rules/schemas/saves.schema.json": (
+                self.rule_schemas_dir / "saves.schema.json"
+            ),
+            "rules/schemas/README.md": self.rule_schemas_dir / "README.md",
+            "rules/ludusavi/manifest.yaml": self.ludusavi_dir / "manifest.yaml",
+            "rules/ludusavi/manifest-meta.json": (
+                self.ludusavi_dir / "manifest-meta.json"
+            ),
+            "rules/ludusavi/manifest-index.sqlite": (
+                self.ludusavi_dir / "manifest-index.sqlite"
+            ),
+            "rules/ludusavi/LICENSE": self.ludusavi_dir / "LICENSE",
+        }
+        return ResourceStatus(
+            missing=tuple(
+                relative_path
+                for relative_path, path in required.items()
+                if not path.is_file()
+            )
+        )

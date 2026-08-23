@@ -72,7 +72,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--directory",
         type=Path,
-        default=REPOSITORY_ROOT / "resources" / "manifests" / "ludusavi",
+        default=REPOSITORY_ROOT / "resources" / "rules" / "ludusavi",
         help="包含 manifest-meta.json 和 manifest-index.sqlite 的目录。",
     )
     arguments = parser.parse_args(argv)

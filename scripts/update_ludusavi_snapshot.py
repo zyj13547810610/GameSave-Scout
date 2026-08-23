@@ -45,7 +45,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="仅从当前已固定清单重新生成 SQLite 索引，不访问网络。",
     )
     arguments = parser.parse_args(argv)
-    destination = REPOSITORY_ROOT / "resources" / "manifests" / "ludusavi"
+    destination = REPOSITORY_ROOT / "resources" / "rules" / "ludusavi"
     if arguments.rebuild_index_only:
         index = rebuild_index_from_snapshot(destination)
         print(f"已重建 Ludusavi 索引：{index}")

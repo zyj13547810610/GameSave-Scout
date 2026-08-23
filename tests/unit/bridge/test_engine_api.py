@@ -49,7 +49,11 @@ def engine_api(tmp_path: Path) -> Iterator["EngineApiHarness"]:
         ).rowcount
     ).result()
     detector = EngineDetectionService.from_rules_file(
-        Path(__file__).parents[3] / "resources" / "rules" / "engines.yaml"
+        Path(__file__).parents[3]
+        / "resources"
+        / "rules"
+        / "builtin"
+        / "engines.yaml"
     )
     api = BridgeApi(
         paths,

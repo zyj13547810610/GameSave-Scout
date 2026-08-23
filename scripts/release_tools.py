@@ -905,7 +905,7 @@ def collect_release_metadata(
     )
     try:
         engine_document = yaml.safe_load(
-            (root / "resources" / "rules" / "engines.yaml").read_text(
+            (root / "resources" / "rules" / "builtin" / "engines.yaml").read_text(
                 encoding="utf-8"
             )
         )
@@ -921,7 +921,7 @@ def collect_release_metadata(
             (
                 root
                 / "resources"
-                / "manifests"
+                / "rules"
                 / "ludusavi"
                 / "manifest-meta.json"
             ).read_text(encoding="utf-8")
@@ -1171,10 +1171,10 @@ def _validate_release_layout(
         raise ReleaseToolError(f"_internal 和 {mode_directory} 必须是目录。")
     critical_files = [
         "_internal/resources/ui/index.html",
-        "_internal/resources/rules/engines.yaml",
-        "_internal/resources/manifests/ludusavi/manifest.yaml",
-        "_internal/resources/manifests/ludusavi/manifest-meta.json",
-        "_internal/resources/manifests/ludusavi/manifest-index.sqlite",
+        "_internal/resources/rules/builtin/engines.yaml",
+        "_internal/resources/rules/ludusavi/manifest.yaml",
+        "_internal/resources/rules/ludusavi/manifest-meta.json",
+        "_internal/resources/rules/ludusavi/manifest-index.sqlite",
         "_internal/gameshelf/db/migrations/0001_initial.sql",
         "_internal/gameshelf/db/migrations/0002_initial.sql",
         "_internal/gameshelf/db/migrations/0003_initial.sql",

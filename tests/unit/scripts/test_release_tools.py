@@ -410,10 +410,10 @@ def test_release_manifest_records_environment_and_every_payload_file(
         "_internal/gameshelf/db/migrations/0002_initial.sql",
         "_internal/gameshelf/db/migrations/0003_initial.sql",
         "_internal/gameshelf/db/migrations/0004_initial.sql",
-        "_internal/resources/manifests/ludusavi/manifest-index.sqlite",
-        "_internal/resources/manifests/ludusavi/manifest-meta.json",
-        "_internal/resources/manifests/ludusavi/manifest.yaml",
-        "_internal/resources/rules/engines.yaml",
+        "_internal/resources/rules/builtin/engines.yaml",
+        "_internal/resources/rules/ludusavi/manifest-index.sqlite",
+        "_internal/resources/rules/ludusavi/manifest-meta.json",
+        "_internal/resources/rules/ludusavi/manifest.yaml",
         "_internal/resources/ui/index.html",
         "runtime/LICENSE.txt",
         "runtime/msedgewebview2.exe",
@@ -784,8 +784,10 @@ def _minimal_release_tree(
     versions = ReleaseVersions("0.1.0")
     root = tmp_path / versions.name_for(mode)
     (root / "_internal" / "resources" / "ui").mkdir(parents=True)
-    (root / "_internal" / "resources" / "rules").mkdir()
-    (root / "_internal" / "resources" / "manifests" / "ludusavi").mkdir(
+    (root / "_internal" / "resources" / "rules" / "builtin").mkdir(
+        parents=True
+    )
+    (root / "_internal" / "resources" / "rules" / "ludusavi").mkdir(
         parents=True
     )
     (root / "_internal" / "gameshelf" / "db" / "migrations").mkdir(
@@ -800,11 +802,18 @@ def _minimal_release_tree(
         "<!doctype html>",
         encoding="utf-8",
     )
-    (root / "_internal" / "resources" / "rules" / "engines.yaml").write_text(
+    (
+        root
+        / "_internal"
+        / "resources"
+        / "rules"
+        / "builtin"
+        / "engines.yaml"
+    ).write_text(
         'version: "2026.08.13-2"\nrules: []\n',
         encoding="utf-8",
     )
-    ludusavi = root / "_internal" / "resources" / "manifests" / "ludusavi"
+    ludusavi = root / "_internal" / "resources" / "rules" / "ludusavi"
     (ludusavi / "manifest.yaml").write_text("{}\n", encoding="utf-8")
     (ludusavi / "manifest-meta.json").write_text("{}\n", encoding="utf-8")
     (ludusavi / "manifest-index.sqlite").write_bytes(b"sqlite")

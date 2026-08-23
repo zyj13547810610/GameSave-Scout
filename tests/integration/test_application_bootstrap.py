@@ -191,8 +191,8 @@ def test_application_uses_injected_resource_paths(tmp_path: Path) -> None:
     ui_dir.mkdir(parents=True)
     ui_marker = "injected portable UI"
     (ui_dir / "index.html").write_text(ui_marker, encoding="utf-8")
-    rules_file = resource_root / "rules" / "engines.yaml"
-    rules_file.parent.mkdir()
+    rules_file = resource_root / "rules" / "builtin" / "engines.yaml"
+    rules_file.parent.mkdir(parents=True)
     rules_file.write_text(
         """\
 version: test
@@ -206,13 +206,14 @@ rules:
 """,
         encoding="utf-8",
     )
-    save_rules_file = resource_root / "rules" / "saves.yaml"
+    save_rules_file = resource_root / "rules" / "builtin" / "saves.yaml"
     save_rules_file.write_text("version: test\nrules: []\n", encoding="utf-8")
     resources = ResourcePaths(
         root=resource_root,
         ui_dir=ui_dir,
-        engine_rules_file=rules_file,
-        save_rules_file=save_rules_file,
+        builtin_engine_rules_file=rules_file,
+        builtin_save_rules_file=save_rules_file,
+        rule_schemas_dir=resource_root / "rules" / "schemas",
         ludusavi_dir=resource_root / "missing-ludusavi",
     )
 
@@ -250,16 +251,17 @@ def test_application_degrades_to_builtin_detectors_for_invalid_rules(
     ui_dir = resource_root / "ui"
     ui_dir.mkdir(parents=True)
     (ui_dir / "index.html").write_text("test ui", encoding="utf-8")
-    rules_file = resource_root / "rules" / "engines.yaml"
-    rules_file.parent.mkdir()
+    rules_file = resource_root / "rules" / "builtin" / "engines.yaml"
+    rules_file.parent.mkdir(parents=True)
     rules_file.write_text(rules_content, encoding="utf-8")
-    save_rules_file = resource_root / "rules" / "saves.yaml"
+    save_rules_file = resource_root / "rules" / "builtin" / "saves.yaml"
     save_rules_file.write_text("version: test\nrules: []\n", encoding="utf-8")
     resources = ResourcePaths(
         root=resource_root,
         ui_dir=ui_dir,
-        engine_rules_file=rules_file,
-        save_rules_file=save_rules_file,
+        builtin_engine_rules_file=rules_file,
+        builtin_save_rules_file=save_rules_file,
+        rule_schemas_dir=resource_root / "rules" / "schemas",
         ludusavi_dir=resource_root / "missing-ludusavi",
     )
     paths = AppPaths.from_root(tmp_path / "便携应用")
@@ -291,8 +293,9 @@ def test_application_rejects_missing_engine_rules_before_database_start(
     resources = ResourcePaths(
         root=resource_root,
         ui_dir=ui_dir,
-        engine_rules_file=resource_root / "rules" / "missing.yaml",
-        save_rules_file=resource_root / "rules" / "saves.yaml",
+        builtin_engine_rules_file=resource_root / "rules" / "missing.yaml",
+        builtin_save_rules_file=resource_root / "rules" / "builtin" / "saves.yaml",
+        rule_schemas_dir=resource_root / "rules" / "schemas",
         ludusavi_dir=resource_root / "missing-ludusavi",
     )
     paths = AppPaths.from_root(tmp_path / "便携应用")
@@ -318,8 +321,8 @@ def test_application_disables_only_invalid_builtin_save_rules(
     ui_dir = resource_root / "ui"
     ui_dir.mkdir(parents=True)
     (ui_dir / "index.html").write_text("test ui", encoding="utf-8")
-    rules_dir = resource_root / "rules"
-    rules_dir.mkdir()
+    rules_dir = resource_root / "rules" / "builtin"
+    rules_dir.mkdir(parents=True)
     engine_rules_file = rules_dir / "engines.yaml"
     engine_rules_file.write_text("version: test\nrules: []\n", encoding="utf-8")
     save_rules_file = rules_dir / "saves.yaml"
@@ -327,8 +330,9 @@ def test_application_disables_only_invalid_builtin_save_rules(
     resources = ResourcePaths(
         root=resource_root,
         ui_dir=ui_dir,
-        engine_rules_file=engine_rules_file,
-        save_rules_file=save_rules_file,
+        builtin_engine_rules_file=engine_rules_file,
+        builtin_save_rules_file=save_rules_file,
+        rule_schemas_dir=resource_root / "rules" / "schemas",
         ludusavi_dir=resource_root / "missing-ludusavi",
     )
     paths = AppPaths.from_root(tmp_path / "便携应用")
@@ -354,15 +358,16 @@ def test_application_rejects_missing_save_rules_before_database_start(
     ui_dir = resource_root / "ui"
     ui_dir.mkdir(parents=True)
     (ui_dir / "index.html").write_text("test ui", encoding="utf-8")
-    rules_dir = resource_root / "rules"
-    rules_dir.mkdir()
+    rules_dir = resource_root / "rules" / "builtin"
+    rules_dir.mkdir(parents=True)
     engine_rules_file = rules_dir / "engines.yaml"
     engine_rules_file.write_text("version: test\nrules: []\n", encoding="utf-8")
     resources = ResourcePaths(
         root=resource_root,
         ui_dir=ui_dir,
-        engine_rules_file=engine_rules_file,
-        save_rules_file=rules_dir / "missing-saves.yaml",
+        builtin_engine_rules_file=engine_rules_file,
+        builtin_save_rules_file=rules_dir / "missing-saves.yaml",
+        rule_schemas_dir=resource_root / "rules" / "schemas",
         ludusavi_dir=resource_root / "missing-ludusavi",
     )
     paths = AppPaths.from_root(tmp_path / "便携应用")

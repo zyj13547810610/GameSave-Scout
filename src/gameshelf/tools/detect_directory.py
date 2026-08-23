@@ -85,7 +85,7 @@ def main(
         )
         return 2
     service = EngineDetectionService.from_rules_file(
-        (resources or ResourcePaths.for_runtime()).engine_rules_file
+        (resources or ResourcePaths.for_runtime()).builtin_engine_rules_file
     )
     outcome = service.detect(game_dir, executable)
     payload: dict[str, object]

@@ -117,13 +117,13 @@ def build_application(
     logger = configure_logging(paths.logs_dir)
     config = ConfigService(JsonConfigStore(paths.config_file))
     engine_detection = _load_engine_detection(
-        resource_paths.engine_rules_file,
+        resource_paths.builtin_engine_rules_file,
         logger,
     )
     known_folders = WindowsKnownFolderProvider().load()
     resolver = PathTemplateResolver(known_folders)
     builtin_save_rules = _load_builtin_save_rules(
-        resource_paths.save_rules_file,
+        resource_paths.builtin_save_rules_file,
         resolver,
         logger,
     )
@@ -166,11 +166,11 @@ def build_application(
         shell,
         registry,
     )
-    custom_manifest_directory = paths.manifests_dir / "custom"
+    custom_manifest_directory = paths.legacy_manifests_dir / "custom"
     custom_provider = CustomManifestProvider(custom_manifest_directory)
     ludusavi_provider = LudusaviProvider(
         resource_dir=resource_paths.ludusavi_dir,
-        active_dir=paths.manifests_dir / "ludusavi",
+        active_dir=paths.ludusavi_active_dir,
         temp_dir=paths.temp_dir,
     )
     static_discovery = StaticSaveDiscovery(

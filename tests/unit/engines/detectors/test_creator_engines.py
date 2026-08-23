@@ -36,7 +36,7 @@ from gameshelf.scanning.pe_metadata import PeMetadata
     ],
 )
 def test_mtool_listed_rules(file_tree, engine_id, files) -> None:
-    rules = load_engine_rules(Path("resources/rules/engines.yaml"))
+    rules = load_engine_rules(Path("resources/rules/builtin/engines.yaml"))
     outcome = DetectorRegistry(RuleDetector(rule) for rule in rules).detect(
         file_tree(files), None
     )

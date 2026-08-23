@@ -115,7 +115,16 @@ def test_pyinstaller_bundle_includes_both_declarative_rule_catalogs(
     pyinstaller_build: tuple[Path, Path],
 ) -> None:
     dist_path, _ = pyinstaller_build
-    rules = dist_path / "GameShelf" / "_internal" / "resources" / "rules"
+    resources = dist_path / "GameShelf" / "_internal" / "resources"
+    rules = resources / "rules"
 
-    assert (rules / "engines.yaml").is_file()
-    assert (rules / "saves.yaml").is_file()
+    assert (rules / "builtin" / "engines.yaml").is_file()
+    assert (rules / "builtin" / "saves.yaml").is_file()
+    assert (rules / "schemas" / "engines.schema.json").is_file()
+    assert (rules / "schemas" / "saves.schema.json").is_file()
+    assert (rules / "schemas" / "README.md").is_file()
+    assert (rules / "ludusavi" / "manifest.yaml").is_file()
+    assert (rules / "ludusavi" / "manifest-meta.json").is_file()
+    assert (rules / "ludusavi" / "manifest-index.sqlite").is_file()
+    assert (rules / "ludusavi" / "LICENSE").is_file()
+    assert not (resources / "manifests").exists()

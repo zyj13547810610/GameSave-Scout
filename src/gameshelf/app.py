@@ -55,16 +55,33 @@ def main(
     try:
         resources = ResourcePaths.for_runtime()
         resource_status = resources.status()
+        missing_resources = set(resource_status.missing)
         checks.update(
             {
                 "resources": resource_status.ok,
-                "ui": "ui/index.html" not in resource_status.missing,
+                "ui": "ui/index.html" not in missing_resources,
                 "engineRules": (
-                    "rules/engines.yaml" not in resource_status.missing
+                    "rules/builtin/engines.yaml" not in missing_resources
                 ),
-                "saveRules": "rules/saves.yaml" not in resource_status.missing,
-                "ludusavi": (
-                    "manifests/ludusavi" not in resource_status.missing
+                "saveRules": (
+                    "rules/builtin/saves.yaml" not in missing_resources
+                ),
+                "ruleSchemas": all(
+                    path not in missing_resources
+                    for path in (
+                        "rules/schemas/engines.schema.json",
+                        "rules/schemas/saves.schema.json",
+                        "rules/schemas/README.md",
+                    )
+                ),
+                "ludusavi": all(
+                    path not in missing_resources
+                    for path in (
+                        "rules/ludusavi/manifest.yaml",
+                        "rules/ludusavi/manifest-meta.json",
+                        "rules/ludusavi/manifest-index.sqlite",
+                        "rules/ludusavi/LICENSE",
+                    )
                 ),
             }
         )

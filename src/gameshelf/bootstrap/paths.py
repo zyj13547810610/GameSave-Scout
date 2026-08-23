@@ -34,7 +34,12 @@ class AppPaths:
     config_file: Path
     covers_original_dir: Path
     covers_thumbs_dir: Path
-    manifests_dir: Path
+    rules_dir: Path
+    user_rules_dir: Path
+    user_engine_rules_dir: Path
+    user_save_rules_dir: Path
+    ludusavi_active_dir: Path
+    rule_settings_file: Path
     webview_dir: Path
     backups_dir: Path
     logs_dir: Path
@@ -44,6 +49,8 @@ class AppPaths:
     def from_root(cls, app_root: Path) -> AppPaths:
         root = app_root.resolve(strict=False)
         data = root / "data"
+        rules = data / "rules"
+        user_rules = rules / "user"
         return cls(
             app_root=root,
             data_dir=data,
@@ -51,7 +58,12 @@ class AppPaths:
             config_file=data / "config.json",
             covers_original_dir=data / "covers" / "original",
             covers_thumbs_dir=data / "covers" / "thumbs",
-            manifests_dir=data / "manifests",
+            rules_dir=rules,
+            user_rules_dir=user_rules,
+            user_engine_rules_dir=user_rules / "engines",
+            user_save_rules_dir=user_rules / "saves",
+            ludusavi_active_dir=rules / "ludusavi",
+            rule_settings_file=rules / "settings.json",
             webview_dir=data / "webview",
             backups_dir=data / "db_backups",
             logs_dir=data / "logs",
@@ -62,12 +74,22 @@ class AppPaths:
     def for_runtime(cls) -> AppPaths:
         return cls.from_root(runtime_root())
 
+    @property
+    def legacy_manifests_dir(self) -> Path:
+        """Return the retired V0.2 directory without creating or owning it."""
+
+        return self.data_dir / "manifests"
+
     def required_directories(self) -> tuple[Path, ...]:
         return (
             self.data_dir,
             self.covers_original_dir,
             self.covers_thumbs_dir,
-            self.manifests_dir,
+            self.rules_dir,
+            self.user_rules_dir,
+            self.user_engine_rules_dir,
+            self.user_save_rules_dir,
+            self.ludusavi_active_dir,
             self.webview_dir,
             self.backups_dir,
             self.logs_dir,
@@ -79,6 +101,7 @@ class AppPaths:
             *self.required_directories(),
             self.database_file,
             self.config_file,
+            self.rule_settings_file,
         )
 
     def ensure_writable(self) -> None:

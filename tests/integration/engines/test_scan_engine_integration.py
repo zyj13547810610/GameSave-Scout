@@ -32,7 +32,11 @@ def engine_scan_harness(tmp_path: Path) -> Iterator["EngineScanHarness"]:
     root_path.mkdir()
     root = library.add_root(str(root_path), "children", 1, [])
     detector = EngineDetectionService.from_rules_file(
-        Path(__file__).parents[3] / "resources" / "rules" / "engines.yaml"
+        Path(__file__).parents[3]
+        / "resources"
+        / "rules"
+        / "builtin"
+        / "engines.yaml"
     )
     harness = EngineScanHarness(
         root_path,
@@ -129,7 +133,11 @@ def test_rescan_uses_valid_manual_executable_for_engine_detection(
     data.mkdir()
     (data / "globalgamemanagers").write_bytes(b"unity")
     detector = EngineDetectionService.from_rules_file(
-        Path(__file__).parents[3] / "resources" / "rules" / "engines.yaml"
+        Path(__file__).parents[3]
+        / "resources"
+        / "rules"
+        / "builtin"
+        / "engines.yaml"
     )
     engine_scan_harness.scanner = ScanService(
         LibraryRepository(engine_scan_harness.factory),

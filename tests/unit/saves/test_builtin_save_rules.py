@@ -151,7 +151,7 @@ rules:
 
 
 def test_bundled_catalog_contains_only_publicly_supported_generic_templates() -> None:
-    rules = load_save_rules(Path("resources/rules/saves.yaml"))
+    rules = load_save_rules(Path("resources/rules/builtin/saves.yaml"))
 
     assert {rule.metadata.rule_id for rule in rules} == {
         "godot_user_data",

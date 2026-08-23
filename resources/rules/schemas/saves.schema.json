@@ -1,0 +1,178 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gameshelf.local/schemas/saves.schema.json",
+  "title": "GameShelf declarative save-location rules",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "rules"],
+  "properties": {
+    "version": {"type": "string", "minLength": 1},
+    "rules": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {"$ref": "#/$defs/rule"}
+    }
+  },
+  "$defs": {
+    "httpsReference": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://"
+    },
+    "selector": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1, "maxLength": 256}
+    },
+    "location": {
+      "type": "object",
+      "additionalProperties": false,
+      "x-gameshelf-filesystem-tokens": [
+        "<game>",
+        "<home>",
+        "<winAppData>",
+        "<winLocalAppData>",
+        "<winLocalAppDataLow>",
+        "<winDocuments>",
+        "<winSavedGames>",
+        "<winProgramData>",
+        "<winPublic>",
+        "<winDir>"
+      ],
+      "x-gameshelf-metadata-fields": [
+        "company_name",
+        "product_name",
+        "project_name"
+      ],
+      "x-gameshelf-registry-roots": [
+        "HKEY_CURRENT_USER",
+        "HKEY_LOCAL_MACHINE"
+      ],
+      "required": ["kind", "path", "category", "confidence"],
+      "properties": {
+        "kind": {"enum": ["directory", "file", "glob", "registry"]},
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "description": "文件系统路径从白名单令牌开始；注册表仅允许 HKCU/HKLM。元数据占位符仅允许 company_name、product_name、project_name。"
+        },
+        "category": {"enum": ["save", "config", "other"]},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {"kind": {"const": "registry"}},
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "path": {
+                "pattern": "^HKEY_(CURRENT_USER|LOCAL_MACHINE)[\\\\/]"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "path": {
+                "pattern": "^<(game|home|winAppData|winLocalAppData|winLocalAppDataLow|winDocuments|winSavedGames|winProgramData|winPublic|winDir)>([\\\\/].*)?$"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "commonProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9_]{1,80}$"},
+        "type": {"enum": ["save_game", "save_engine"]},
+        "status": {"enum": ["formal", "experimental"]},
+        "priority": {"type": "integer", "minimum": -1000, "maximum": 1000},
+        "enabled": {"type": "boolean"},
+        "references": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/httpsReference"},
+          "uniqueItems": true
+        },
+        "locations": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": {"$ref": "#/$defs/location"}
+        }
+      }
+    },
+    "rule": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "type", "titles", "locations"],
+          "properties": {
+            "id": {"type": "string", "pattern": "^[a-z0-9_]{1,80}$"},
+            "type": {"const": "save_game"},
+            "status": {"enum": ["formal", "experimental"]},
+            "priority": {"type": "integer", "minimum": -1000, "maximum": 1000},
+            "enabled": {"type": "boolean"},
+            "references": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/httpsReference"},
+              "uniqueItems": true
+            },
+            "titles": {"$ref": "#/$defs/selector"},
+            "product_ids": {
+              "type": "array",
+              "maxItems": 64,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "pattern": "^(steam|gog|epic|itch|vndb|dlsite):[A-Za-z0-9._-]{1,96}$"
+              }
+            },
+            "locations": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 32,
+              "items": {"$ref": "#/$defs/location"}
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "type", "engine_ids", "locations"],
+          "properties": {
+            "id": {"type": "string", "pattern": "^[a-z0-9_]{1,80}$"},
+            "type": {"const": "save_engine"},
+            "status": {"enum": ["formal", "experimental"]},
+            "priority": {"type": "integer", "minimum": -1000, "maximum": 1000},
+            "enabled": {"type": "boolean"},
+            "references": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/httpsReference"},
+              "uniqueItems": true
+            },
+            "engine_ids": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 64,
+              "uniqueItems": true,
+              "items": {"type": "string", "pattern": "^[a-z0-9_]{1,80}$"}
+            },
+            "locations": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 32,
+              "items": {"$ref": "#/$defs/location"}
+            }
+          }
+        }
+      ]
+    }
+  }
+}

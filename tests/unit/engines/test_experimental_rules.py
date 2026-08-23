@@ -111,5 +111,5 @@ def test_format_header_without_required_structure_is_unknown(
 
 
 def _registry() -> DetectorRegistry:
-    rules = load_engine_rules(Path("resources/rules/engines.yaml"))
+    rules = load_engine_rules(Path("resources/rules/builtin/engines.yaml"))
     return DetectorRegistry(RuleDetector(rule) for rule in rules)

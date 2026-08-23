@@ -7,7 +7,7 @@ from gameshelf.engines.rule_detector import RuleDetector
 from gameshelf.engines.rule_schema import load_engine_rules
 from gameshelf.engines.service import EngineDetectionService
 
-RULES_FILE = Path("resources/rules/engines.yaml")
+RULES_FILE = Path("resources/rules/builtin/engines.yaml")
 
 
 def test_livemaker_vff_archive_is_detected(tmp_path: Path) -> None:

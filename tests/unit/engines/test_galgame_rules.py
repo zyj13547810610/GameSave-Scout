@@ -24,7 +24,7 @@ def test_galgame_signature_combinations(tmp_path: Path, engine_id: str, files) -
         path = tmp_path / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(content)
-    rules = load_engine_rules(Path("resources/rules/engines.yaml"))
+    rules = load_engine_rules(Path("resources/rules/builtin/engines.yaml"))
     outcome = DetectorRegistry(RuleDetector(rule) for rule in rules).detect(tmp_path, None)
     assert outcome.best is not None and outcome.best.engine_id == engine_id
 
@@ -32,7 +32,7 @@ def test_galgame_signature_combinations(tmp_path: Path, engine_id: str, files) -
 @pytest.mark.parametrize("name", ["data.arc", "data.dat", "data.int", "data.pac", "Game.exe"])
 def test_generic_file_alone_remains_unknown(tmp_path: Path, name: str) -> None:
     (tmp_path / name).write_bytes(b"random generic bytes")
-    rules = load_engine_rules(Path("resources/rules/engines.yaml"))
+    rules = load_engine_rules(Path("resources/rules/builtin/engines.yaml"))
     outcome = DetectorRegistry(RuleDetector(rule) for rule in rules).detect(tmp_path, None)
     assert outcome.best is None
 
@@ -40,7 +40,7 @@ def test_generic_file_alone_remains_unknown(tmp_path: Path, name: str) -> None:
 def test_artemis_pfs_extension_without_magic_remains_unknown(tmp_path: Path) -> None:
     (tmp_path / "assets_01.pfs").write_bytes(b"not pfs")
     (tmp_path / "movie.mja").write_bytes(b"MJA0")
-    rules = load_engine_rules(Path("resources/rules/engines.yaml"))
+    rules = load_engine_rules(Path("resources/rules/builtin/engines.yaml"))
 
     outcome = DetectorRegistry(RuleDetector(rule) for rule in rules).detect(tmp_path, None)
 
@@ -50,7 +50,7 @@ def test_artemis_pfs_extension_without_magic_remains_unknown(tmp_path: Path) -> 
 def test_artemis_reports_the_actual_variable_pfs_path(tmp_path: Path) -> None:
     (tmp_path / "assets_01.pfs").write_bytes(b"pf\0\0")
     (tmp_path / "movie.mja").write_bytes(b"MJA0")
-    rules = load_engine_rules(Path("resources/rules/engines.yaml"))
+    rules = load_engine_rules(Path("resources/rules/builtin/engines.yaml"))
 
     outcome = DetectorRegistry(RuleDetector(rule) for rule in rules).detect(tmp_path, None)
 
@@ -77,7 +77,7 @@ def test_siglus_accepts_exact_scene_file_variants(
         ),
     )
 
-    rules = load_engine_rules(Path("resources/rules/engines.yaml"))
+    rules = load_engine_rules(Path("resources/rules/builtin/engines.yaml"))
     outcome = DetectorRegistry(RuleDetector(rule) for rule in rules).detect(
         tmp_path, tmp_path / "SiglusEngine.exe"
     )
@@ -100,7 +100,7 @@ def test_siglus_scene_without_pe_product_evidence_remains_unknown(
         lambda _: PeMetadata("", "", "", "unknown"),
     )
 
-    rules = load_engine_rules(Path("resources/rules/engines.yaml"))
+    rules = load_engine_rules(Path("resources/rules/builtin/engines.yaml"))
     outcome = DetectorRegistry(RuleDetector(rule) for rule in rules).detect(
         tmp_path, None
     )
@@ -118,7 +118,7 @@ def test_siglus_pe_product_with_unrelated_scene_file_remains_unknown(
         lambda _: PeMetadata("Siglus", "", "VisualArt's", "x86"),
     )
 
-    rules = load_engine_rules(Path("resources/rules/engines.yaml"))
+    rules = load_engine_rules(Path("resources/rules/builtin/engines.yaml"))
     outcome = DetectorRegistry(RuleDetector(rule) for rule in rules).detect(
         tmp_path, None
     )

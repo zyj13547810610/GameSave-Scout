@@ -57,7 +57,7 @@ def test_detect_directory_uses_injected_engine_rules(tmp_path: Path, capsys) -> 
     game = tmp_path / "Sample"
     game.mkdir()
     (game / "injected.marker").write_text("marker", encoding="utf-8")
-    rules_file = tmp_path / "resources" / "rules" / "engines.yaml"
+    rules_file = tmp_path / "resources" / "rules" / "builtin" / "engines.yaml"
     rules_file.parent.mkdir(parents=True)
     rules_file.write_text(
         """\
@@ -75,9 +75,12 @@ rules:
     resources = ResourcePaths(
         root=tmp_path / "resources",
         ui_dir=tmp_path / "resources" / "ui",
-        engine_rules_file=rules_file,
-        save_rules_file=tmp_path / "resources" / "rules" / "saves.yaml",
-        ludusavi_dir=tmp_path / "resources" / "manifests" / "ludusavi",
+        builtin_engine_rules_file=rules_file,
+        builtin_save_rules_file=(
+            tmp_path / "resources" / "rules" / "builtin" / "saves.yaml"
+        ),
+        rule_schemas_dir=tmp_path / "resources" / "rules" / "schemas",
+        ludusavi_dir=tmp_path / "resources" / "rules" / "ludusavi",
     )
 
     exit_code = main([str(game)], resources=resources)

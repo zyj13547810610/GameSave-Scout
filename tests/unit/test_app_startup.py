@@ -92,6 +92,7 @@ def test_json_smoke_writes_success_without_creating_desktop_window(
         "ui": True,
         "engineRules": True,
         "saveRules": True,
+        "ruleSchemas": True,
         "ludusavi": True,
         "desktopDependencies": True,
         "webviewRuntime": True,
@@ -180,6 +181,7 @@ def test_json_smoke_writes_failure_without_showing_frozen_dialog(
         "ui": False,
         "engineRules": False,
         "saveRules": False,
+        "ruleSchemas": False,
         "ludusavi": False,
     }
     assert "ui/index.html" in payload["error"]
@@ -393,16 +395,27 @@ def _create_required_resources(resource_root: Path) -> None:
         "<!doctype html>",
         encoding="utf-8",
     )
-    (resource_root / "rules").mkdir()
-    (resource_root / "rules" / "engines.yaml").write_text(
+    builtin = resource_root / "rules" / "builtin"
+    builtin.mkdir(parents=True)
+    (builtin / "engines.yaml").write_text(
         "version: test\nrules: []\n",
         encoding="utf-8",
     )
-    (resource_root / "rules" / "saves.yaml").write_text(
+    (builtin / "saves.yaml").write_text(
         "version: test\nrules: []\n",
         encoding="utf-8",
     )
-    (resource_root / "manifests" / "ludusavi").mkdir(parents=True)
+    schemas = resource_root / "rules" / "schemas"
+    schemas.mkdir()
+    (schemas / "engines.schema.json").write_text("{}", encoding="utf-8")
+    (schemas / "saves.schema.json").write_text("{}", encoding="utf-8")
+    (schemas / "README.md").write_text("schema", encoding="utf-8")
+    ludusavi = resource_root / "rules" / "ludusavi"
+    ludusavi.mkdir()
+    (ludusavi / "manifest.yaml").write_text("{}", encoding="utf-8")
+    (ludusavi / "manifest-meta.json").write_text("{}", encoding="utf-8")
+    (ludusavi / "manifest-index.sqlite").write_bytes(b"sqlite")
+    (ludusavi / "LICENSE").write_text("license", encoding="utf-8")
 
 
 def _write_release_manifest(root: Path, *, mode: str) -> None:

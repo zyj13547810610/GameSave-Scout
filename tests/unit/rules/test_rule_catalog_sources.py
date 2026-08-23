@@ -4,7 +4,7 @@ from gameshelf.engines.rule_schema import load_engine_rules
 
 
 def test_every_formal_builtin_engine_rule_has_public_references() -> None:
-    rules = load_engine_rules(Path("resources/rules/engines.yaml"))
+    rules = load_engine_rules(Path("resources/rules/builtin/engines.yaml"))
 
     missing = tuple(
         rule.metadata.qualified_id
