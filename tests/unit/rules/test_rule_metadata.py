@@ -26,7 +26,36 @@ def test_builtin_metadata_keeps_compatibility_id_and_exposes_qualified_id() -> N
     assert metadata.namespace == "builtin"
     assert metadata.source == "builtin"
     assert metadata.qualified_id == "builtin:qlie"
+    assert metadata.verification_label == "实验"
     assert metadata.references == ("https://github.com/morkt/GARbro",)
+
+
+@pytest.mark.parametrize(
+    ("source", "status", "expected"),
+    [
+        ("builtin", "formal", "正式"),
+        ("builtin", "experimental", "实验"),
+        ("user", "formal", "已验证"),
+        ("user", "experimental", "实验"),
+    ],
+)
+def test_verification_label_maps_source_and_status_for_ui(
+    source: str,
+    status: str,
+    expected: str,
+) -> None:
+    metadata = build_rule_metadata(
+        rule_id="rule",
+        rule_type="engine",
+        source=source,
+        status=status,
+        version="1",
+        references=(),
+        priority=0,
+        enabled=True,
+    )
+
+    assert metadata.verification_label == expected
 
 
 @pytest.mark.parametrize(

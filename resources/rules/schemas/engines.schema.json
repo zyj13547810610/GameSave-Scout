@@ -77,14 +77,16 @@
     "rule": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id"],
+      "required": ["id", "label", "type"],
       "properties": {
         "id": {"type": "string", "pattern": "^[a-z0-9_]{1,80}$"},
         "label": {"type": "string", "minLength": 1},
+        "type": {"const": "engine"},
         "variant": {"type": ["string", "null"]},
         "status": {"enum": ["formal", "experimental"]},
         "priority": {"type": "integer", "minimum": -1000, "maximum": 1000},
         "enabled": {"type": "boolean"},
+        "notes": {"type": ["string", "null"], "maxLength": 4096},
         "references": {
           "type": "array",
           "items": {"$ref": "#/$defs/httpsReference"},

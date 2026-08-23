@@ -28,3 +28,9 @@ class RuleMetadata:
     @property
     def qualified_id(self) -> str:
         return f"{self.namespace}:{self.rule_id}"
+
+    @property
+    def verification_label(self) -> str:
+        if self.status == "experimental":
+            return "实验"
+        return "正式" if self.source == "builtin" else "已验证"

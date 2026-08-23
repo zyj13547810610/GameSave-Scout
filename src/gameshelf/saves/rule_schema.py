@@ -10,7 +10,7 @@ from typing import Any, Literal, cast
 
 import yaml
 
-from gameshelf.rules.models import RuleMetadata
+from gameshelf.rules.models import RuleMetadata, RuleSource
 from gameshelf.rules.validation import RuleMetadataError, build_rule_metadata
 from gameshelf.saves.models import SaveLocationKind, SuggestionCategory
 
@@ -24,10 +24,12 @@ MAX_PATH_LENGTH = 1024
 _TOP_KEYS = {"version", "rules"}
 _COMMON_RULE_KEYS = {
     "id",
+    "label",
     "type",
     "status",
     "priority",
     "enabled",
+    "notes",
     "references",
     "locations",
 }
@@ -50,6 +52,7 @@ _FILESYSTEM_TOKENS = {
 }
 _METADATA_FIELDS = {"company_name", "product_name", "project_name"}
 _REGISTRY_ROOTS = {"HKEY_CURRENT_USER", "HKEY_LOCAL_MACHINE"}
+_SOURCES = {"builtin", "user"}
 _PRODUCT_ID = re.compile(
     r"(?:steam|gog|epic|itch|vndb|dlsite):[A-Za-z0-9._-]{1,96}\Z"
 )
@@ -74,31 +77,46 @@ class SaveRuleLocation:
 
 
 @dataclass(frozen=True, slots=True)
-class BuiltinSaveRule:
+class SaveRule:
     metadata: RuleMetadata
+    label: str
+    notes: str | None
     titles: tuple[str, ...]
     product_ids: tuple[str, ...]
     engine_ids: tuple[str, ...]
     locations: tuple[SaveRuleLocation, ...]
 
 
-def load_save_rules(path: Path) -> tuple[BuiltinSaveRule, ...]:
+def load_save_rules(path: Path) -> tuple[SaveRule, ...]:
     try:
         raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError) as error:
         raise SaveRuleSchemaError(f"Cannot read save rules: {error}") from error
 
+    return parse_save_rule_document(raw, source="builtin", require_single=False)
+
+
+def parse_save_rule_document(
+    raw: object,
+    *,
+    source: RuleSource,
+    require_single: bool,
+) -> tuple[SaveRule, ...]:
+    if source not in _SOURCES:
+        raise SaveRuleSchemaError(f"unsupported rule source: {source}")
     document = _mapping(raw, "document")
     _reject_unknown(document, _TOP_KEYS, "document")
     version = _text(document.get("version"), "version")
     entries = document.get("rules")
     if not isinstance(entries, list):
         raise SaveRuleSchemaError("rules must be a list")
+    if require_single and len(entries) != 1:
+        raise SaveRuleSchemaError("用户规则文件必须恰好包含一条规则。")
     if len(entries) > MAX_RULES:
         raise SaveRuleSchemaError(f"规则文件最多 {MAX_RULES} 条规则。")
 
     rules = tuple(
-        _parse_rule(_mapping(entry, f"rule {index}"), version)
+        _parse_rule(_mapping(entry, f"rule {index}"), version, source)
         for index, entry in enumerate(entries, start=1)
     )
     seen: set[str] = set()
@@ -110,7 +128,11 @@ def load_save_rules(path: Path) -> tuple[BuiltinSaveRule, ...]:
     return rules
 
 
-def _parse_rule(raw: dict[str, Any], version: str) -> BuiltinSaveRule:
+def _parse_rule(
+    raw: dict[str, Any],
+    version: str,
+    source: RuleSource,
+) -> SaveRule:
     rule_type = _text(raw.get("type"), "rule type")
     if rule_type == "save_game":
         allowed = _GAME_RULE_KEYS
@@ -121,12 +143,16 @@ def _parse_rule(raw: dict[str, Any], version: str) -> BuiltinSaveRule:
     _reject_unknown(raw, allowed, f"rule {raw.get('id', '?')}")
 
     rule_id = _text(raw.get("id"), "rule id")
+    label = _text(raw.get("label"), "rule label")
+    notes = _optional_notes(raw.get("notes"))
     try:
         metadata = build_rule_metadata(
             rule_id=rule_id,
             rule_type=rule_type,
-            source="builtin",
-            status=raw.get("status", "formal"),
+            source=source,
+            status=raw.get(
+                "status", "formal" if source == "builtin" else "experimental"
+            ),
             version=version,
             references=raw.get("references", []),
             priority=raw.get("priority", 0),
@@ -136,7 +162,11 @@ def _parse_rule(raw: dict[str, Any], version: str) -> BuiltinSaveRule:
         raise SaveRuleSchemaError(
             f"invalid metadata for save rule {rule_id}: {error}"
         ) from error
-    if metadata.status == "formal" and not metadata.references:
+    if (
+        source == "builtin"
+        and metadata.status == "formal"
+        and not metadata.references
+    ):
         raise SaveRuleSchemaError(f"正式规则 {metadata.qualified_id} 必须提供公开依据。")
 
     if rule_type == "save_game":
@@ -164,13 +194,24 @@ def _parse_rule(raw: dict[str, Any], version: str) -> BuiltinSaveRule:
             f"每条规则最多 {MAX_LOCATIONS_PER_RULE} 个存档位置。"
         )
     locations = tuple(
-        _parse_location(_mapping(entry, "save location"))
+        _parse_location(_mapping(entry, "save location"), source)
         for entry in locations_raw
     )
-    return BuiltinSaveRule(metadata, titles, product_ids, engine_ids, locations)
+    return SaveRule(
+        metadata,
+        label,
+        notes,
+        titles,
+        product_ids,
+        engine_ids,
+        locations,
+    )
 
 
-def _parse_location(raw: dict[str, Any]) -> SaveRuleLocation:
+def _parse_location(
+    raw: dict[str, Any],
+    source: RuleSource,
+) -> SaveRuleLocation:
     _reject_unknown(raw, _LOCATION_KEYS, "save location")
     kind = _text(raw.get("kind"), "location kind")
     if kind not in _LOCATION_KINDS:
@@ -189,7 +230,9 @@ def _parse_location(raw: dict[str, Any]) -> SaveRuleLocation:
     if len(path_template) > MAX_PATH_LENGTH or "\x00" in path_template:
         raise SaveRuleSchemaError("存档路径模板过长或包含空字符。")
     metadata_fields = _validate_path_template(
-        path_template, cast(SaveLocationKind, kind)
+        path_template,
+        cast(SaveLocationKind, kind),
+        source,
     )
     return SaveRuleLocation(
         kind=cast(SaveLocationKind, kind),
@@ -203,6 +246,7 @@ def _parse_location(raw: dict[str, Any]) -> SaveRuleLocation:
 def _validate_path_template(
     path_template: str,
     kind: SaveLocationKind,
+    source: RuleSource,
 ) -> tuple[str, ...]:
     if kind == "registry":
         normalized = path_template.replace("/", "\\")
@@ -213,6 +257,8 @@ def _validate_path_template(
             raise SaveRuleSchemaError("注册表模板不能使用文件系统令牌。")
         if any(part == ".." for part in parts):
             raise SaveRuleSchemaError("注册表模板不能离开声明的注册表根。")
+        if any("*" in part or "?" in part for part in parts):
+            raise SaveRuleSchemaError("注册表模板不能包含通配符。")
         return _metadata_fields(parts[1:])
 
     match = _ROOT_TEMPLATE.fullmatch(path_template)
@@ -233,7 +279,17 @@ def _validate_path_template(
         raise SaveRuleSchemaError("路径后缀不能包含其他令牌。")
     if kind != "glob" and any("*" in part or "?" in part for part in parts):
         raise SaveRuleSchemaError("只有 glob 位置允许通配符。")
+    if source == "user" and parts and parts[0] == "**":
+        raise SaveRuleSchemaError("用户规则不允许从令牌根开始无界 ** glob。")
     return _metadata_fields(parts)
+
+
+def _optional_notes(value: object) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or len(value) > 4096 or "\x00" in value:
+        raise SaveRuleSchemaError("notes must be a bounded string or null")
+    return value
 
 
 def _metadata_fields(parts: tuple[str, ...]) -> tuple[str, ...]:

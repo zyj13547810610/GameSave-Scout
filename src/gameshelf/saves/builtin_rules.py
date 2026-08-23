@@ -1,7 +1,8 @@
-"""Typed suggestions produced from the bundled declarative save rules."""
+"""Typed suggestions produced from declarative save rules."""
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import re
 import unicodedata
@@ -9,8 +10,9 @@ from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 from gameshelf.library.models import Game
+from gameshelf.rules.serialization import serialize_rule_document
 from gameshelf.saves.models import SaveLocationSuggestion, SuggestionEvidence
-from gameshelf.saves.rule_schema import BuiltinSaveRule, SaveRuleLocation, load_save_rules
+from gameshelf.saves.rule_schema import SaveRule, SaveRuleLocation, load_save_rules
 from gameshelf.saves.templates import InvalidPathTemplate, PathTemplateResolver
 
 _UNSAFE_WINDOWS_CHARACTER = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
@@ -24,18 +26,23 @@ _RESERVED_WINDOWS_NAMES = {
 }
 
 
-class BuiltinSaveRuleProvider:
+class SaveRuleProvider:
     def __init__(
         self,
-        rules: tuple[BuiltinSaveRule, ...],
+        rules: tuple[SaveRule, ...],
         resolver: PathTemplateResolver,
         logger: logging.Logger | None = None,
     ) -> None:
-        self._rules = tuple(
-            sorted(
-                (rule for rule in rules if rule.metadata.enabled),
-                key=lambda rule: (-rule.metadata.priority, rule.metadata.qualified_id),
-            )
+        ordered = tuple(
+            sorted(rules, key=_rule_order_key)
+        )
+        self._rules = tuple(rule for rule in ordered if rule.metadata.enabled)
+        self._rules_version = (
+            hashlib.sha256(
+                b"\0".join(serialize_rule_document(rule) for rule in ordered)
+            ).hexdigest()
+            if ordered
+            else None
         )
         self._resolver = resolver
         self._logger = logger or logging.getLogger(__name__)
@@ -46,7 +53,7 @@ class BuiltinSaveRuleProvider:
         path: Path,
         resolver: PathTemplateResolver,
         logger: logging.Logger | None = None,
-    ) -> BuiltinSaveRuleProvider:
+    ) -> SaveRuleProvider:
         return cls(load_save_rules(path), resolver, logger)
 
     @classmethod
@@ -54,12 +61,16 @@ class BuiltinSaveRuleProvider:
         cls,
         resolver: PathTemplateResolver,
         logger: logging.Logger | None = None,
-    ) -> BuiltinSaveRuleProvider:
+    ) -> SaveRuleProvider:
         return cls((), resolver, logger)
 
     @property
     def rules_version(self) -> str | None:
-        return self._rules[0].metadata.version if self._rules else None
+        return self._rules_version
+
+    @property
+    def rules(self) -> tuple[SaveRule, ...]:
+        return self._rules
 
     def suggest_game_specific(
         self,
@@ -98,7 +109,7 @@ class BuiltinSaveRuleProvider:
 
     def _suggest(
         self,
-        rules: Iterable[BuiltinSaveRule],
+        rules: Iterable[SaveRule],
         install_dir: Path | None,
         metadata: Mapping[str, object],
     ) -> tuple[SaveLocationSuggestion, ...]:
@@ -116,7 +127,7 @@ class BuiltinSaveRuleProvider:
                         display_path = str(self._resolver.expand(rendered, install_dir))
                     except InvalidPathTemplate as error:
                         self._logger.warning(
-                            "内置存档规则 %s 的路径无法安全展开：%s",
+                            "存档规则 %s 的路径无法安全展开：%s",
                             rule.metadata.qualified_id,
                             error,
                         )
@@ -130,7 +141,10 @@ class BuiltinSaveRuleProvider:
                         confidence=location.confidence,
                         evidence=(detail,),
                         source_evidence=(
-                            SuggestionEvidence(source="builtin", detail=detail),
+                            SuggestionEvidence(
+                                source=rule.metadata.source,
+                                detail=detail,
+                            ),
                         ),
                         suggestion_id=f"{rule.metadata.qualified_id}:{index}",
                         category=location.category,
@@ -145,7 +159,7 @@ class BuiltinSaveRuleProvider:
 
     def _render_location(
         self,
-        rule: BuiltinSaveRule,
+        rule: SaveRule,
         location: SaveRuleLocation,
         metadata: Mapping[str, object],
     ) -> str | None:
@@ -154,7 +168,7 @@ class BuiltinSaveRuleProvider:
             value = metadata.get(field)
             if not isinstance(value, str) or not _safe_windows_segment(value):
                 self._logger.warning(
-                    "内置存档规则 %s 缺少安全元数据 %s，已跳过该位置。",
+                    "存档规则 %s 缺少安全元数据 %s，已跳过该位置。",
                     rule.metadata.qualified_id,
                     field,
                 )
@@ -188,7 +202,7 @@ def _safe_windows_segment(value: str) -> bool:
     return base_name not in _RESERVED_WINDOWS_NAMES
 
 
-def _evidence_detail(rule: BuiltinSaveRule) -> str:
+def _evidence_detail(rule: SaveRule) -> str:
     references = rule.metadata.references
     if not references:
         reference_summary = "无公开链接（实验规则）"
@@ -196,7 +210,17 @@ def _evidence_detail(rule: BuiltinSaveRule) -> str:
         reference_summary = references[0]
     else:
         reference_summary = f"{references[0]}（另 {len(references) - 1} 项）"
+    source_label = "内置规则" if rule.metadata.source == "builtin" else "用户规则"
     return (
-        f"内置规则 {rule.metadata.qualified_id}"
+        f"{source_label} {rule.metadata.qualified_id}"
         f"（{rule.metadata.status}；依据：{reference_summary}）"
+    )
+
+
+def _rule_order_key(rule: SaveRule) -> tuple[int, int, int, str]:
+    return (
+        0 if rule.metadata.source == "user" else 1,
+        0 if rule.metadata.rule_type == "save_game" else 1,
+        -rule.metadata.priority,
+        rule.metadata.qualified_id,
     )

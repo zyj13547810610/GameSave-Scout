@@ -1,6 +1,7 @@
 version: 2026.08.21-2
 rules:
   - id: godot_user_data
+    label: Godot 用户数据目录
     type: save_engine
     status: formal
     priority: 20
@@ -15,6 +16,7 @@ rules:
         category: save
         confidence: 0.9
   - id: unity_user_data
+    label: Unity 持久化数据与注册表
     type: save_engine
     status: formal
     priority: 20
@@ -34,6 +36,7 @@ rules:
         category: config
         confidence: 0.9
   - id: unreal_save_games
+    label: Unreal Engine SaveGames
     type: save_engine
     status: formal
     priority: 20

@@ -4,7 +4,11 @@ import pytest
 
 from gameshelf.engines.base import DetectionContext
 from gameshelf.engines.rule_detector import RuleDetector
-from gameshelf.engines.rule_schema import RuleSchemaError, load_engine_rules
+from gameshelf.engines.rule_schema import (
+    RuleSchemaError,
+    load_engine_rules,
+    parse_engine_rule_document,
+)
 
 
 def test_rule_requires_all_and_scores_any_evidence(tmp_path: Path) -> None:
@@ -43,6 +47,31 @@ def test_rule_exposes_shared_metadata_without_changing_engine_id(tmp_path: Path)
     assert rule.metadata.priority == 20
     assert rule.metadata.enabled is True
     assert rule.metadata.references == ("https://tyranoscript.com/",)
+
+
+def test_pure_parser_uses_caller_source_and_preserves_notes() -> None:
+    rule = parse_engine_rule_document(
+        {
+            "version": "1",
+            "rules": [
+                {
+                    "id": "user_engine",
+                    "label": "用户引擎",
+                    "type": "engine",
+                    "notes": "合成夹具验证",
+                    "all": [
+                        {"op": "path_exists", "path": "game.dat", "weight": 1}
+                    ],
+                }
+            ],
+        },
+        source="user",
+        require_single=True,
+    )[0]
+
+    assert rule.metadata.qualified_id == "user:user_engine"
+    assert rule.metadata.status == "experimental"
+    assert rule.notes == "合成夹具验证"
 
 
 def test_unknown_rule_key_is_rejected(tmp_path: Path) -> None:

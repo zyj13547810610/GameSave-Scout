@@ -5,8 +5,8 @@ from pathlib import Path
 
 from gameshelf.library.models import Game
 from gameshelf.platform.windows.known_folders import KnownFolders
-from gameshelf.saves.builtin_rules import BuiltinSaveRuleProvider
-from gameshelf.saves.rule_schema import load_save_rules
+from gameshelf.saves.builtin_rules import SaveRuleProvider
+from gameshelf.saves.rule_schema import load_save_rules, parse_save_rule_document
 from gameshelf.saves.templates import PathTemplateResolver
 
 
@@ -19,6 +19,7 @@ def test_game_specific_rule_uses_version_free_exact_title_and_not_fuzzy(
 version: test
 rules:
   - id: exact_game
+    label: 精确游戏存档
     type: save_game
     status: formal
     priority: 0
@@ -57,6 +58,7 @@ def test_engine_rule_expands_only_safe_metadata_segments(tmp_path: Path) -> None
 version: test
 rules:
   - id: godot_user_data
+    label: Godot 用户数据
     type: save_engine
     status: formal
     priority: 0
@@ -97,6 +99,7 @@ def test_missing_or_unsafe_metadata_skips_location_with_diagnostic(
 version: test
 rules:
   - id: godot_user_data
+    label: Godot 用户数据
     type: save_engine
     status: experimental
     priority: 0
@@ -136,6 +139,7 @@ def test_disabled_and_unrelated_engine_rules_do_not_produce_suggestions(
 version: test
 rules:
   - id: disabled_godot
+    label: 已禁用 Godot 规则
     type: save_engine
     status: experimental
     priority: 0
@@ -160,12 +164,94 @@ def test_bundled_catalog_contains_only_publicly_supported_generic_templates() ->
     }
     assert all(rule.metadata.status == "formal" for rule in rules)
     assert all(rule.metadata.references for rule in rules)
+    assert {rule.label for rule in rules} == {
+        "Godot 用户数据目录",
+        "Unity 持久化数据与注册表",
+        "Unreal Engine SaveGames",
+    }
 
 
-def _provider(tmp_path: Path, yaml_text: str) -> BuiltinSaveRuleProvider:
+def test_provider_orders_user_and_game_rules_first_and_hashes_full_content(
+    tmp_path: Path,
+) -> None:
+    builtin_game = parse_save_rule_document(
+        _document("builtin_game", "内置游戏规则", "save_game", priority=100),
+        source="builtin",
+        require_single=True,
+    )[0]
+    user_engine = parse_save_rule_document(
+        _document("user_engine", "用户引擎规则", "save_engine", priority=-100),
+        source="user",
+        require_single=True,
+    )[0]
+    user_game = parse_save_rule_document(
+        _document("user_game", "用户游戏规则", "save_game", priority=-100),
+        source="user",
+        require_single=True,
+    )[0]
+    resolver = _resolver(tmp_path)
+
+    provider = SaveRuleProvider(
+        (builtin_game, user_engine, user_game),
+        resolver,
+    )
+    changed = SaveRuleProvider(
+        (
+            builtin_game,
+            user_engine,
+            parse_save_rule_document(
+                _document(
+                    "user_game",
+                    "用户游戏规则",
+                    "save_game",
+                    priority=-100,
+                    confidence=0.7,
+                ),
+                source="user",
+                require_single=True,
+            )[0],
+        ),
+        resolver,
+    )
+
+    assert [rule.metadata.qualified_id for rule in provider.rules] == [
+        "user:user_game",
+        "user:user_engine",
+        "builtin:builtin_game",
+    ]
+    assert provider.rules_version
+    assert provider.rules_version != changed.rules_version
+
+
+def test_user_rule_keeps_database_source_and_reports_real_evidence_source(
+    tmp_path: Path,
+) -> None:
+    rule = parse_save_rule_document(
+        _document("user_game", "用户游戏规则", "save_game", priority=0),
+        source="user",
+        require_single=True,
+    )[0]
+    provider = SaveRuleProvider((rule,), _resolver(tmp_path))
+
+    suggestion = provider.suggest_game_specific(
+        _game(title="Game"),
+        tmp_path / "Game",
+        {},
+    )[0]
+
+    assert suggestion.source == "engine"
+    assert suggestion.source_evidence[0].source == "user"
+    assert "user:user_game" in suggestion.source_evidence[0].detail
+
+
+def _provider(tmp_path: Path, yaml_text: str) -> SaveRuleProvider:
     path = tmp_path / "saves.yaml"
     path.write_text(yaml_text, encoding="utf-8")
     rules = load_save_rules(path)
+    return SaveRuleProvider(rules, _resolver(tmp_path))
+
+
+def _resolver(tmp_path: Path) -> PathTemplateResolver:
     home = tmp_path / "Profile"
     folders = KnownFolders(
         home=home,
@@ -178,7 +264,43 @@ def _provider(tmp_path: Path, yaml_text: str) -> BuiltinSaveRuleProvider:
         public=tmp_path / "Public",
         windows=tmp_path / "Windows",
     )
-    return BuiltinSaveRuleProvider(rules, PathTemplateResolver(folders))
+    return PathTemplateResolver(folders)
+
+
+def _document(
+    rule_id: str,
+    label: str,
+    rule_type: str,
+    *,
+    priority: int,
+    confidence: float = 0.5,
+) -> dict[str, object]:
+    selector = (
+        {"titles": ["Game"]}
+        if rule_type == "save_game"
+        else {"engine_ids": ["godot"]}
+    )
+    return {
+        "version": "same-version",
+        "rules": [
+            {
+                "id": rule_id,
+                "label": label,
+                "type": rule_type,
+                "priority": priority,
+                "references": ["https://example.com/rule"],
+                "locations": [
+                    {
+                        "kind": "directory",
+                        "path": "<winDocuments>\\Game",
+                        "category": "save",
+                        "confidence": confidence,
+                    }
+                ],
+                **selector,
+            }
+        ],
+    }
 
 
 def _game(

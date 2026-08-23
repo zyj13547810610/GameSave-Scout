@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -42,6 +43,7 @@ _BUILTIN_OPTIONS = (
     EngineOption("rpg_developer_bakin", "RPG Developer Bakin"),
     EngineOption("visual_novel_maker", "Visual Novel Maker"),
 )
+BUILTIN_ENGINE_IDS = frozenset(option.id for option in _BUILTIN_OPTIONS)
 BUILTIN_ENGINE_CACHE_VERSION = "2026.08.18-1"
 
 
@@ -62,18 +64,19 @@ class EngineDetectionService:
 
     @classmethod
     def builtins_only(cls) -> EngineDetectionService:
-        return cls._from_rules(())
+        return cls.from_rules(())
 
     @classmethod
     def from_rules_file(cls, rules_file: Path) -> EngineDetectionService:
-        return cls._from_rules(load_engine_rules(rules_file))
+        return cls.from_rules(load_engine_rules(rules_file))
 
     @classmethod
-    def _from_rules(
+    def from_rules(
         cls,
-        rules: tuple[EngineRule, ...],
+        rules: Sequence[EngineRule],
     ) -> EngineDetectionService:
-        enabled_rules = tuple(rule for rule in rules if rule.metadata.enabled)
+        all_rules = tuple(rules)
+        enabled_rules = tuple(rule for rule in all_rules if rule.metadata.enabled)
         detectors: tuple[EngineDetector, ...] = (
             RpgMakerDetector(),
             RenPyDetector(),
@@ -97,7 +100,7 @@ class EngineDetectionService:
         return cls(
             DetectorRegistry(detectors),
             options,
-            tuple(rule.version for rule in rules),
+            tuple(rule.version for rule in all_rules),
         )
 
     @property

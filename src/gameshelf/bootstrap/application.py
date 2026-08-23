@@ -43,7 +43,7 @@ from gameshelf.saves.batch_rules import BatchRuleProvider
 from gameshelf.saves.batch_scanner import BatchFilesystemScanner
 from gameshelf.saves.batch_scope import BatchScopeBuilder
 from gameshelf.saves.batch_service import BatchSaveDiscoveryService
-from gameshelf.saves.builtin_rules import BuiltinSaveRuleProvider
+from gameshelf.saves.builtin_rules import SaveRuleProvider
 from gameshelf.saves.custom_manifest_provider import CustomManifestProvider
 from gameshelf.saves.engine_hints import EngineSaveHintProvider
 from gameshelf.saves.guided_models import GuidedScopeOption
@@ -83,7 +83,7 @@ class Application:
     asset_server: AssetServer
     asset_address: AssetServerAddress
     guided_saves: GuidedSaveSessionService
-    builtin_save_rules: BuiltinSaveRuleProvider
+    builtin_save_rules: SaveRuleProvider
     cover_wizard: CoverWizardService
     analysis_pool: ScanAnalysisPool
     _close_lock: Lock = field(default_factory=Lock, repr=False)
@@ -343,9 +343,9 @@ def _load_builtin_save_rules(
     rules_file: Path,
     resolver: PathTemplateResolver,
     logger: logging.Logger,
-) -> BuiltinSaveRuleProvider:
+) -> SaveRuleProvider:
     try:
-        return BuiltinSaveRuleProvider.from_file(rules_file, resolver, logger)
+        return SaveRuleProvider.from_file(rules_file, resolver, logger)
     except SaveRuleSchemaError as error:
         if not rules_file.is_file() or isinstance(error.__cause__, OSError):
             raise
@@ -354,4 +354,4 @@ def _load_builtin_save_rules(
             rules_file,
             error,
         )
-        return BuiltinSaveRuleProvider.empty(resolver, logger)
+        return SaveRuleProvider.empty(resolver, logger)

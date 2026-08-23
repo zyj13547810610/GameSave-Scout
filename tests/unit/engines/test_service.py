@@ -1,6 +1,7 @@
 from pathlib import Path
 
-from gameshelf.engines.service import EngineDetectionService
+from gameshelf.engines.rule_schema import parse_engine_rule_document
+from gameshelf.engines.service import BUILTIN_ENGINE_IDS, EngineDetectionService
 
 
 def _rules(path: Path, version: str) -> None:
@@ -27,6 +28,31 @@ def test_builtin_engine_cache_version_is_stable() -> None:
 
     assert first.cache_version == second.cache_version
     assert first.cache_version
+    assert {"unity", "unreal", "renpy", "rpg_maker_mv"} <= BUILTIN_ENGINE_IDS
+
+
+def test_service_can_compile_an_existing_rule_sequence() -> None:
+    rules = parse_engine_rule_document(
+        {
+            "version": "1",
+            "rules": [
+                {
+                    "id": "user_engine",
+                    "label": "User Engine",
+                    "type": "engine",
+                    "all": [
+                        {"op": "path_exists", "path": "data.bin", "weight": 1}
+                    ],
+                }
+            ],
+        },
+        source="user",
+        require_single=True,
+    )
+
+    service = EngineDetectionService.from_rules(rules)
+
+    assert service.has_option("user_engine") is True
 
 
 def test_declarative_rule_version_changes_engine_cache_version(tmp_path: Path) -> None:

@@ -199,6 +199,7 @@ version: test
 rules:
   - id: injected_engine
     label: Injected Engine
+    references: [https://example.com/injected-engine]
     all:
       - op: path_exists
         path: injected.marker

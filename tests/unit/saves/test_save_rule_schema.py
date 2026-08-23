@@ -4,7 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from gameshelf.saves.rule_schema import SaveRuleSchemaError, load_save_rules
+from gameshelf.saves.rule_schema import (
+    SaveRuleSchemaError,
+    load_save_rules,
+    parse_save_rule_document,
+)
 
 
 def test_loads_strict_game_and_engine_save_rules(tmp_path: Path) -> None:
@@ -14,6 +18,7 @@ def test_loads_strict_game_and_engine_save_rules(tmp_path: Path) -> None:
 version: 2026.08.21-1
 rules:
   - id: exact_game
+    label: 精确游戏存档
     type: save_game
     status: formal
     priority: 10
@@ -27,6 +32,7 @@ rules:
         category: save
         confidence: 0.95
   - id: godot_user_data
+    label: Godot 用户数据
     type: save_engine
     status: formal
     priority: 0
@@ -46,6 +52,7 @@ rules:
         "builtin:godot_user_data",
     ]
     assert rules[0].titles == ("Exact Game", "精确游戏")
+    assert rules[0].label == "精确游戏存档"
     assert rules[0].product_ids == ("steam:12345",)
     assert rules[1].engine_ids == ("godot",)
     assert rules[1].locations[0].metadata_fields == ("project_name",)
@@ -86,6 +93,7 @@ def test_rejects_unsafe_engine_rule_shapes(
 version: test
 rules:
   - id: unsafe
+    label: 不安全规则
     type: save_engine
     status: experimental
     priority: 0
@@ -121,6 +129,7 @@ def test_rejects_invalid_game_selectors(
 version: test
 rules:
   - id: game_rule
+    label: 游戏规则
     type: save_game
     status: experimental
     priority: 0
@@ -143,6 +152,7 @@ def test_rejects_invalid_registry_root_and_duplicate_qualified_id(tmp_path: Path
 version: test
 rules:
   - id: registry_rule
+    label: 注册表规则
     type: save_engine
     status: experimental
     priority: 0
@@ -160,6 +170,7 @@ version: test
 rules:
   - &rule
     id: duplicate
+    label: 重复规则
     type: save_engine
     status: experimental
     priority: 0
@@ -180,6 +191,7 @@ def test_enforces_bounded_catalog_and_selector_sizes(tmp_path: Path) -> None:
     too_many_rules = "\n".join(
         f"""\
   - id: rule_{index}
+    label: Rule {index}
     type: save_engine
     status: experimental
     priority: 0
@@ -200,6 +212,7 @@ def test_enforces_bounded_catalog_and_selector_sizes(tmp_path: Path) -> None:
 version: test
 rules:
   - id: too_many_titles
+    label: 太多标题
     type: save_game
     status: experimental
     priority: 0
@@ -208,6 +221,48 @@ rules:
     titles: [{too_many_titles}]
     locations: [{{kind: directory, path: '<winAppData>\\Game', category: save, confidence: 0.5}}]
 """,
+        )
+
+
+def test_pure_parser_uses_user_source_and_requires_label() -> None:
+    document = {
+        "version": "1",
+        "rules": [
+            {
+                "id": "game_save",
+                "label": "游戏存档",
+                "type": "save_game",
+                "notes": "仅使用合成路径",
+                "titles": ["Game"],
+                "locations": [
+                    {
+                        "kind": "directory",
+                        "path": "<winDocuments>\\Game",
+                        "category": "save",
+                        "confidence": 0.9,
+                    }
+                ],
+            }
+        ],
+    }
+
+    rule = parse_save_rule_document(
+        document,
+        source="user",
+        require_single=True,
+    )[0]
+
+    assert rule.metadata.qualified_id == "user:game_save"
+    assert rule.metadata.status == "experimental"
+    assert rule.label == "游戏存档"
+    assert rule.notes == "仅使用合成路径"
+
+    del document["rules"][0]["label"]
+    with pytest.raises(SaveRuleSchemaError, match="label"):
+        parse_save_rule_document(
+            document,
+            source="user",
+            require_single=True,
         )
 
 

@@ -90,10 +90,12 @@
       "additionalProperties": false,
       "properties": {
         "id": {"type": "string", "pattern": "^[a-z0-9_]{1,80}$"},
+        "label": {"type": "string", "minLength": 1},
         "type": {"enum": ["save_game", "save_engine"]},
         "status": {"enum": ["formal", "experimental"]},
         "priority": {"type": "integer", "minimum": -1000, "maximum": 1000},
         "enabled": {"type": "boolean"},
+        "notes": {"type": ["string", "null"], "maxLength": 4096},
         "references": {
           "type": "array",
           "items": {"$ref": "#/$defs/httpsReference"},
@@ -112,13 +114,15 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["id", "type", "titles", "locations"],
+          "required": ["id", "label", "type", "titles", "locations"],
           "properties": {
             "id": {"type": "string", "pattern": "^[a-z0-9_]{1,80}$"},
+            "label": {"type": "string", "minLength": 1},
             "type": {"const": "save_game"},
             "status": {"enum": ["formal", "experimental"]},
             "priority": {"type": "integer", "minimum": -1000, "maximum": 1000},
             "enabled": {"type": "boolean"},
+            "notes": {"type": ["string", "null"], "maxLength": 4096},
             "references": {
               "type": "array",
               "items": {"$ref": "#/$defs/httpsReference"},
@@ -145,13 +149,15 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["id", "type", "engine_ids", "locations"],
+          "required": ["id", "label", "type", "engine_ids", "locations"],
           "properties": {
             "id": {"type": "string", "pattern": "^[a-z0-9_]{1,80}$"},
+            "label": {"type": "string", "minLength": 1},
             "type": {"const": "save_engine"},
             "status": {"enum": ["formal", "experimental"]},
             "priority": {"type": "integer", "minimum": -1000, "maximum": 1000},
             "enabled": {"type": "boolean"},
+            "notes": {"type": ["string", "null"], "maxLength": 4096},
             "references": {
               "type": "array",
               "items": {"$ref": "#/$defs/httpsReference"},

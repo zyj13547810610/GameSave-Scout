@@ -14,7 +14,7 @@ from gameshelf.saves.batch_rules import (
     BatchRuleContext,
     BatchRuleProvider,
 )
-from gameshelf.saves.builtin_rules import BuiltinSaveRuleProvider
+from gameshelf.saves.builtin_rules import SaveRuleProvider
 from gameshelf.saves.custom_manifest_provider import (
     CustomManifestError,
     CustomManifestLoadResult,
@@ -353,7 +353,7 @@ def _builtin_provider(
     resolver: PathTemplateResolver,
     *,
     version: str,
-) -> BuiltinSaveRuleProvider:
+) -> SaveRuleProvider:
     tmp_path.mkdir(parents=True, exist_ok=True)
     path = tmp_path / "builtin-saves.yaml"
     path.write_text(
@@ -361,6 +361,7 @@ def _builtin_provider(
 version: {version}
 rules:
   - id: alice_game
+    label: Alice 游戏存档
     type: save_game
     status: formal
     priority: 20
@@ -381,6 +382,7 @@ rules:
         category: config
         confidence: 0.9
   - id: godot_generic
+    label: Godot 通用存档
     type: save_engine
     status: experimental
     priority: 10
@@ -399,7 +401,7 @@ rules:
 """,
         encoding="utf-8",
     )
-    return BuiltinSaveRuleProvider(load_save_rules(path), resolver)
+    return SaveRuleProvider(load_save_rules(path), resolver)
 
 
 def _game(
