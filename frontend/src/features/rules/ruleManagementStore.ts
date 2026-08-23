@@ -4,9 +4,13 @@ import type {
   RuleDetail,
   RuleDiagnostic,
   RuleDraft,
+  RuleDraftValidation,
+  RuleImportDecision,
+  RuleImportPreview,
   RuleSource,
   RuleStatus,
   RuleSummary,
+  RuleTestResult,
   RuleType,
 } from '../../api/contracts'
 
@@ -45,6 +49,28 @@ function defaultDraft(type: RuleType): RuleDraft {
   return { ...common, type, titles: [], product_ids: [], locations: [] }
 }
 
+function verificationMaterial(draft: RuleDraft): string {
+  if (draft.type === 'engine') {
+    return JSON.stringify({
+      id: draft.id, type: draft.type, variant: draft.variant ?? null,
+      threshold: draft.threshold, all: draft.all, any: draft.any, negative: draft.negative,
+    })
+  }
+  if (draft.type === 'save_game') {
+    return JSON.stringify({
+      id: draft.id, type: draft.type, titles: draft.titles,
+      product_ids: draft.product_ids, locations: draft.locations,
+    })
+  }
+  return JSON.stringify({
+    id: draft.id, type: draft.type, engine_ids: draft.engine_ids, locations: draft.locations,
+  })
+}
+
+function cloneDraft(draft: RuleDraft): RuleDraft {
+  return JSON.parse(JSON.stringify(draft)) as RuleDraft
+}
+
 export const useRuleManagementStore = defineStore('rule-management', {
   state: () => ({
     activeTab: 'engine' as RuleManagementTab,
@@ -57,9 +83,14 @@ export const useRuleManagementStore = defineStore('rule-management', {
     selectedQualifiedId: null as string | null,
     detail: null as RuleDetail | null,
     draft: null as RuleDraft | null,
+    validation: null as RuleDraftValidation | null,
+    testResult: null as RuleTestResult | null,
+    verificationToken: null as string | null,
+    verifiedMaterial: null as string | null,
     dirty: false,
     editing: false,
     mobilePane: 'list' as 'list' | 'detail',
+    focusQualifiedId: null as string | null,
     diagnostics: [] as RuleDiagnostic[],
     catalogVersion: '',
     generation: 0,
@@ -67,13 +98,29 @@ export const useRuleManagementStore = defineStore('rule-management', {
     listLoading: false,
     detailLoading: false,
     refreshing: false,
+    validating: false,
+    testing: false,
+    mutating: false,
+    importing: false,
     listError: '',
     detailError: '',
     refreshError: '',
+    mutationError: '',
+    notice: '',
+    importPreview: null as RuleImportPreview | null,
+    importError: '',
     listRequestSequence: 0,
     detailRequestSequence: 0,
+    validationRequestSequence: 0,
     queryTimer: null as number | null,
   }),
+  getters: {
+    canMarkVerified: (state) => Boolean(
+      state.draft
+      && state.verificationToken
+      && state.verifiedMaterial === verificationMaterial(state.draft),
+    ),
+  },
   actions: {
     async ensureLoaded(bridge: GameShelfBridge) {
       if (this.initialized) return
@@ -139,8 +186,13 @@ export const useRuleManagementStore = defineStore('rule-management', {
         return
       }
       this.selectedQualifiedId = qualifiedId
+      this.focusQualifiedId = null
       this.detail = result.data
       this.draft = null
+      this.validation = null
+      this.testResult = null
+      this.verificationToken = null
+      this.verifiedMaterial = null
       this.dirty = false
       this.editing = false
       this.mobilePane = 'detail'
@@ -149,13 +201,27 @@ export const useRuleManagementStore = defineStore('rule-management', {
       this.selectedQualifiedId = null
       this.detail = null
       this.draft = defaultDraft(type)
+      this.validation = null
+      this.testResult = null
+      this.verificationToken = null
+      this.verifiedMaterial = null
       this.dirty = false
       this.editing = true
       this.mobilePane = 'detail'
     },
     startEdit() {
       if (!this.detail?.capabilities.edit) return
-      this.draft = structuredClone(this.detail.draft)
+      this.draft = cloneDraft(this.detail.draft)
+      this.validation = {
+        valid: true,
+        normalizedDraft: cloneDraft(this.detail.draft),
+        yamlPreview: this.detail.yamlPreview,
+        errorCode: null,
+        message: '规则草稿有效。',
+      }
+      this.testResult = null
+      this.verificationToken = null
+      this.verifiedMaterial = null
       this.dirty = false
       this.editing = true
       this.mobilePane = 'detail'
@@ -165,8 +231,204 @@ export const useRuleManagementStore = defineStore('rule-management', {
     },
     discardDraft() {
       this.draft = null
+      this.validation = null
+      this.testResult = null
+      this.verificationToken = null
+      this.verifiedMaterial = null
       this.dirty = false
       this.editing = false
+    },
+    updateDraft(draft: RuleDraft) {
+      this.validationRequestSequence += 1
+      this.validating = false
+      if (
+        this.verificationToken
+        && this.verifiedMaterial
+        && verificationMaterial(draft) !== this.verifiedMaterial
+      ) {
+        this.verificationToken = null
+        if (draft.status === 'formal') draft = { ...draft, status: 'experimental' } as RuleDraft
+      }
+      this.draft = draft
+      this.validation = null
+      this.dirty = true
+      this.mutationError = ''
+      this.notice = ''
+    },
+    async validateDraft(bridge: GameShelfBridge, draft: RuleDraft) {
+      const requestId = ++this.validationRequestSequence
+      this.validating = true
+      const result = await bridge.validate_rule_draft({ draft })
+      if (requestId !== this.validationRequestSequence) return
+      this.validating = false
+      if (!result.ok) {
+        this.validation = {
+          valid: false, normalizedDraft: null, yamlPreview: null,
+          errorCode: result.error.code, message: result.error.message,
+        }
+        return
+      }
+      this.validation = result.data
+    },
+    async testDraft(bridge: GameShelfBridge, gameId: string) {
+      const sourceDraft = this.draft ?? this.detail?.draft
+      if (!sourceDraft || this.testing) return
+      this.testing = true
+      this.mutationError = ''
+      const testedDraft = cloneDraft(sourceDraft)
+      const result = await bridge.test_rule_draft({ draft: testedDraft, gameId })
+      this.testing = false
+      if (!result.ok) {
+        this.mutationError = result.error.message
+        return
+      }
+      this.testResult = result.data
+      const testedMaterial = verificationMaterial(testedDraft)
+      const stillCurrent = this.draft && verificationMaterial(this.draft) === testedMaterial
+      this.verificationToken = stillCurrent ? result.data.verificationToken : null
+      this.verifiedMaterial = this.verificationToken ? testedMaterial : null
+    },
+    markVerified() {
+      if (
+        !this.draft
+        || !this.verificationToken
+        || this.verifiedMaterial !== verificationMaterial(this.draft)
+      ) return
+      this.draft = { ...this.draft, status: 'formal' } as RuleDraft
+      this.validation = null
+      this.dirty = true
+    },
+    async saveDraft(bridge: GameShelfBridge) {
+      if (!this.draft || !this.validation?.valid || this.mutating) return
+      this.mutating = true
+      this.mutationError = ''
+      this.notice = ''
+      const result = await bridge.save_rule({
+        originalQualifiedId: this.editing && this.detail ? this.detail.qualifiedId : null,
+        draft: this.validation.normalizedDraft ?? this.draft,
+        verificationToken: this.verificationToken,
+      })
+      this.mutating = false
+      if (!result.ok) {
+        this.mutationError = result.error.message
+        return
+      }
+      this.applySavedDetail(result.data.detail, result.data.generation)
+      this.notice = '规则已保存；变更只影响下一次识别或查找任务。'
+    },
+    async copyRule(bridge: GameShelfBridge, qualifiedId: string) {
+      if (this.mutating) return
+      this.mutating = true
+      this.mutationError = ''
+      const result = await bridge.copy_rule({ qualifiedId })
+      this.mutating = false
+      if (!result.ok) {
+        this.mutationError = result.error.message
+        return
+      }
+      this.applySavedDetail(result.data.detail, result.data.generation)
+      this.notice = '已复制为新的用户实验规则。'
+    },
+    async toggleRule(bridge: GameShelfBridge, detail: RuleDetail) {
+      if (this.mutating) return
+      this.mutating = true
+      this.mutationError = ''
+      const result = await bridge.set_rule_enabled({
+        qualifiedId: detail.qualifiedId,
+        enabled: !detail.enabled,
+      })
+      this.mutating = false
+      if (!result.ok) {
+        this.mutationError = result.error.message
+        return
+      }
+      this.applySavedDetail(result.data.detail, result.data.generation)
+      this.notice = `规则已${result.data.detail.enabled ? '启用' : '停用'}；只影响下一次任务。`
+    },
+    async deleteRule(bridge: GameShelfBridge, qualifiedId: string) {
+      if (this.mutating) return
+      const index = this.items.findIndex((item) => item.qualifiedId === qualifiedId)
+      this.mutating = true
+      this.mutationError = ''
+      const result = await bridge.delete_rule({ qualifiedId })
+      this.mutating = false
+      if (!result.ok) {
+        this.mutationError = result.error.message
+        return
+      }
+      this.items = this.items.filter((item) => item.qualifiedId !== qualifiedId)
+      this.total = Math.max(0, this.total - 1)
+      this.generation = result.data.generation
+      this.selectedQualifiedId = null
+      this.detail = null
+      this.discardDraft()
+      this.mobilePane = 'list'
+      this.notice = '用户规则已删除；只影响下一次任务。'
+      const neighbor = this.items[Math.min(Math.max(index, 0), this.items.length - 1)]
+      if (neighbor) {
+        await this.selectRule(bridge, neighbor.qualifiedId)
+        this.mobilePane = 'list'
+        this.focusQualifiedId = neighbor.qualifiedId
+      }
+    },
+    clearFocusRequest() {
+      this.focusQualifiedId = null
+    },
+    async exportRule(bridge: GameShelfBridge, qualifiedId: string) {
+      if (this.mutating) return
+      this.mutating = true
+      this.mutationError = ''
+      const result = await bridge.export_rule({ qualifiedId })
+      this.mutating = false
+      if (!result.ok) {
+        this.mutationError = result.error.message
+        return
+      }
+      this.notice = result.data.cancelled
+        ? '已取消导出，规则没有改变。'
+        : `规则已导出为 ${result.data.fileName ?? 'YAML 文件'}。`
+    },
+    async beginImport(bridge: GameShelfBridge) {
+      if (this.importing) return
+      this.importing = true
+      this.importError = ''
+      this.notice = ''
+      const result = await bridge.begin_rule_import({})
+      this.importing = false
+      if (!result.ok) {
+        this.importError = result.error.message
+        return
+      }
+      if (result.data.cancelled) {
+        this.notice = '已取消导入。'
+        return
+      }
+      this.importPreview = result.data
+    },
+    closeImport() {
+      if (this.importing) return
+      this.importPreview = null
+      this.importError = ''
+    },
+    async confirmImport(bridge: GameShelfBridge, decisions: RuleImportDecision[]) {
+      if (!this.importPreview || this.importing) return
+      this.importing = true
+      this.importError = ''
+      const result = await bridge.confirm_rule_import({
+        sessionId: this.importPreview.sessionId,
+        decisions,
+      })
+      this.importing = false
+      if (!result.ok) {
+        this.importError = result.error.message
+        return
+      }
+      const firstImported = result.data.importedQualifiedIds[0] ?? null
+      this.importPreview = null
+      this.generation = result.data.generation
+      this.notice = `已导入 ${result.data.importedQualifiedIds.length} 条规则，跳过 ${result.data.skippedCount} 条。`
+      await this.loadList(bridge)
+      if (firstImported) await this.selectRule(bridge, firstImported)
     },
     applySavedDetail(detail: RuleDetail, generation: number) {
       const summary: RuleSummary = {
@@ -188,6 +450,10 @@ export const useRuleManagementStore = defineStore('rule-management', {
       this.selectedQualifiedId = detail.qualifiedId
       this.detail = detail
       this.draft = null
+      this.validation = null
+      this.testResult = null
+      this.verificationToken = null
+      this.verifiedMaterial = null
       this.dirty = false
       this.editing = false
       this.generation = generation

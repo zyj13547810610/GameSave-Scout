@@ -1,13 +1,25 @@
 <script setup lang="ts">
+import { nextTick, ref, watch } from 'vue'
 import type { RuleSummary } from '../../api/contracts'
 
-defineProps<{
+const props = defineProps<{
   items: RuleSummary[]
   selectedQualifiedId: string | null
+  focusQualifiedId?: string | null
   loading: boolean
 }>()
 
-defineEmits<{ select: [qualifiedId: string] }>()
+const emit = defineEmits<{ select: [qualifiedId: string]; focused: [] }>()
+const list = ref<HTMLElement | null>(null)
+
+watch(() => props.focusQualifiedId, async (qualifiedId) => {
+  if (!qualifiedId) return
+  await nextTick()
+  const item = [...(list.value?.querySelectorAll<HTMLButtonElement>('[data-rule-qualified-id]') ?? [])]
+    .find((button) => button.dataset.ruleQualifiedId === qualifiedId)
+  item?.focus()
+  emit('focused')
+})
 
 function sourceLabel(item: RuleSummary) {
   return item.source === 'builtin' ? '内置规则' : '用户规则'
@@ -31,13 +43,14 @@ function typeLabel(item: RuleSummary) {
       <h3>规则目录</h3>
       <span>{{ items.length }} 条</span>
     </div>
-    <div data-test="rule-list-scroll" class="rule-list-scroll" tabindex="0">
+    <div ref="list" data-test="rule-list-scroll" class="rule-list-scroll" tabindex="0">
       <p v-if="loading && items.length === 0" class="rule-pane-message">正在读取规则…</p>
       <p v-else-if="items.length === 0" class="rule-pane-message">没有符合条件的规则。</p>
       <button
         v-for="item in items"
         :key="item.qualifiedId"
         type="button"
+        :data-rule-qualified-id="item.qualifiedId"
         class="rule-list-item"
         :class="{ selected: item.qualifiedId === selectedQualifiedId }"
         :aria-current="item.qualifiedId === selectedQualifiedId ? 'true' : undefined"

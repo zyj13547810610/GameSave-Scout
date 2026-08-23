@@ -119,4 +119,125 @@ describe('ruleManagementStore', () => {
     expect(store.diagnostics[0]?.sourceName).toBe('broken.yaml')
     expect(store.refreshError).toContain('未应用')
   })
+
+  it('keeps verification for metadata edits and revokes it for matching edits', async () => {
+    const store = useRuleManagementStore()
+    store.startNew('engine')
+    store.updateDraft({
+      ...store.draft!,
+      type: 'engine', id: 'kiri', label: 'KiriKiri', threshold: .7,
+      all: [{ op: 'path_exists', path: 'data.xp3', weight: 1 }], any: [], negative: [],
+    })
+    const bridge = createMockBridge({
+      async test_rule_draft() {
+        return ok({ matched: true, summary: '命中', evidence: ['data.xp3'], expandedLocations: [], verificationToken: 'token-1' })
+      },
+    })
+    await store.testDraft(bridge, 'game-1')
+    store.markVerified()
+    expect(store.draft?.status).toBe('formal')
+
+    store.updateDraft({ ...store.draft!, notes: '只改备注' })
+    expect(store.verificationToken).toBe('token-1')
+    expect(store.draft?.status).toBe('formal')
+
+    const engineDraft = store.draft!
+    if (engineDraft.type !== 'engine') throw new Error('expected engine draft')
+    store.updateDraft({
+      ...engineDraft,
+      all: [{ ...engineDraft.all[0]!, path: 'other.xp3' }],
+    })
+    expect(store.verificationToken).toBeNull()
+    expect(store.draft?.status).toBe('experimental')
+  })
+
+  it('preserves the entire draft and selection after save failure', async () => {
+    const store = useRuleManagementStore()
+    store.startNew('save_game')
+    const draft = {
+      ...store.draft!, type: 'save_game' as const, id: 'alice', label: 'Alice', titles: ['Alice'],
+      product_ids: [], locations: [{ kind: 'directory' as const, path: '<winDocuments>\\Alice', category: 'save' as const, confidence: .9 }],
+    }
+    store.updateDraft(draft)
+    store.validation = { valid: true, normalizedDraft: draft, yamlPreview: 'id: alice', errorCode: null, message: '有效' }
+    const bridge = createMockBridge({
+      async save_rule() { return { ok: false, error: { code: 'write_failed', message: '写入失败' } } },
+    })
+
+    await store.saveDraft(bridge)
+
+    expect(store.draft).toEqual(draft)
+    expect(store.dirty).toBe(true)
+    expect(store.mobilePane).toBe('detail')
+    expect(store.mutationError).toBe('写入失败')
+  })
+
+  it('keeps an import preview after batch failure and selects the first rule after success', async () => {
+    const store = useRuleManagementStore()
+    store.importPreview = {
+      cancelled: false, sessionId: 'session-1',
+      items: [{
+        itemId: 'one', fileName: 'one.yaml', valid: true, errors: [], qualifiedId: 'user:one',
+        ruleType: 'engine', status: 'experimental', conflict: 'none', allowedDecisions: ['import', 'skip'],
+      }],
+    }
+    const failedBridge = createMockBridge({
+      async confirm_rule_import() { return { ok: false, error: { code: 'import_failed', message: '整批失败' } } },
+    })
+    const decisions = [{ itemId: 'one', action: 'import' as const, newRuleId: null }]
+    await store.confirmImport(failedBridge, decisions)
+    expect(store.importPreview?.sessionId).toBe('session-1')
+    expect(store.importError).toBe('整批失败')
+
+    const imported = detail('user:one', 'One')
+    const successfulBridge = createMockBridge({
+      async confirm_rule_import() { return ok({ importedQualifiedIds: ['user:one'], skippedCount: 0, generation: 9 }) },
+      async list_rules() { return ok({ items: [summary('user:one', 'One')], total: 1 }) },
+      async get_rule() { return ok(imported) },
+    })
+    await store.confirmImport(successfulBridge, decisions)
+    expect(store.importPreview).toBeNull()
+    expect(store.selectedQualifiedId).toBe('user:one')
+    expect(store.generation).toBe(9)
+  })
+
+  it('reports export success, cancellation and failure without changing the selected rule', async () => {
+    const store = useRuleManagementStore()
+    store.selectedQualifiedId = 'builtin:kiri'
+    const exportRule = vi
+      .fn()
+      .mockResolvedValueOnce(ok({ cancelled: false, fileName: 'kiri.yaml' }))
+      .mockResolvedValueOnce(ok({ cancelled: true }))
+      .mockResolvedValueOnce({ ok: false, error: { code: 'export_failed', message: '导出失败' } })
+    const bridge = createMockBridge({ export_rule: exportRule })
+
+    await store.exportRule(bridge, 'builtin:kiri')
+    expect(store.notice).toContain('kiri.yaml')
+    await store.exportRule(bridge, 'builtin:kiri')
+    expect(store.notice).toContain('取消导出')
+    await store.exportRule(bridge, 'builtin:kiri')
+    expect(store.mutationError).toBe('导出失败')
+    expect(store.selectedQualifiedId).toBe('builtin:kiri')
+  })
+
+  it('returns to the list and requests focus on the neighboring rule after deletion', async () => {
+    const store = useRuleManagementStore()
+    const removed = detail('user:removed', 'Removed')
+    const neighbor = detail('user:neighbor', 'Neighbor')
+    store.items = [summary('user:removed', 'Removed'), summary('user:neighbor', 'Neighbor')]
+    store.total = 2
+    store.selectedQualifiedId = removed.qualifiedId
+    store.detail = removed
+    store.mobilePane = 'detail'
+    const bridge = createMockBridge({
+      async delete_rule() { return ok({ qualifiedId: removed.qualifiedId, generation: 11 }) },
+      async get_rule() { return ok(neighbor) },
+    })
+
+    await store.deleteRule(bridge, removed.qualifiedId)
+
+    expect(store.selectedQualifiedId).toBe(neighbor.qualifiedId)
+    expect(store.mobilePane).toBe('list')
+    expect(store.focusQualifiedId).toBe(neighbor.qualifiedId)
+  })
 })
