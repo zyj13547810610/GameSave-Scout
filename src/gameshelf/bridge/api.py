@@ -18,6 +18,7 @@ from gameshelf.bootstrap.config import (
 )
 from gameshelf.bootstrap.paths import AppPaths
 from gameshelf.bridge.contracts import ApiResult, JSONValue, failure, success
+from gameshelf.bridge.rule_controller import RuleBridgeController
 from gameshelf.bridge.tasks import (
     ActiveTaskConflict,
     TaskContext,
@@ -162,6 +163,7 @@ class BridgeApi:
         batch_external: BatchExternalLookup | None = None,
         batch_candidate_opener: BatchCandidateOpener | None = None,
         ludusavi_provider: LudusaviProvider | None = None,
+        rule_controller: RuleBridgeController | None = None,
         asset_session_token: str | None = None,
     ) -> None:
         self._paths = paths
@@ -187,12 +189,57 @@ class BridgeApi:
         self._batch_external = batch_external
         self._batch_candidate_opener = batch_candidate_opener
         self._ludusavi_provider = ludusavi_provider
+        self._rule_controller = rule_controller
         self._asset_session_token = asset_session_token
         self._window: Any | None = None
 
     def attach_window(self, window: object) -> None:
         """Attach only the native window needed by whitelisted file dialogs."""
         self._window = window
+        if self._rule_controller is not None:
+            self._rule_controller.attach_window(window)
+
+    def list_rules(self, request: object) -> ApiResult:
+        return self._require_rule_controller().list_rules(request)
+
+    def get_rule(self, request: object) -> ApiResult:
+        return self._require_rule_controller().get_rule(request)
+
+    def validate_rule_draft(self, request: object) -> ApiResult:
+        return self._require_rule_controller().validate_rule_draft(request)
+
+    def test_rule_draft(self, request: object) -> ApiResult:
+        return self._require_rule_controller().test_rule_draft(request)
+
+    def save_rule(self, request: object) -> ApiResult:
+        return self._require_rule_controller().save_rule(request)
+
+    def copy_rule(self, request: object) -> ApiResult:
+        return self._require_rule_controller().copy_rule(request)
+
+    def set_rule_enabled(self, request: object) -> ApiResult:
+        return self._require_rule_controller().set_rule_enabled(request)
+
+    def delete_rule(self, request: object) -> ApiResult:
+        return self._require_rule_controller().delete_rule(request)
+
+    def refresh_rules(self, request: object) -> ApiResult:
+        return self._require_rule_controller().refresh_rules(request)
+
+    def get_game_save_rule_prefill(self, request: object) -> ApiResult:
+        return self._require_rule_controller().get_game_save_rule_prefill(request)
+
+    def begin_rule_import(self, request: object) -> ApiResult:
+        return self._require_rule_controller().begin_rule_import(request)
+
+    def confirm_rule_import(self, request: object) -> ApiResult:
+        return self._require_rule_controller().confirm_rule_import(request)
+
+    def export_rule(self, request: object) -> ApiResult:
+        return self._require_rule_controller().export_rule(request)
+
+    def open_rule_directory(self, request: object) -> ApiResult:
+        return self._require_rule_controller().open_rule_directory(request)
 
     def bootstrap(self) -> ApiResult:
         state: dict[str, JSONValue] = {
@@ -1784,6 +1831,11 @@ class BridgeApi:
         if self._ludusavi_provider is None:
             raise RuntimeError("Ludusavi provider is not configured.")
         return self._ludusavi_provider
+
+    def _require_rule_controller(self) -> RuleBridgeController:
+        if self._rule_controller is None:
+            raise RuntimeError("Rule management is not configured.")
+        return self._rule_controller
 
     def _engine_label(
         self,

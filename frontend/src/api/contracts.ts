@@ -409,8 +409,194 @@ export type ScanResult = {
   moveSuggestions: Omit<MoveSuggestion, 'sessionId'>[]
 }
 
+export type RuleSource = 'builtin' | 'user'
+export type RuleStatus = 'formal' | 'experimental'
+export type RuleType = 'engine' | 'save_game' | 'save_engine'
+
+export type RuleDiagnostic = {
+  severity: 'info' | 'warning' | 'error'
+  code: string
+  message: string
+  sourceName: string
+}
+
+export type RuleSummary = {
+  qualifiedId: string
+  ruleId: string
+  label: string
+  ruleType: RuleType
+  source: RuleSource
+  status: RuleStatus
+  enabled: boolean
+  priority: number
+}
+
+export type EngineRuleEvidenceDraft = {
+  op: 'path_exists' | 'glob_exists' | 'glob_magic_at' | 'magic_at' | 'magic_from_end' | 'edge_contains' | 'text_contains' | 'pe_field_contains'
+  path: string
+  value?: string
+  offset?: number
+  weight: number
+  field?: string
+}
+
+export type SaveRuleLocationDraft = {
+  kind: SaveLocationKind
+  path: string
+  category: 'save' | 'config' | 'other'
+  confidence: number
+}
+
+type RuleDraftCommon = {
+  version: string
+  id: string
+  label: string
+  status: RuleStatus
+  priority: number
+  enabled: boolean
+  notes: string | null
+  references: string[]
+}
+
+export type EngineRuleDraft = RuleDraftCommon & {
+  type: 'engine'
+  variant?: string
+  threshold: number
+  all: EngineRuleEvidenceDraft[]
+  any: EngineRuleEvidenceDraft[]
+  negative: EngineRuleEvidenceDraft[]
+}
+
+export type GameSaveRuleDraft = RuleDraftCommon & {
+  type: 'save_game'
+  titles: string[]
+  product_ids: string[]
+  locations: SaveRuleLocationDraft[]
+}
+
+export type EngineSaveRuleDraft = RuleDraftCommon & {
+  type: 'save_engine'
+  engine_ids: string[]
+  locations: SaveRuleLocationDraft[]
+}
+
+export type RuleDraft = EngineRuleDraft | GameSaveRuleDraft | EngineSaveRuleDraft
+
+export type RuleCapabilities = {
+  edit: boolean
+  copy: boolean
+  test: boolean
+  toggle: boolean
+  delete: boolean
+  export: boolean
+}
+
+export type RuleDetail = RuleSummary & {
+  notes: string | null
+  references: string[]
+  sourceFile: string
+  yamlPreview: string
+  draft: RuleDraft
+  capabilities: RuleCapabilities
+}
+
+export type RuleDraftValidation = {
+  valid: boolean
+  normalizedDraft: RuleDraft | null
+  yamlPreview: string | null
+  errorCode: string | null
+  message: string
+}
+
+export type RuleTestResult = {
+  matched: boolean
+  summary: string
+  evidence: string[]
+  expandedLocations: {
+    kind: SaveLocationKind
+    pathTemplate: string
+    displayPath: string
+    exists: boolean
+    truncated: boolean
+    diagnostics: string[]
+  }[]
+  verificationToken: string | null
+}
+
+export type RuleImportDecision = {
+  itemId: string
+  action: 'import' | 'replace' | 'new_id' | 'skip'
+  newRuleId: string | null
+}
+
+export type RuleImportPreview = {
+  cancelled: false
+  sessionId: string
+  items: {
+    itemId: string
+    fileName: string
+    valid: boolean
+    errors: string[]
+    qualifiedId: string | null
+    ruleType: RuleType | null
+    status: RuleStatus | null
+    conflict: 'none' | 'builtin' | 'user' | 'invalid'
+    allowedDecisions: RuleImportDecision['action'][]
+  }[]
+}
+
+export type RuleRefreshResult = {
+  applied: boolean
+  generation: number
+  catalogVersion: string
+  diagnostics: RuleDiagnostic[]
+}
+
+export type GameSaveRulePrefill = {
+  gameId: string
+  title: string
+  aliases: string[]
+  productIds: string[]
+  locations: {
+    kind: SaveLocationKind
+    pathTemplate: string
+    category: 'save' | 'config' | 'other'
+    confidence: number
+  }[]
+  engineId: string | null
+}
+
 export interface GameShelfBridge {
   bootstrap(): Promise<ApiResult<BootstrapState>>
+  list_rules(input: {
+    kind: 'all' | 'engine' | 'save'
+    source: 'all' | RuleSource
+    status: 'all' | RuleStatus
+    enabled: 'all' | 'enabled' | 'disabled'
+    query: string
+    offset: number
+    limit: number
+  }): Promise<ApiResult<{ items: RuleSummary[]; total: number }>>
+  get_rule(input: { qualifiedId: string }): Promise<ApiResult<RuleDetail>>
+  validate_rule_draft(input: { draft: RuleDraft }): Promise<ApiResult<RuleDraftValidation>>
+  test_rule_draft(input: { draft: RuleDraft; gameId: string }): Promise<ApiResult<RuleTestResult>>
+  save_rule(input: {
+    originalQualifiedId: string | null
+    draft: RuleDraft
+    verificationToken: string | null
+  }): Promise<ApiResult<{ detail: RuleDetail; generation: number }>>
+  copy_rule(input: { qualifiedId: string }): Promise<ApiResult<{ detail: RuleDetail; generation: number }>>
+  set_rule_enabled(input: { qualifiedId: string; enabled: boolean }): Promise<ApiResult<{ detail: RuleDetail; generation: number }>>
+  delete_rule(input: { qualifiedId: string }): Promise<ApiResult<{ qualifiedId: string; generation: number }>>
+  refresh_rules(input: Record<string, never>): Promise<ApiResult<RuleRefreshResult>>
+  get_game_save_rule_prefill(input: { gameId: string }): Promise<ApiResult<GameSaveRulePrefill>>
+  begin_rule_import(input: Record<string, never>): Promise<ApiResult<RuleImportPreview | { cancelled: true }>>
+  confirm_rule_import(input: {
+    sessionId: string
+    decisions: RuleImportDecision[]
+  }): Promise<ApiResult<{ importedQualifiedIds: string[]; skippedCount: number; generation: number }>>
+  export_rule(input: { qualifiedId: string }): Promise<ApiResult<{ cancelled: boolean; fileName?: string }>>
+  open_rule_directory(input: { target: 'user' | 'legacy' }): Promise<ApiResult<{ opened: boolean }>>
   set_ui_scale(input: { uiScale: UiScaleValue }): Promise<ApiResult<{ uiScale: UiScaleValue }>>
   set_library_scan_settings(input: LibraryScanSettings): Promise<ApiResult<LibraryScanSettings>>
   set_cover_wizard_settings(input: CoverWizardSettings): Promise<ApiResult<CoverWizardSettings>>

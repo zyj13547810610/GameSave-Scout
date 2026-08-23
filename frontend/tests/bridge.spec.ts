@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { createBridge } from '../src/api/bridge'
+import { createBridge, createDeferredBridge, ruleBridgeMethods } from '../src/api/bridge'
+import type { GameShelfBridge } from '../src/api/contracts'
 
 describe('desktop bridge', () => {
   it('uses the development mock when pywebview is absent', async () => {
@@ -20,5 +21,26 @@ describe('desktop bridge', () => {
         batchSaveSettings: { customRoots: [] },
       },
     })
+  })
+
+  it('forwards every rule method after delayed pywebview readiness', async () => {
+    let ready: (() => void) | undefined
+    const windowObject = {
+      addEventListener(_name: string, callback: () => void) { ready = callback },
+    } as unknown as Window
+    const bridge = createDeferredBridge(windowObject)
+    const pending = ruleBridgeMethods.map((name) => (
+      (bridge[name] as (input: Record<string, never>) => Promise<unknown>)({})
+    ))
+    const calls: string[] = []
+    const api = Object.fromEntries(ruleBridgeMethods.map((name) => [
+      name,
+      async () => { calls.push(name); return { ok: true, data: name } },
+    ])) as unknown as GameShelfBridge
+    Object.assign(windowObject, { pywebview: { api } })
+    ready?.()
+
+    await Promise.all(pending)
+    expect(calls).toEqual([...ruleBridgeMethods])
   })
 })

@@ -6,6 +6,23 @@ export const bridgeKey: InjectionKey<GameShelfBridge> = Symbol('GameShelfBridge'
 
 type BridgeOptions = { windowObject?: Window }
 
+export const ruleBridgeMethods = [
+  'list_rules',
+  'get_rule',
+  'validate_rule_draft',
+  'test_rule_draft',
+  'save_rule',
+  'copy_rule',
+  'set_rule_enabled',
+  'delete_rule',
+  'refresh_rules',
+  'get_game_save_rule_prefill',
+  'begin_rule_import',
+  'confirm_rule_import',
+  'export_rule',
+  'open_rule_directory',
+] as const satisfies readonly (keyof GameShelfBridge)[]
+
 export function createBridge(options: BridgeOptions = {}): GameShelfBridge {
   const windowObject = options.windowObject ?? window
   const available = windowObject.pywebview?.api
@@ -14,7 +31,7 @@ export function createBridge(options: BridgeOptions = {}): GameShelfBridge {
   return createDeferredBridge(windowObject)
 }
 
-function createDeferredBridge(windowObject: Window): GameShelfBridge {
+export function createDeferredBridge(windowObject: Window): GameShelfBridge {
   let apiPromise: Promise<GameShelfBridge> | undefined
   const api = () => (apiPromise ??= waitForPywebview(windowObject))
   return new Proxy({} as GameShelfBridge, {

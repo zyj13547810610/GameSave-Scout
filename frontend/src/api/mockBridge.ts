@@ -88,6 +88,47 @@ export function createMockBridge(overrides: Partial<GameShelfBridge> = {}): Game
         batchSaveSettings: { customRoots: [] },
       })
     },
+    async list_rules() { return ok({ items: [], total: 0 }) },
+    async get_rule() {
+      return { ok: false, error: { code: 'rule_not_found', message: '没有找到对应的规则。' } }
+    },
+    async validate_rule_draft(input) {
+      return ok({
+        valid: true, normalizedDraft: input.draft,
+        yamlPreview: '', errorCode: null, message: '规则草稿有效。',
+      })
+    },
+    async test_rule_draft() {
+      return ok({
+        matched: false, summary: '未测试', evidence: [],
+        expandedLocations: [], verificationToken: null,
+      })
+    },
+    async save_rule() {
+      return { ok: false, error: { code: 'not_implemented', message: '开发 Mock 尚未保存规则。' } }
+    },
+    async copy_rule() {
+      return { ok: false, error: { code: 'not_implemented', message: '开发 Mock 尚未复制规则。' } }
+    },
+    async set_rule_enabled() {
+      return { ok: false, error: { code: 'not_implemented', message: '开发 Mock 尚未修改规则。' } }
+    },
+    async delete_rule(input) { return ok({ qualifiedId: input.qualifiedId, generation: 1 }) },
+    async refresh_rules() {
+      return ok({ applied: true, generation: 1, catalogVersion: 'mock', diagnostics: [] })
+    },
+    async get_game_save_rule_prefill(input) {
+      return ok({
+        gameId: input.gameId, title: 'Alice', aliases: [], productIds: [],
+        locations: [], engineId: null,
+      })
+    },
+    async begin_rule_import() { return ok({ cancelled: true as const }) },
+    async confirm_rule_import() {
+      return ok({ importedQualifiedIds: [], skippedCount: 0, generation: 1 })
+    },
+    async export_rule() { return ok({ cancelled: true }) },
+    async open_rule_directory() { return ok({ opened: true }) },
     async set_ui_scale(input) { return ok({ uiScale: input.uiScale }) },
     async set_library_scan_settings(input) { return ok(input) },
     async set_cover_wizard_settings(input) { return ok(input) },

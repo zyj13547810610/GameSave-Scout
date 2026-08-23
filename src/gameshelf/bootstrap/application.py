@@ -15,6 +15,7 @@ from gameshelf.bootstrap.logging import configure_logging
 from gameshelf.bootstrap.paths import AppPaths
 from gameshelf.bootstrap.resources import ResourcePaths
 from gameshelf.bridge.api import BridgeApi
+from gameshelf.bridge.rule_controller import RuleBridgeController
 from gameshelf.bridge.tasks import TaskRegistry
 from gameshelf.covers.local_discovery import LocalCoverDiscovery
 from gameshelf.covers.service import CoverService
@@ -35,6 +36,7 @@ from gameshelf.platform.windows.processes import WindowsProcessLauncher
 from gameshelf.platform.windows.registry import WindowsRegistry
 from gameshelf.platform.windows.shell import WindowsShell
 from gameshelf.rules.catalog import RuleCatalogService
+from gameshelf.rules.import_export import RuleImportExportService
 from gameshelf.rules.management import RuleManagementService
 from gameshelf.rules.repository import UserRuleRepository
 from gameshelf.rules.settings import RuleSettingsStore
@@ -191,6 +193,10 @@ def build_application(
         save_repository=save_repository,
         registry=registry,
     )
+    rule_import_export = RuleImportExportService(
+        catalog=rule_catalog,
+        repository=rule_catalog.repository,
+    )
     ludusavi_provider = LudusaviProvider(
         resource_dir=resource_paths.ludusavi_dir,
         active_dir=paths.ludusavi_active_dir,
@@ -299,6 +305,14 @@ def build_application(
         candidate_root=paths.temp_dir / "cover-wizard",
     )
     asset_address = asset_server.start()
+    rule_controller = RuleBridgeController(
+        management=rule_management,
+        catalog=rule_catalog,
+        import_export=rule_import_export,
+        user_rule_directory=paths.user_rules_dir,
+        legacy_manifest_directory=paths.legacy_manifests_dir,
+        directory_opener=shell.open_directory,
+    )
     api = BridgeApi(
         paths,
         tasks,
@@ -322,6 +336,7 @@ def build_application(
         batch_external=batch_external,
         batch_candidate_opener=batch_candidate_opener,
         ludusavi_provider=ludusavi_provider,
+        rule_controller=rule_controller,
         asset_session_token=asset_address.session_token,
     )
     return Application(
