@@ -632,7 +632,10 @@ def _draft_from_rule(rule: RuleDefinition) -> dict[str, object]:
     assert isinstance(document, dict)
     entries = document["rules"]
     assert isinstance(entries, list) and isinstance(entries[0], dict)
-    return {"version": document["version"], **entries[0]}
+    draft: dict[str, object] = {"version": document["version"], **entries[0]}
+    if isinstance(rule, SaveRule) and rule.metadata.rule_type == "save_game":
+        draft.setdefault("product_ids", [])
+    return draft
 
 
 def _matches_filters(rule: RuleDefinition, filters: RuleListFilters) -> bool:

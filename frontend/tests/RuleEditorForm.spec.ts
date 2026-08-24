@@ -43,6 +43,18 @@ describe('RuleEditorForm', () => {
     vi.useRealTimers()
   })
 
+  it('uses an explicit enabled status select instead of an ambiguous checkbox', async () => {
+    const wrapper = mount(RuleEditorForm, {
+      props: { draft, mode: 'edit', validation, busy: false, dirty: false },
+    })
+
+    expect(wrapper.find('input[name="enabled"]').exists()).toBe(false)
+    const enabled = wrapper.get('select[name="enabled"]')
+    expect((enabled.element as HTMLSelectElement).value).toBe('enabled')
+    await enabled.setValue('disabled')
+    expect(wrapper.emitted('update:draft')?.at(-1)?.[0]).toMatchObject({ enabled: false })
+  })
+
   it('shows backend validation failure and disables save without dropping the draft', async () => {
     const invalid: RuleDraftValidation = {
       valid: false, normalizedDraft: null, yamlPreview: null,

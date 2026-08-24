@@ -17,6 +17,9 @@ describe('SaveRuleForm', () => {
     expect(wrapper.find('[data-test="game-title-selectors"]').exists()).toBe(true)
     expect(wrapper.find('[data-test="product-id-selectors"]').exists()).toBe(true)
     expect(wrapper.find('[data-test="engine-id-selectors"]').exists()).toBe(false)
+    expect(wrapper.get('[data-test="product-id-help"]').text())
+      .toContain('steam、gog、epic、itch、vndb、dlsite')
+    expect(wrapper.get('[data-test="product-id-help"]').text()).toContain('每项填写一个')
   })
 
   it('requires stable engine IDs for an engine save rule', () => {

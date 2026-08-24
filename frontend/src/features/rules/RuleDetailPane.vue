@@ -36,6 +36,7 @@ const emit = defineEmits<{
 
 const pendingAction = ref<'toggle' | 'delete' | null>(null)
 const actionTrigger = ref<HTMLElement | null>(null)
+const testPanelAnchor = ref<HTMLElement | null>(null)
 
 function requestDanger(action: 'toggle' | 'delete', event: MouseEvent) {
   if (!props.detail || props.busy) return
@@ -54,6 +55,14 @@ function confirmDanger() {
   if (pendingAction.value === 'toggle') emit('toggle', props.detail)
   else emit('delete', props.detail.qualifiedId)
   void closeDanger()
+}
+
+async function focusTestPanel() {
+  await nextTick()
+  const anchor = testPanelAnchor.value
+  if (!anchor) return
+  anchor.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  anchor.focus({ preventScroll: true })
 }
 
 function onKeydown(event: KeyboardEvent) {
@@ -81,16 +90,19 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
           :dirty="dirty"
           @update:draft="$emit('updateDraft', $event)"
           @validate="$emit('validate', $event)"
+          @test="focusTestPanel"
           @save="$emit('save')"
         />
-        <RuleTestPanel
-          :games="games"
-          :result="testResult"
-          :busy="testing"
-          :can-mark-verified="canMarkVerified"
-          @test="$emit('test', $event)"
-          @mark-verified="$emit('markVerified')"
-        />
+        <div ref="testPanelAnchor" class="rule-test-anchor" data-test="rule-test-anchor" tabindex="-1">
+          <RuleTestPanel
+            :games="games"
+            :result="testResult"
+            :busy="testing"
+            :can-mark-verified="canMarkVerified"
+            @test="$emit('test', $event)"
+            @mark-verified="$emit('markVerified')"
+          />
+        </div>
       </template>
       <template v-else-if="detail">
         <RuleEditorForm

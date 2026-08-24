@@ -67,6 +67,9 @@ function moveLocation(index: number, direction: -1 | 1) {
     </fieldset>
     <fieldset v-if="modelValue.type === 'save_game'" data-test="product-id-selectors" class="rule-editor-group">
       <legend>产品编号（可选）</legend>
+      <p class="rule-field-help" data-test="product-id-help">
+        支持 steam、gog、epic、itch、vndb、dlsite；格式为“平台:编号”，每项填写一个，没有可留空。
+      </p>
       <div v-for="(value, index) in modelValue.product_ids" :key="index" class="rule-inline-row">
         <input :disabled="readonly" :value="value" placeholder="例如 vndb:v123" @input="updateValue('product_ids', index, ($event.target as HTMLInputElement).value)">
         <button v-if="!readonly" class="danger" type="button" @click="removeValue('product_ids', index)">删除</button>

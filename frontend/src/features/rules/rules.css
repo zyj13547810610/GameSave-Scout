@@ -152,6 +152,7 @@
 .rule-type-form { display: grid; gap: .8rem; }
 .rule-editor-group { min-width: 0; margin: 0; border: 1px solid #393341; border-radius: .65rem; padding: .75rem; }
 .rule-editor-group legend { padding: 0 .35rem; color: #c9bed7; }
+.rule-field-help { margin: 0 0 .55rem; color: #9c94aa; font-size: .75rem; }
 .rule-editor-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem; }
 .rule-editor-grid label,
 .rule-editor-row label { display: grid; min-width: 0; gap: .3rem; color: #aaa2b6; }

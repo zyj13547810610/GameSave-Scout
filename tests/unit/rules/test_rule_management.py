@@ -61,6 +61,7 @@ def test_rule_list_detail_and_validation_are_normalized_and_path_safe(
         RuleListFilters(kind="all", source="all", query="SHARED", limit=20)
     )
     detail = service.get_rule("builtin:declared_engine")
+    save_detail = service.get_rule("builtin:declared_save")
     invalid = service.validate_draft({"version": "1", "id": "UPPER"})
 
     assert [item.qualified_id for item in page.items] == [
@@ -76,6 +77,8 @@ def test_rule_list_detail_and_validation_are_normalized_and_path_safe(
         export=True,
     )
     assert detail.source_file == "builtin/engines.yaml"
+    assert save_detail.draft["product_ids"] == []
+    assert "product_ids" not in save_detail.yaml_preview
     assert str(tmp_path) not in detail.yaml_preview
     assert invalid.valid is False
     assert invalid.error_code == "invalid_rule_draft"

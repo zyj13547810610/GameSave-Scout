@@ -80,7 +80,12 @@ onBeforeUnmount(() => {
         <label>优先级
           <input name="priority" type="number" :disabled="mode === 'readonly'" :value="draft.priority" @input="updateCommon({ priority: Number(($event.target as HTMLInputElement).value) })">
         </label>
-        <label class="check-row"><input name="enabled" type="checkbox" :disabled="mode === 'readonly'" :checked="draft.enabled" @change="updateCommon({ enabled: ($event.target as HTMLInputElement).checked })">启用</label>
+        <label>启用状态
+          <select name="enabled" :disabled="mode === 'readonly'" :value="draft.enabled ? 'enabled' : 'disabled'" @change="updateCommon({ enabled: ($event.target as HTMLSelectElement).value === 'enabled' })">
+            <option value="enabled">已启用</option>
+            <option value="disabled">已停用</option>
+          </select>
+        </label>
         <label class="rule-editor-wide">备注
           <input name="notes" :disabled="mode === 'readonly'" :value="draft.notes ?? ''" @input="updateCommon({ notes: ($event.target as HTMLInputElement).value || null })">
         </label>
