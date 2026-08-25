@@ -54,3 +54,4 @@ class SaveLocationSuggestion:
     category: SuggestionCategory = "save"
     group: SuggestionGroup = "possible"
     availability: SuggestionAvailability = "predicted"
+    require_existing: bool = False

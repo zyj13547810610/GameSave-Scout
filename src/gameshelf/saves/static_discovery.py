@@ -197,6 +197,8 @@ class StaticSaveDiscovery:
         merged: dict[tuple[str, str], _RankedSuggestion] = {}
         for ranked in candidates:
             suggestion = self._with_availability(ranked.suggestion, install_dir)
+            if suggestion.require_existing and suggestion.availability != "found":
+                continue
             key = self._suggestion_key(suggestion, install_dir)
             if key is None or key in existing:
                 continue

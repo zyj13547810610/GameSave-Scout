@@ -89,6 +89,41 @@ rules:
     assert suggestions[0].category == "save"
 
 
+def test_provider_propagates_location_existing_policy(tmp_path: Path) -> None:
+    provider = _provider(
+        tmp_path,
+        """\
+version: test
+rules:
+  - id: existing_policy
+    label: 存在性策略
+    type: save_engine
+    status: formal
+    references: [https://example.com/save]
+    engine_ids: [godot]
+    locations:
+      - kind: directory
+        path: <winDocuments>\\Predicted
+        category: save
+        confidence: 0.8
+      - kind: directory
+        path: <winDocuments>\\Existing
+        category: save
+        confidence: 0.9
+        require_existing: true
+""",
+    )
+
+    relaxed, strict = provider.suggest_engine(
+        _game(engine_id="godot"),
+        tmp_path / "Game",
+        {},
+    )
+
+    assert relaxed.require_existing is False
+    assert strict.require_existing is True
+
+
 def test_missing_or_unsafe_metadata_skips_location_with_diagnostic(
     tmp_path: Path,
     caplog,

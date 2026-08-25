@@ -168,6 +168,7 @@ class SaveRuleProvider:
                         ),
                         suggestion_id=f"{rule.metadata.qualified_id}:{index}",
                         category=location.category,
+                        require_existing=location.require_existing,
                         group=(
                             "experimental"
                             if rule.metadata.status == "experimental"

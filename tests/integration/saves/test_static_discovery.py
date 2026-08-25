@@ -336,6 +336,51 @@ def test_existing_path_becomes_predicted_and_unselected_after_removal(
     assert predicted.preselected is False
 
 
+def test_declarative_existing_policy_filters_only_missing_strict_location(
+    static_harness: StaticHarness,
+) -> None:
+    resolver = static_harness.discovery._resolver
+    rules = parse_save_rule_document(
+        yaml.safe_load(
+            """\
+version: test
+rules:
+  - id: location_policy
+    label: 位置存在性策略
+    type: save_game
+    status: experimental
+    titles: [Alice]
+    locations:
+      - kind: directory
+        path: <winDocuments>\\Policy\\Predicted
+        category: save
+        confidence: 0.8
+      - kind: directory
+        path: <winDocuments>\\Policy\\Existing
+        category: save
+        confidence: 0.9
+        require_existing: true
+"""
+        ),
+        source="user",
+        require_single=True,
+    )
+    static_harness.snapshot.save_rules = SaveRuleProvider(rules, resolver)
+    relaxed_path = resolver.expand(r"<winDocuments>\Policy\Predicted", None)
+    strict_path = resolver.expand(r"<winDocuments>\Policy\Existing", None)
+
+    missing = static_harness.discovery.suggest_for_game(static_harness.game_id)
+
+    assert any(item.display_path == str(relaxed_path) for item in missing)
+    assert not any(item.display_path == str(strict_path) for item in missing)
+
+    strict_path.mkdir(parents=True)
+    found = static_harness.discovery.suggest_for_game(static_harness.game_id)
+    strict = next(item for item in found if item.display_path == str(strict_path))
+
+    assert strict.availability == "found"
+
+
 def test_availability_probe_failure_keeps_candidate_with_diagnostic(
     static_harness: StaticHarness,
 ) -> None:

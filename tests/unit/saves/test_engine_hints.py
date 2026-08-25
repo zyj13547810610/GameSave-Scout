@@ -25,38 +25,53 @@ def hint_provider(tmp_path: Path) -> EngineSaveHintProvider:
     return EngineSaveHintProvider(PathTemplateResolver(folders))
 
 
-def test_renpy_reads_literal_save_directory_and_suggests_appdata(
-    tmp_path: Path,
-    hint_provider: EngineSaveHintProvider,
-) -> None:
+def test_renpy_metadata_reads_literal_save_directory(tmp_path: Path) -> None:
     root = tmp_path / "Game"
     script = root / "game" / "options.rpy"
     script.parent.mkdir(parents=True)
     script.write_text('define config.save_directory = "Alice-123"', encoding="utf-8")
 
-    suggestions = hint_provider.suggest(_game("renpy"), root, {})
-
-    assert suggestions[0].path_template == r"<winAppData>\RenPy\Alice-123"
-    assert suggestions[0].confidence >= 0.9
-    assert suggestions[0].availability == "predicted"
-
-    Path(suggestions[0].display_path).mkdir(parents=True)
-    assert hint_provider.suggest(_game("renpy"), root, {})[0].availability == "found"
+    assert load_engine_metadata(_game("renpy"), root) == {
+        "renpy_save_directory": "Alice-123"
+    }
 
 
-def test_renpy_never_executes_expression_or_accepts_unsafe_segment(
+@pytest.mark.parametrize(
+    "assignment",
+    [
+        "config.save_directory = make_save_dir()",
+        'config.save_directory = "../Alice"',
+        'config.save_directory = "CON"',
+        'config.save_directory = "Alice."',
+        'config.save_directory = "Alice "',
+        f'config.save_directory = "{"A" * 129}"',
+    ],
+)
+def test_renpy_metadata_never_executes_or_accepts_unsafe_segment(
     tmp_path: Path,
-    hint_provider: EngineSaveHintProvider,
+    assignment: str,
 ) -> None:
     root = tmp_path / "Game"
     script = root / "game" / "options.rpy"
     script.parent.mkdir(parents=True)
-    script.write_text(
-        'config.save_directory = make_save_dir()\nconfig.save_directory = "../Alice"',
+    script.write_text(assignment, encoding="utf-8")
+
+    assert load_engine_metadata(_game("renpy"), root) == {}
+
+
+def test_renpy_metadata_scan_is_depth_and_read_bounded(tmp_path: Path) -> None:
+    root = tmp_path / "Game"
+    too_deep = root / "game" / "one" / "two" / "three" / "four" / "options.rpy"
+    too_deep.parent.mkdir(parents=True)
+    too_deep.write_text('config.save_directory = "TooDeep"', encoding="utf-8")
+
+    oversized = root / "game" / "oversized.rpy"
+    oversized.write_text(
+        "#" * (256 * 1024) + '\nconfig.save_directory = "PastLimit"',
         encoding="utf-8",
     )
 
-    assert hint_provider.suggest(_game("renpy"), root, {}) == ()
+    assert load_engine_metadata(_game("renpy"), root) == {}
 
 
 def test_unity_requires_company_and_product_before_local_low_hint(

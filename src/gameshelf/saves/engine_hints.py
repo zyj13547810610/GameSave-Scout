@@ -427,12 +427,28 @@ def _safe_iterdir(directory: Path) -> tuple[Path, ...]:
 def load_engine_metadata(game: Game, install_dir: Path) -> Mapping[str, str]:
     """Read the small, engine-owned metadata files used by save hints."""
 
+    if game.engine_id == "renpy":
+        return _load_renpy_metadata(install_dir)
     if game.engine_id == "unity":
         return _load_unity_metadata(game, install_dir)
     if game.engine_id == "unreal":
         return _load_unreal_metadata(install_dir)
     if game.engine_id == "godot":
         return _load_godot_metadata(install_dir)
+    return {}
+
+
+def _load_renpy_metadata(install_dir: Path) -> Mapping[str, str]:
+    scripts_dir = install_dir / "game"
+    for candidate in _bounded_files(scripts_dir, ".rpy"):
+        try:
+            text = read_text_limit(candidate)
+        except OSError:
+            continue
+        for match in _RENPY_SAVE_DIRECTORY.finditer(text):
+            segment = match.group("value")
+            if _safe_windows_segment(segment):
+                return {"renpy_save_directory": segment}
     return {}
 
 
