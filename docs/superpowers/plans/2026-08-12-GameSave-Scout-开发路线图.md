@@ -2,7 +2,7 @@
 
 > 文档性质：项目唯一有效的版本路线图与开发状态；最后更新：2026-08-25。
 
-> 名称过渡状态：产品与当前固定文档已更名为 **GameSave Scout**；V0.3.2 源码技术标识、构建资源和既有发布产物暂时保留 `GameShelf` / `gameshelf`。后续代码改名将作为一次独立收口，同时更新需要与代码原型对应的历史归档；真实版本号、提交号和校验值保持原样。
+> V0.3.3 产品技术身份已在后端、前端和发布链中统一为 **GameSave Scout**，不保留旧运行入口；程序旁 `data` 与 schema 4 不变。当前正在同步文档与历史代码原型，随后执行完整门禁和双版本便携构建；旧版本真实产物、提交号和校验值保持原样。
 
 ## 1. 产品方向
 
@@ -176,12 +176,12 @@ V0.3.0 完整源码门禁为 Python 963 项、前端 48 个测试文件共 197 �
 - 新增安全 `{renpy_save_directory}` 元数据占位符，把 Ren'Py、RPG Maker 2000/XP/VX/VX Ace/MV/MZ 和 NScripter 的等价存档提示迁入内置 YAML；只有对照测试等价后才删除旧候选分支。
 - KiriKiri 和 WOLF 继续保留需要目录内部文件证据的代码提示；本轮不新增数据库表、不迁移 schema 4、不构建便携包，也不改变按需查找和用户主动批量扫描边界。
 
-### 9.4 V0.3.3 产品技术改名（设计已确认，下一项）
+### 9.4 V0.3.3 产品技术改名（源码与发布链已实现，便携构建待完成）
 
-- 产品名保持 `GameSave Scout`；Python 包改为 `gamesave_scout`，命令改为 `gamesave-scout`，前端桥接类型改为 `GameSaveScoutBridge`，开发环境变量改用 `GAMESAVE_SCOUT_*`。
-- PyInstaller 配置和可执行文件改为 `GameSaveScout.spec` / `GameSaveScout.exe`；发布产物改为 `GameSave-Scout-0.3.3-win-x64` 与 `GameSave-Scout-0.3.3-win-x64-lite`。
-- 不保留 `gameshelf`、旧命令或 `GAMESHELF_*` 兼容入口；程序旁 `data` 结构、配置版本 5、SQLite schema 4 和用户数据不变，旧日志不迁移或删除。
-- 采用后端、前端、发布链、文档与历史原型的分层收口；完整门禁后构建两版便携包，随后更新 GitHub `origin` 并推送 `main`，不自动上传 Release 附件。
+- 产品名保持 `GameSave Scout`；Python 包已改为 `gamesave_scout`，命令已改为 `gamesave-scout`，前端桥接类型已改为 `GameSaveScoutBridge`，开发环境变量使用 `GAMESAVE_SCOUT_*`。
+- PyInstaller 配置和可执行文件已改为 `GameSaveScout.spec` / `GameSaveScout.exe`；发布产物前缀已改为 `GameSave-Scout-0.3.3-win-x64` 与 `GameSave-Scout-0.3.3-win-x64-lite`。
+- 不保留旧包、旧命令或旧环境变量兼容入口；程序旁 `data` 结构、配置版本 5、SQLite schema 4 和用户数据不变，旧日志不迁移或删除。
+- 后端、前端和发布链分层收口已完成并分别提交；当前同步文档与历史原型，随后运行完整门禁并构建两版便携包，再更新 GitHub `origin` 并推送 `main`，不自动上传 Release 附件。
 - 历史归档中的可执行代码原型同步新身份；V0.3.2 及更早真实产物名、版本、提交和 SHA-256 保持原样。
 
 ### 9.5 更晚版本
@@ -203,12 +203,14 @@ python -m mypy src scripts
 npm --prefix frontend run test:unit -- --run
 npm --prefix frontend run type-check
 npm --prefix frontend run build
-python -m gameshelf --smoke-test
+python -m gamesave_scout --smoke-test
 ```
 
 正式冻结产物必须运行模块 07 定义的冻结冒烟；额外干净目标设备复核属于后续可选兼容性检查。
 
 ## 11. 下一项建议任务
+
+当前唯一强制收口项是完成 V0.3.3 文档/历史原型同步、完整质量门禁和双版本便携构建，并记录正式尺寸与 SHA-256；完成后再进入新的功能版本。
 
 游戏记录生命周期、扫描过程可见性、引擎识别首发补强、界面缩放便携持久化、主页批量管理与事务式删除、Ludusavi 静态存档性能索引、引导式寻找存档及 V0.1 发布流水线均已完成自动实现与验证。
 
@@ -292,5 +294,6 @@ V0.3.2 正式发布门禁为 Python 1276 项通过、1 项平台条件跳过，�
 | 2026-08-25 | 完成 V0.3.2 自动收口：Python 1274 项通过、1 项跳过，前端 241 项及 Ruff、mypy、Vue 类型检查、141 模块生产构建和隔离 schema 4 源码 smoke 全部通过；未构建便携包，真实游戏样本矩阵继续后置。 |
 | 2026-08-25 | V0.3.2 首次正式构建在冻结核心完成后发现两份随包 README 仍为 0.2.1；新增真实发布模板版本一致性回归并提交修复，未发布错误产物。 |
 | 2026-08-25 | 从干净提交 `55d8024` 完成 V0.3.2 双版本正式构建与独立复核；Python 1276 项、前端 241 项及完整门禁、两版冻结 smoke、清单、schema 4、规则树、模式隔离、无 `data`、ZIP 和微软签名均通过。完整版/轻量版目录为 751.35/92.07 MiB，ZIP 为 326.15/35.23 MiB，SHA-256 为 `af4c7b50…1e252` / `181dbb71…80bb`。 |
-| 2026-08-25 | 确认产品名改为 GameSave Scout：README、总体设计、路线图和 01～07 固定文档正文与文件名已先行统一；为保持 V0.3.2 可复现，本轮不修改 `GameShelf.exe`、`gameshelf`、构建资源和既有发布产物，历史归档仅修复因固定文档改名产生的实际断链，完整技术改名留作后续独立任务。 |
+| 2026-08-25 | 确认产品名改为 GameSave Scout：README、总体设计、路线图和 01～07 固定文档正文与文件名先行统一；为保持 V0.3.2 可复现，首轮暂不修改旧技术标识、构建资源和既有发布产物，历史归档仅修复因固定文档改名产生的实际断链，完整技术改名留作后续独立任务。 |
 | 2026-08-25 | 确认 V0.3.3 完整技术改名设计：采用分层收口并彻底移除旧包、命令和环境变量入口；新身份为 `gamesave_scout`、`gamesave-scout`、`GameSaveScout.exe`、`GameSave-Scout-0.3.3-*`，`data` 与 schema 4 不变。完整门禁和双版本构建后更新新 GitHub 远端并推送，Release 附件仍不自动上传。 |
+| 2026-08-25 | 完成 V0.3.3 后端、前端与发布链源码迁移：Python 身份回归 1233 项通过、1 项跳过，前端 241 项通过，发布工具 38 项与 PyInstaller 集成 5 项通过；Ruff、mypy、类型检查、生产构建和 schema 4 源码 smoke 均通过，下一步为文档审计和正式双版本构建。 |

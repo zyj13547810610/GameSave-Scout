@@ -4,7 +4,7 @@ GameSave Scout 是一个面向 Windows 10/11 x64 的本地优先、便携式个�
 
 GameSave Scout 不需要账号或云服务。游戏库、配置、封面、日志和 WebView 用户数据默认保存在程序旁的 `data` 目录，可以随整个程序目录迁移。当前源码范围与实现状态见[开发路线图](docs/superpowers/plans/2026-08-12-GameSave-Scout-开发路线图.md)。
 
-> 名称过渡说明：产品与当前维护文档已使用 **GameSave Scout**。为保证 V0.3.2 源码、命令和既有便携产物仍可准确复现，本阶段暂不修改 `GameShelf.exe`、Python 包 `gameshelf`、`GAMESHELF_*` 环境变量及已生成的 `GameShelf-0.3.2-*` 产物名称；这些技术标识将在后续代码改名时统一更新。
+> V0.3.3 源码与发布链已统一为 **GameSave Scout**：Python 包为 `gamesave_scout`，命令为 `gamesave-scout`，可执行文件为 `GameSaveScout.exe`，发布前缀为 `GameSave-Scout`。程序旁 `data` 和 SQLite schema 4 保持不变；V0.3.3 双版本便携包尚待最终构建复核。
 
 ## 主要功能
 
@@ -26,10 +26,20 @@ GameSave Scout 不需要账号或云服务。游戏库、配置、封面、日�
 
 ## 版本更新记录
 
-以下记录按源码开发里程碑整理；`V0.1.0`、`V0.1.4`、`V0.2.1` 和 `V0.3.2` 已生成本地双版本便携候选包。详细设计、实现边界和验证记录以[固定设计文档](docs/superpowers/plans)为准。
+以下记录按源码开发里程碑整理；`V0.1.0`、`V0.1.4`、`V0.2.1` 和 `V0.3.2` 已生成本地双版本便携候选包，`V0.3.3` 技术改名已完成源码与发布链迁移，便携构建待最终步骤。详细设计、实现边界和验证记录以[固定设计文档](docs/superpowers/plans)为准。
 
 <details open>
-<summary><strong>V0.3.2 — 2026-08-25（最新源码与便携候选）</strong></summary>
+<summary><strong>V0.3.3 — 2026-08-25（最新源码，便携构建待完成）</strong></summary>
+
+- 产品技术身份统一为 GameSave Scout，不保留旧 Python 包、命令或开发环境变量兼容入口；
+- Python 包、前端桥接、日志、PyInstaller spec、EXE 和双版本发布前缀已同步改名，程序旁 `data` 与 schema 4 不变；
+- 后端迁移回归为 1233 项通过、1 项平台条件跳过，前端为 57 个测试文件共 241 项通过；发布工具、真实 PyInstaller 集成、Ruff、mypy、类型检查和源码 smoke 均已通过；
+- 完整离线版与轻量联网版将在最终质量门禁后生成，正式尺寸和 SHA-256 只记录实际构建结果。
+
+</details>
+
+<details>
+<summary><strong>V0.3.2 — 2026-08-25（历史便携候选）</strong></summary>
 
 - 逐项复核固定 GARbro 提交的 228 个 ArcFormats 顶层格式族，从 123 个引擎/系统相关族中筛出并实现 45 条强特征正式规则和 7 条短签名/加密头实验规则；现有安全证据操作无法可靠表达的候选继续留在开发台账；
 - 内置引擎规则增至 74 条（66 条正式、8 条实验），新增规则具有资料驱动的正反、近似魔数、截断、复合证据和跨格式碰撞夹具；缺少商业游戏样本的真实矩阵继续后置；
@@ -186,28 +196,28 @@ V0.2 批量存档发现展示已安装、失效、未关联及已记录存档位
 
 ## 便携版选择与使用
 
-当前 V0.3.2 提供两个本地 Windows x64 便携候选包；尚未上传 GitHub Release：
+V0.3.3 最终构建将生成两个本地 Windows x64 便携候选包；当前源码与发布链已就绪，正式产物尚待最终质量门禁：
 
 | 版本 | 目录/ZIP 名称 | WebView2 | 适用场景 |
 | --- | --- | --- | --- |
-| 完整离线版 | `GameShelf-0.3.2-win-x64` | 自带 Fixed Version Runtime | 体积较大，可在系统没有 WebView2 时离线启动 |
-| 轻量联网版 | `GameShelf-0.3.2-win-x64-lite` | 使用系统 Evergreen Runtime | 下载体积较小，系统缺失 Runtime 时需要联网手动安装 |
+| 完整离线版 | `GameSave-Scout-0.3.3-win-x64` | 自带 Fixed Version Runtime | 体积较大，可在系统没有 WebView2 时离线启动 |
+| 轻量联网版 | `GameSave-Scout-0.3.3-win-x64-lite` | 使用系统 Evergreen Runtime | 下载体积较小，系统缺失 Runtime 时需要联网手动安装 |
 
 使用步骤：
 
 1. 将 ZIP 完整解压到本地固定磁盘上的可写目录，不要直接在压缩包内运行。
-2. 保持 `GameShelf.exe`、`_internal` 以及完整版的 `runtime` 或轻量版的 `prerequisites` 相对位置不变。
-3. 双击 `GameShelf.exe` 启动。首次正常启动会在程序旁创建 `data`。
+2. 保持 `GameSaveScout.exe`、`_internal` 以及完整版的 `runtime` 或轻量版的 `prerequisites` 相对位置不变。
+3. 双击 `GameSaveScout.exe` 启动。首次正常启动会在程序旁创建 `data`。
 4. 添加一个或多个游戏根目录并执行扫描；游戏详情中可以继续设置启动方式、封面、引擎和存档位置。
 
 轻量版如果检测不到系统 Evergreen WebView2 Runtime，会先校验随包的微软官方 `MicrosoftEdgeWebview2Setup.exe`，再询问是否打开安装位置。选择“是”后，GameSave Scout 只会在 Explorer 中选中安装器并正常退出；请手动双击安装器联网完成安装，然后重新启动 GameSave Scout。GameSave Scout 不会静默运行安装器，也不会自动重新启动自身。
 
 便携使用注意事项：
 
-- 完全退出 GameSave Scout 后，复制整个程序目录即可迁移；不要只移动 `GameShelf.exe`。
+- 完全退出 GameSave Scout 后，复制整个程序目录即可迁移；不要只移动 `GameSaveScout.exe`。
 - 删除整个 GameSave Scout 目录即可删除程序及其便携数据；轻量版使用的系统 Evergreen Runtime 不会随之卸载。
 - 当前便携包只支持本地文件系统中的可写目录，且完整发布负载的绝对路径必须少于 260 个字符；不支持 UNC 或网络共享路径。
-- 启动错误日志位于 `data\logs\startup-error.log`，普通运行日志位于 `data\logs\gameshelf.log`。
+- 启动错误日志位于 `data\logs\startup-error.log`，普通运行日志位于 `data\logs\gamesave-scout.log`。
 - 当前 GameSave Scout 本体未进行 Authenticode 签名，Windows 可能显示未知发布者或 SmartScreen 提示。请只使用可信来源的发布包并核对 ZIP 的 SHA-256，不要为运行程序而关闭系统安全功能。
 
 ## 开发环境
@@ -231,7 +241,7 @@ npm --prefix frontend ci
 conda activate .\.venv
 ```
 
-当前 V0.3.2 源码和便携候选包均使用 SQLite schema 4，并按开发期约定不迁移 schema 1/2/3 数据库。如果程序提示检测到旧库，请先完全退出 GameSave Scout，再自行移走或删除可舍弃的 `data\library.db` 后重启。该操作会丢失旧数据库记录；程序不会自动删除 `data\covers` 中的图片，但新库也不会自动恢复旧封面关联。
+当前 V0.3.3 源码和待构建便携候选包均使用 SQLite schema 4，并按开发期约定不迁移 schema 1/2/3 数据库。如果程序提示检测到旧库，请先完全退出 GameSave Scout，再自行移走或删除可舍弃的 `data\library.db` 后重启。该操作会丢失旧数据库记录；程序不会自动删除 `data\covers` 中的图片，但新库也不会自动恢复旧封面关联。
 
 后端检查：
 
@@ -252,7 +262,7 @@ npm --prefix frontend run build
 前端生产构建会直接更新 `resources/ui`。随后可以在不打开窗口的情况下验证便携路径与数据库：
 
 ```powershell
-python -m gameshelf --smoke-test
+python -m gamesave_scout --smoke-test
 ```
 
 ## 构建 Windows x64 便携包
@@ -285,22 +295,22 @@ $webView2Bootstrapper = (Resolve-Path ".\webview安装包\MicrosoftEdgeWebview2S
 
 ```text
 dist/
-├─ GameShelf-0.3.2-win-x64/
-├─ GameShelf-0.3.2-win-x64.zip
-├─ GameShelf-0.3.2-win-x64.zip.sha256
-├─ GameShelf-0.3.2-win-x64-lite/
-├─ GameShelf-0.3.2-win-x64-lite.zip
-└─ GameShelf-0.3.2-win-x64-lite.zip.sha256
+├─ GameSave-Scout-0.3.3-win-x64/
+├─ GameSave-Scout-0.3.3-win-x64.zip
+├─ GameSave-Scout-0.3.3-win-x64.zip.sha256
+├─ GameSave-Scout-0.3.3-win-x64-lite/
+├─ GameSave-Scout-0.3.3-win-x64-lite.zip
+└─ GameSave-Scout-0.3.3-win-x64-lite.zip.sha256
 ```
 
 可以独立复核两个 ZIP：
 
 ```powershell
-Get-FileHash .\dist\GameShelf-0.3.2-win-x64.zip -Algorithm SHA256
-Get-Content .\dist\GameShelf-0.3.2-win-x64.zip.sha256
+Get-FileHash .\dist\GameSave-Scout-0.3.3-win-x64.zip -Algorithm SHA256
+Get-Content .\dist\GameSave-Scout-0.3.3-win-x64.zip.sha256
 
-Get-FileHash .\dist\GameShelf-0.3.2-win-x64-lite.zip -Algorithm SHA256
-Get-Content .\dist\GameShelf-0.3.2-win-x64-lite.zip.sha256
+Get-FileHash .\dist\GameSave-Scout-0.3.3-win-x64-lite.zip -Algorithm SHA256
+Get-Content .\dist\GameSave-Scout-0.3.3-win-x64-lite.zip.sha256
 ```
 
 2026-08-25 本地 V0.3.2 候选包的 ZIP SHA-256 为：
@@ -316,7 +326,7 @@ Get-Content .\dist\GameShelf-0.3.2-win-x64-lite.zip.sha256
 
 ```powershell
 conda activate .\.venv
-python -m gameshelf
+python -m gamesave_scout
 ```
 
 该命令会加载已经构建到 `resources/ui` 的前端。如果修改过前端源码，应先执行 `npm --prefix frontend run build`。
@@ -330,11 +340,11 @@ npm --prefix frontend run dev -- --host 127.0.0.1
 第二个窗口让桌面程序加载 Vite 页面：
 
 ```powershell
-$env:GAMESHELF_DEV_SERVER_URL = "http://127.0.0.1:5173"
-python -m gameshelf
+$env:GAMESAVE_SCOUT_DEV_SERVER_URL = "http://127.0.0.1:5173"
+python -m gamesave_scout
 ```
 
-如果 Vite 因端口占用显示了其他地址，应把 `GAMESHELF_DEV_SERVER_URL` 改为终端中实际显示的地址。冻结版会忽略该变量并只加载随包 UI。
+如果 Vite 因端口占用显示了其他地址，应把 `GAMESAVE_SCOUT_DEV_SERVER_URL` 改为终端中实际显示的地址。冻结版会忽略该变量并只加载随包 UI。
 
 ## 项目文档与许可证
 

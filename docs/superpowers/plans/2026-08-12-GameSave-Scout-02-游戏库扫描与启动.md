@@ -250,17 +250,17 @@ Windows 启动适配器使用参数数组和 `shell=False`，不拼接命令行�
 
 | 区域 | 主要职责 |
 | --- | --- |
-| `src/gameshelf/scanning/discovery.py` | 安全枚举候选目录和递归剪枝 |
-| `src/gameshelf/scanning/executable_ranker.py` | 过滤并排序主程序候选 |
-| `src/gameshelf/scanning/analysis.py` | 单游戏分析、文件指纹和缓存复用决策 |
-| `src/gameshelf/scanning/analysis_pool.py` | 单根/多根目录共享的有界分析并发池 |
-| `src/gameshelf/scanning/analysis_cache.py` | 分析缓存读取模型和事务写入载荷 |
-| `src/gameshelf/scanning/service.py` | 扫描会话编排、批量观察与进度 |
-| `src/gameshelf/scanning/reconcile.py` | 成功扫描后的事务核对与移动建议 |
-| `src/gameshelf/library/title_parser.py` | 从目录末级名称保守拆分作品标题与明确版本尾缀 |
-| `src/gameshelf/library/service.py` | 根目录、游戏元数据和启动配置命令 |
-| `src/gameshelf/library` 分组服务 | V0.2 分组名称、成员关系和批量事务命令 |
-| `src/gameshelf/library/launcher.py` | 启动前验证与 Windows 进程调用 |
+| `src/gamesave_scout/scanning/discovery.py` | 安全枚举候选目录和递归剪枝 |
+| `src/gamesave_scout/scanning/executable_ranker.py` | 过滤并排序主程序候选 |
+| `src/gamesave_scout/scanning/analysis.py` | 单游戏分析、文件指纹和缓存复用决策 |
+| `src/gamesave_scout/scanning/analysis_pool.py` | 单根/多根目录共享的有界分析并发池 |
+| `src/gamesave_scout/scanning/analysis_cache.py` | 分析缓存读取模型和事务写入载荷 |
+| `src/gamesave_scout/scanning/service.py` | 扫描会话编排、批量观察与进度 |
+| `src/gamesave_scout/scanning/reconcile.py` | 成功扫描后的事务核对与移动建议 |
+| `src/gamesave_scout/library/title_parser.py` | 从目录末级名称保守拆分作品标题与明确版本尾缀 |
+| `src/gamesave_scout/library/service.py` | 根目录、游戏元数据和启动配置命令 |
+| `src/gamesave_scout/library` 分组服务 | V0.2 分组名称、成员关系和批量事务命令 |
+| `src/gamesave_scout/library/launcher.py` | 启动前验证与 Windows 进程调用 |
 | `frontend/src/features/scan-roots` | 根目录添加和列表操作 |
 | `frontend/src/features/library` | 游戏列表、设置和扫描状态 |
 

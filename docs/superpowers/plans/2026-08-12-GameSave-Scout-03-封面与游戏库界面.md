@@ -335,9 +335,9 @@ data/covers/thumbs/
 
 | 区域 | 主要职责 |
 | --- | --- |
-| `src/gameshelf/covers/image_pipeline.py` | 图片限制、解码、方向修正和缩略图生成 |
-| `src/gameshelf/covers/service.py` | 文件与数据库补偿式更新、替换和清理 |
-| `src/gameshelf/web/asset_server.py` | 只读提供 UI 与受管封面 |
+| `src/gamesave_scout/covers/image_pipeline.py` | 图片限制、解码、方向修正和缩略图生成 |
+| `src/gamesave_scout/covers/service.py` | 文件与数据库补偿式更新、替换和清理 |
+| `src/gamesave_scout/web/asset_server.py` | 只读提供 UI 与受管封面 |
 | `frontend/src/App.vue` | 主页视口壳层、固定控制区、游戏内容滚动边界和覆盖层状态恢复 |
 | `frontend/src/features/scan-roots/ScanRootList.vue` | 固定目录标题、目录列表独立滚动和扫描操作 |
 | `frontend/src/features/library/GameGrid.vue` | 网格和详情选择状态 |
@@ -550,12 +550,12 @@ GARbro 等专用资源解包工具、资源解密和深层商业资源扫描不�
 
 | 区域 | 主要职责 |
 | --- | --- |
-| `src/gameshelf/covers/wizard_service.py` | 向导会话、队列、候选池、采用与清理协调 |
-| `src/gameshelf/covers/candidates.py` | 候选模型、去重、来源优先级与匹配排序 |
-| `src/gameshelf/covers/vndb.py` | VNDB 查询、响应校验、限速与受控图片下载 |
-| `src/gameshelf/covers/local_discovery.py` | 浅层扫描、自定义目录匹配和安全预览 |
-| `src/gameshelf/bridge/api.py` | 受约束的向导、来源、设置和任务桥接 |
-| `src/gameshelf/web/asset_server.py` | 按会话与候选 ID 只读提供临时预览 |
+| `src/gamesave_scout/covers/wizard_service.py` | 向导会话、队列、候选池、采用与清理协调 |
+| `src/gamesave_scout/covers/candidates.py` | 候选模型、去重、来源优先级与匹配排序 |
+| `src/gamesave_scout/covers/vndb.py` | VNDB 查询、响应校验、限速与受控图片下载 |
+| `src/gamesave_scout/covers/local_discovery.py` | 浅层扫描、自定义目录匹配和安全预览 |
+| `src/gamesave_scout/bridge/api.py` | 受约束的向导、来源、设置和任务桥接 |
+| `src/gamesave_scout/web/asset_server.py` | 按会话与候选 ID 只读提供临时预览 |
 | `frontend/src/features/covers/CoverWizardWorkspace.vue` | 全屏视口壳层、固定审核区、候选滚动区、焦点与退出流程 |
 | `frontend/src/features/covers/CoverWizardQueue.vue` | 固定开关、游戏队列独立滚动、当前项可见和窄布局选择器 |
 | `frontend/src/features/covers/CoverCandidateToolbar.vue` | 来源入口、批量确认和任务状态 |

@@ -191,7 +191,7 @@ V0.1 固定以下上限，不提供高级配置界面：
 
 ## 10. 数据结构与开发期建库策略
 
-当前仍处于开发阶段，不为现有临时数据库增加迁移兼容代码。实现时直接修改 `src/gameshelf/db/migrations/0001_initial.sql` 中的最终表结构，schema 版本暂时保持 1。
+当前仍处于开发阶段，不为现有临时数据库增加迁移兼容代码。实现时直接修改 `src/gamesave_scout/db/migrations/0001_initial.sql` 中的最终表结构，schema 版本暂时保持 1。
 
 实施前确认 GameSave Scout 进程已经关闭，将现有 `data/library.db`、`data/library.db-wal` 和 `data/library.db-shm` 移动到 `data/db_backups` 中一个独立的时间戳目录，然后让 GameSave Scout 创建新数据库。测试数据库继续从修改后的初始脚本全新创建。
 
@@ -531,7 +531,7 @@ python -m mypy src scripts/update_ludusavi_snapshot.py scripts/benchmark_ludusav
 npm --prefix frontend run test:unit -- --run
 npm --prefix frontend run type-check
 npm --prefix frontend run build
-python -m gameshelf --smoke-test
+python -m gamesave_scout --smoke-test
 ```
 
 模块 07 定义的冻结冒烟与 Windows Sandbox 当前范围已经完成。额外目标 Windows 10/11 设备和特殊故障矩阵没有完整执行，不记为通过，作为后续可选兼容性复核。

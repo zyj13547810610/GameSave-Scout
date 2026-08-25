@@ -1,10 +1,10 @@
-# GameShelf WebView2 双版本发布实施计划
+# GameSave Scout WebView2 双版本发布实施计划
 
 > 实施状态：已完成。完整离线版与轻量联网版的运行时配置、单入口构建、六产物原子发布、冻结 smoke 和本机候选验证均已落地；轻量版安装行为随后由手动安装引导计划替代。
 
 > **面向执行代理：** 必须使用 `superpowers:executing-plans` 按任务顺序实施；本计划禁止使用子代理、Git worktree 和自动提交/推送。每个步骤使用复选框跟踪。
 
-**目标：** 从同一份 GameShelf PyInstaller 核心原子生成完整离线版和 `-lite` 轻量联网版；轻量版优先使用系统 Evergreen WebView2，缺失时经用户同意运行随包官方 Bootstrapper，并在安装成功后由同一 GameShelf 进程继续启动。
+**目标：** 从同一份 GameSave Scout PyInstaller 核心原子生成完整离线版和 `-lite` 轻量联网版；轻量版优先使用系统 Evergreen WebView2，缺失时经用户同意运行随包官方 Bootstrapper，并在安装成功后由同一 GameSave Scout 进程继续启动。
 
 **架构：** 启动侧以格式版本 2 的发布清单确定 `fixed` 或 `evergreen`，不根据目录偶然存在进行回退；发布清单解析、Evergreen 安装状态机和 pywebview 配置各自保持独立。构建侧只运行一次质量门和 PyInstaller，再派生两种严格布局，分别验证清单、smoke、ZIP 和 SHA-256，最后把六个产物作为一个事务发布。
 
@@ -15,7 +15,7 @@
 - 目标平台仅为 Windows 10/11 x64；Python 必须来自仓库 `.venv` Conda 前缀，Node.js 主版本必须为 24。
 - 完整离线版名称保持 `GameShelf-0.1.0-win-x64`；轻量联网版名称为 `GameShelf-0.1.0-win-x64-lite`。
 - 完整版必须只使用随包 Fixed Runtime，损坏时不得回退系统 Evergreen；轻量版不得包含 Fixed Runtime。
-- 轻量版只有在官方 API 检测不到 Evergreen 且用户明确同意后，才能以固定参数执行随包 Bootstrapper；安装成功后同一进程继续，不创建第二个 GameShelf 进程。
+- 轻量版只有在官方 API 检测不到 Evergreen 且用户明确同意后，才能以固定参数执行随包 Bootstrapper；安装成功后同一进程继续，不创建第二个 GameSave Scout 进程。
 - 构建脚本不得联网下载外部输入；Fixed Runtime CAB 和 Evergreen Bootstrapper 均由构建者手动提供并通过版本、SHA-256 与 Microsoft Corporation 有效签名校验。
 - 构建、测试和 smoke 不得自动安装 WebView2 或修改构建机系统状态。
 - 发布目录不得包含 `data`、CAB、Python 源码、`__pycache__`、用户游戏、封面或存档。
@@ -30,8 +30,8 @@
 
 **新增文件**
 
-- `src/gameshelf/bootstrap/release_runtime.py`：只负责读取冻结发布清单并产出强类型运行时配置。
-- `src/gameshelf/bootstrap/webview_bootstrapper.py`：只负责 Evergreen 检测、用户同意后的 Bootstrapper 校验/执行和有限重检。
+- `src/gamesave_scout/bootstrap/release_runtime.py`：只负责读取冻结发布清单并产出强类型运行时配置。
+- `src/gamesave_scout/bootstrap/webview_bootstrapper.py`：只负责 Evergreen 检测、用户同意后的 Bootstrapper 校验/执行和有限重检。
 - `tests/unit/bootstrap/test_release_runtime.py`：覆盖格式版本 2、模式字段和两种包布局配置。
 - `tests/unit/bootstrap/test_webview_bootstrapper.py`：覆盖检测、取消、哈希、安装进程和超时状态机。
 - `release/webview2-bootstrapper.json`：在取得真实微软官方 Bootstrapper 后记录唯一文件名、文件版本、SHA-256 和来源 URL。
@@ -39,16 +39,16 @@
 
 **修改文件**
 
-- `src/gameshelf/bootstrap/webview_runtime.py`：消费发布运行时配置，分别准备 Fixed 或 Evergreen。
-- `src/gameshelf/platform/windows/startup_reporter.py`：增加独立的原生安装确认接口，保留现有错误报告行为。
-- `src/gameshelf/bootstrap/smoke.py`：报告 `runtimeMode` 和分模式检查结果。
-- `src/gameshelf/app.py`：在构建应用前完成运行时准备，并把用户取消与真实错误分开。
+- `src/gamesave_scout/bootstrap/webview_runtime.py`：消费发布运行时配置，分别准备 Fixed 或 Evergreen。
+- `src/gamesave_scout/platform/windows/startup_reporter.py`：增加独立的原生安装确认接口，保留现有错误报告行为。
+- `src/gamesave_scout/bootstrap/smoke.py`：报告 `runtimeMode` 和分模式检查结果。
+- `src/gamesave_scout/app.py`：在构建应用前完成运行时准备，并把用户取消与真实错误分开。
 - `scripts/release_tools.py`：增加 Bootstrapper 受控配置、双模式布局、格式版本 2 清单、双 ZIP 和六产物原子发布。
 - `scripts/build_release.ps1`：接收两个外部输入，一次构建核心，派生并验证两个发布包。
 - `release/README.txt`：继续作为完整离线版说明，并明确与 `-lite` 的区别。
 - `THIRD_PARTY_NOTICES.md`：记录 Evergreen Bootstrapper 官方来源和再分发说明。
 - 现有相关测试：扩展启动、smoke、发布工具、入口脚本和真实 PyInstaller 回归测试。
-- `docs/superpowers/plans/2026-08-12-GameShelf-07-便携版打包与发布.md`、`docs/superpowers/plans/2026-08-12-GameShelf-开发路线图.md`：实施完成后只更新实际状态和验证证据。
+- `docs/superpowers/plans/2026-08-12-GameSave-Scout-07-便携版打包与发布.md`、`docs/superpowers/plans/2026-08-12-GameSave-Scout-开发路线图.md`：实施完成后只更新实际状态和验证证据。
 
 ---
 
@@ -56,7 +56,7 @@
 
 **文件：**
 
-- 新增：`src/gameshelf/bootstrap/release_runtime.py`
+- 新增：`src/gamesave_scout/bootstrap/release_runtime.py`
 - 新增：`tests/unit/bootstrap/test_release_runtime.py`
 
 **接口：**
@@ -99,7 +99,7 @@ def test_evergreen_release_runtime_requires_bootstrapper_digest(tmp_path: Path) 
 ./.venv/python.exe -m pytest tests/unit/bootstrap/test_release_runtime.py -q
 ```
 
-预期：收集阶段因 `gameshelf.bootstrap.release_runtime` 不存在而失败。
+预期：收集阶段因 `gamesave_scout.bootstrap.release_runtime` 不存在而失败。
 
 - [x] **步骤 3：实现最小强类型解析器**
 
@@ -136,8 +136,8 @@ class ReleaseRuntimeConfig:
 
 ```powershell
 ./.venv/python.exe -m pytest tests/unit/bootstrap/test_release_runtime.py -q
-./.venv/python.exe -m ruff check src/gameshelf/bootstrap/release_runtime.py tests/unit/bootstrap/test_release_runtime.py
-./.venv/python.exe -m mypy src/gameshelf/bootstrap/release_runtime.py
+./.venv/python.exe -m ruff check src/gamesave_scout/bootstrap/release_runtime.py tests/unit/bootstrap/test_release_runtime.py
+./.venv/python.exe -m mypy src/gamesave_scout/bootstrap/release_runtime.py
 ```
 
 预期：全部通过。
@@ -151,9 +151,9 @@ class ReleaseRuntimeConfig:
 
 **文件：**
 
-- 新增：`src/gameshelf/bootstrap/webview_bootstrapper.py`
+- 新增：`src/gamesave_scout/bootstrap/webview_bootstrapper.py`
 - 新增：`tests/unit/bootstrap/test_webview_bootstrapper.py`
-- 修改：`src/gameshelf/platform/windows/startup_reporter.py`
+- 修改：`src/gamesave_scout/platform/windows/startup_reporter.py`
 - 修改：`tests/unit/platform/windows/test_startup_reporter.py`
 
 **接口：**
@@ -178,7 +178,7 @@ def test_runtime_prompt_uses_yes_no_and_defaults_to_no() -> None:
     message, title, flags = calls[0]
     assert "联网" in message
     assert "Microsoft WebView2 Runtime" in message
-    assert title == "GameShelf 需要 WebView2"
+    assert title == "GameSave Scout 需要 WebView2"
     assert flags & 0x00000004
     assert flags & 0x00000100
 ```
@@ -209,7 +209,7 @@ class FrozenRuntimeInstallPrompt:
             result = self.message_box(
                 "系统未检测到 Microsoft WebView2 Runtime。\\n\\n"
                 "是否现在联网安装微软官方运行时？",
-                "GameShelf 需要 WebView2",
+                "GameSave Scout 需要 WebView2",
                 _INSTALL_PROMPT_FLAGS,
             )
         except Exception:
@@ -305,8 +305,8 @@ class EvergreenRuntimeInstaller:
 
 ```powershell
 ./.venv/python.exe -m pytest tests/unit/bootstrap/test_webview_bootstrapper.py tests/unit/platform/windows/test_startup_reporter.py -q
-./.venv/python.exe -m ruff check src/gameshelf/bootstrap/webview_bootstrapper.py src/gameshelf/platform/windows/startup_reporter.py tests/unit/bootstrap/test_webview_bootstrapper.py tests/unit/platform/windows/test_startup_reporter.py
-./.venv/python.exe -m mypy src/gameshelf/bootstrap/webview_bootstrapper.py src/gameshelf/platform/windows/startup_reporter.py
+./.venv/python.exe -m ruff check src/gamesave_scout/bootstrap/webview_bootstrapper.py src/gamesave_scout/platform/windows/startup_reporter.py tests/unit/bootstrap/test_webview_bootstrapper.py tests/unit/platform/windows/test_startup_reporter.py
+./.venv/python.exe -m mypy src/gamesave_scout/bootstrap/webview_bootstrapper.py src/gamesave_scout/platform/windows/startup_reporter.py
 ```
 
 预期：全部通过。
@@ -317,9 +317,9 @@ class EvergreenRuntimeInstaller:
 
 **文件：**
 
-- 修改：`src/gameshelf/bootstrap/webview_runtime.py`
-- 修改：`src/gameshelf/bootstrap/smoke.py`
-- 修改：`src/gameshelf/app.py`
+- 修改：`src/gamesave_scout/bootstrap/webview_runtime.py`
+- 修改：`src/gamesave_scout/bootstrap/smoke.py`
+- 修改：`src/gamesave_scout/app.py`
 - 修改：`tests/unit/bootstrap/test_webview_runtime.py`
 - 修改：`tests/unit/bootstrap/test_smoke.py`
 - 修改：`tests/unit/test_app_startup.py`
@@ -437,8 +437,8 @@ checks["webviewRuntime"] = True
 
 ```powershell
 ./.venv/python.exe -m pytest tests/unit/bootstrap/test_webview_runtime.py tests/unit/bootstrap/test_smoke.py tests/unit/test_app_startup.py tests/unit/test_app_close.py -q
-./.venv/python.exe -m ruff check src/gameshelf/app.py src/gameshelf/bootstrap tests/unit/bootstrap tests/unit/test_app_startup.py tests/unit/test_app_close.py
-./.venv/python.exe -m mypy src/gameshelf/app.py src/gameshelf/bootstrap
+./.venv/python.exe -m ruff check src/gamesave_scout/app.py src/gamesave_scout/bootstrap tests/unit/bootstrap tests/unit/test_app_startup.py tests/unit/test_app_close.py
+./.venv/python.exe -m mypy src/gamesave_scout/app.py src/gamesave_scout/bootstrap
 ```
 
 预期：全部通过。
@@ -781,11 +781,11 @@ Copy-Item -LiteralPath $bootstrapperPath -Destination (
 
 - 已安装 Evergreen 时可断网启动。
 - 缺失时会先询问，再联网运行微软官方安装器。
-- 安装成功后 GameShelf 同进程继续。
+- 安装成功后 GameSave Scout 同进程继续。
 - 取消不写错误堆栈；断网或安装失败写 `data/logs/startup-error.log`。
-- 删除整个 GameShelf 目录不会卸载系统共享 Evergreen。
+- 删除整个 GameSave Scout 目录不会卸载系统共享 Evergreen。
 
-完整 README 明确自身包含 Fixed Runtime，并指向轻量版作为小体积选择。第三方声明记录 Bootstrapper 官方来源，不把它描述为 GameShelf 自有二进制。
+完整 README 明确自身包含 Fixed Runtime，并指向轻量版作为小体积选择。第三方声明记录 Bootstrapper 官方来源，不把它描述为 GameSave Scout 自有二进制。
 
 - [x] **步骤 8：接入两套清单、ZIP、SHA-256 和一次发布**
 
@@ -817,7 +817,7 @@ Copy-Item -LiteralPath $bootstrapperPath -Destination (
 - [x] **步骤 1：核对真实文件、签名、版本和 SHA-256**
 
 ```powershell
-$bootstrapper = "D:/MyProgrammingSoftware/GameShelf/webview安装包/MicrosoftEdgeWebview2Setup.exe"
+$bootstrapper = "D:/MyProgrammingSoftware/GameSave-Scout/webview安装包/MicrosoftEdgeWebview2Setup.exe"
 Get-Item -LiteralPath $bootstrapper |
     Select-Object FullName, Length, @{Name="FileVersion";Expression={$_.VersionInfo.FileVersion}}
 Get-FileHash -LiteralPath $bootstrapper -Algorithm SHA256
@@ -834,7 +834,7 @@ Get-AuthenticodeSignature -LiteralPath $bootstrapper |
 - [x] **步骤 3：运行完整自动质量门**
 
 ```powershell
-$repo = "D:/MyProgrammingSoftware/GameShelf"
+$repo = "D:/MyProgrammingSoftware/GameSave-Scout"
 $env:PATH = "$repo/.venv;$repo/.venv/Scripts;$env:PATH"
 ./.venv/python.exe -m pytest -q
 ./.venv/python.exe -m ruff check src tests scripts
@@ -850,8 +850,8 @@ $env:PATH = "$repo/.venv;$repo/.venv/Scripts;$env:PATH"
 
 ```powershell
 ./scripts/build_release.ps1 `
-  -WebView2Archive "D:/MyProgrammingSoftware/GameShelf/webview安装包/Microsoft.WebView2.FixedVersionRuntime.151.0.4129.86.x64.cab" `
-  -WebView2Bootstrapper "D:/MyProgrammingSoftware/GameShelf/webview安装包/MicrosoftEdgeWebview2Setup.exe"
+  -WebView2Archive "D:/MyProgrammingSoftware/GameSave-Scout/webview安装包/Microsoft.WebView2.FixedVersionRuntime.151.0.4129.86.x64.cab" `
+  -WebView2Bootstrapper "D:/MyProgrammingSoftware/GameSave-Scout/webview安装包/MicrosoftEdgeWebview2Setup.exe"
 ```
 
 预期：生成两组目录、ZIP、SHA-256，共六项；完整流程内部再次运行全部门禁，不使用跳过参数。
@@ -859,7 +859,7 @@ $env:PATH = "$repo/.venv;$repo/.venv/Scripts;$env:PATH"
 - [x] **步骤 5：独立验证两个发布树和归档**
 
 ```powershell
-./.venv/python.exe -c "from pathlib import Path; from scripts.release_tools import ReleaseMode, ReleaseVersions, verify_release_tree, verify_release_zip, verify_zip_sha256; root=Path(r'D:/MyProgrammingSoftware/GameShelf'); versions=ReleaseVersions.load(root); [(verify_release_tree(root/'dist'/versions.name_for(mode), versions, mode), verify_release_zip(root/'dist'/f'{versions.name_for(mode)}.zip', versions, mode), verify_zip_sha256(root/'dist'/f'{versions.name_for(mode)}.zip', root/'dist'/f'{versions.name_for(mode)}.zip.sha256')) for mode in ReleaseMode]; print('dual-release=OK')"
+./.venv/python.exe -c "from pathlib import Path; from scripts.release_tools import ReleaseMode, ReleaseVersions, verify_release_tree, verify_release_zip, verify_zip_sha256; root=Path(r'D:/MyProgrammingSoftware/GameSave-Scout'); versions=ReleaseVersions.load(root); [(verify_release_tree(root/'dist'/versions.name_for(mode), versions, mode), verify_release_zip(root/'dist'/f'{versions.name_for(mode)}.zip', versions, mode), verify_zip_sha256(root/'dist'/f'{versions.name_for(mode)}.zip', root/'dist'/f'{versions.name_for(mode)}.zip.sha256')) for mode in ReleaseMode]; print('dual-release=OK')"
 ```
 
 另用 PowerShell 确认两个正式目录都没有 `data`、CAB、`.py`、`.pyc` 或 `__pycache__`；完整版有 `runtime` 且无 `prerequisites`，轻量版相反。
@@ -876,7 +876,7 @@ $lite = Get-ChildItem -LiteralPath "dist/GameShelf-0.1.0-win-x64-lite" -Recurse 
 Get-AuthenticodeSignature -LiteralPath "dist/GameShelf-0.1.0-win-x64-lite/prerequisites/MicrosoftEdgeWebview2Setup.exe"
 ```
 
-预期：轻量版小于 100 MiB；Bootstrapper 签名仍为 `Valid`；GameShelf 本体仍按 V0.1 设计未签名。
+预期：轻量版小于 100 MiB；Bootstrapper 签名仍为 `Valid`；GameSave Scout 本体仍按 V0.1 设计未签名。
 
 - [x] **步骤 7：在发布副本中做真实窗口验证**
 
@@ -888,8 +888,8 @@ Get-AuthenticodeSignature -LiteralPath "dist/GameShelf-0.1.0-win-x64-lite/prereq
 
 **文件：**
 
-- 修改：`docs/superpowers/plans/2026-08-12-GameShelf-07-便携版打包与发布.md`
-- 修改：`docs/superpowers/plans/2026-08-12-GameShelf-开发路线图.md`
+- 修改：`docs/superpowers/plans/2026-08-12-GameSave-Scout-07-便携版打包与发布.md`
+- 修改：`docs/superpowers/plans/2026-08-12-GameSave-Scout-开发路线图.md`
 
 **接口：**
 
@@ -906,8 +906,8 @@ Get-AuthenticodeSignature -LiteralPath "dist/GameShelf-0.1.0-win-x64-lite/prereq
 git diff --check
 git status --short
 Select-String -LiteralPath `
-  "docs/superpowers/plans/2026-08-12-GameShelf-07-便携版打包与发布.md", `
-  "docs/superpowers/plans/2026-08-12-GameShelf-开发路线图.md" `
+  "docs/superpowers/plans/2026-08-12-GameSave-Scout-07-便携版打包与发布.md", `
+  "docs/superpowers/plans/2026-08-12-GameSave-Scout-开发路线图.md" `
   -Pattern @(("T" + "BD"), ("TO" + "DO"))
 ```
 
@@ -924,7 +924,7 @@ Select-String -LiteralPath `
 ./.venv/npm.cmd --prefix frontend run build
 ```
 
-预期：全部通过。最终报告列出六个产物、两个 ZIP SHA-256、两种解压体积、GameShelf/Bootstrapper/Fixed Runtime 签名状态，并明确 Windows Sandbox 四场景仍需用户复验。
+预期：全部通过。最终报告列出六个产物、两个 ZIP SHA-256、两种解压体积、GameSave Scout/Bootstrapper/Fixed Runtime 签名状态，并明确 Windows Sandbox 四场景仍需用户复验。
 
 - [x] **步骤 4：停止在未授权的 Git 边界之前**
 

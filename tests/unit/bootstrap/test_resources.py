@@ -129,7 +129,7 @@ def test_published_rule_schemas_describe_all_supported_safe_choices() -> None:
         "config",
         "other",
     }
-    assert set(location_schema["x-gameshelf-filesystem-tokens"]) == {
+    assert set(location_schema["x-gamesave-scout-filesystem-tokens"]) == {
         "<game>",
         "<home>",
         "<winAppData>",
@@ -141,13 +141,13 @@ def test_published_rule_schemas_describe_all_supported_safe_choices() -> None:
         "<winPublic>",
         "<winDir>",
     }
-    assert set(location_schema["x-gameshelf-metadata-fields"]) == {
+    assert set(location_schema["x-gamesave-scout-metadata-fields"]) == {
         "company_name",
         "product_name",
         "project_name",
         "renpy_save_directory",
     }
-    assert location_schema["x-gameshelf-registry-roots"] == [
+    assert location_schema["x-gamesave-scout-registry-roots"] == [
         "HKEY_CURRENT_USER",
         "HKEY_LOCAL_MACHINE",
     ]

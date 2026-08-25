@@ -1,6 +1,6 @@
-# GameShelf 内置规则证据台账
+# GameSave Scout 内置规则证据台账
 
-本目录保存 GameShelf 随程序发布的声明式规则。规则只用于受限、只读的静态识别与存档位置建议，不解包游戏资源，不读取存档正文，也不执行来自游戏目录的脚本。
+本目录保存 GameSave Scout 随程序发布的声明式规则。规则只用于受限、只读的静态识别与存档位置建议，不解包游戏资源，不读取存档正文，也不执行来自游戏目录的脚本。
 
 ## 状态与来源要求
 
@@ -8,7 +8,7 @@
 - `experimental`（实验）：证据或排他性尚不足，可以显示为实验候选，但不能伪装成正式结论。
 - `enabled: false`：规则保留在资源中但不参与检测。
 - `references` 只记录公开的 HTTPS 页面；资料访问日期统一为 **2026-08-21**。
-- GARbro 的格式实现和支持列表可证明“某种归档签名确实存在，并被相关格式处理器使用”，但单个归档扩展名或短魔数通常不能独立证明唯一引擎。GameShelf 不复制 GARbro 解析器代码，也不借此解包或收集游戏内容。
+- GARbro 的格式实现和支持列表可证明“某种归档签名确实存在，并被相关格式处理器使用”，但单个归档扩展名或短魔数通常不能独立证明唯一引擎。GameSave Scout 不复制 GARbro 解析器代码，也不借此解包或收集游戏内容。
 - 正向夹具只保存人工生成的最小字节和目录结构；负向夹具覆盖同名随机文件、常见扩展名、签名偏移/截断及容易混淆的组合。仓库不纳入真实游戏文件。
 
 本轮通用上游资料包括 [GARbro 仓库](https://github.com/morkt/GARbro)、[GARbro 许可](https://github.com/morkt/GARbro/blob/master/LICENSE)、[支持格式表](https://morkt.github.io/GARbro/supported.html) 和 [ArcFormats 项目清单](https://github.com/morkt/GARbro/blob/master/ArcFormats/ArcFormats.csproj)。规则行仍尽量链接到对应格式实现，便于逐项复核。
@@ -69,7 +69,7 @@
 需要在另一台电脑采集引擎识别线索时，必须显式使用脱敏模式：
 
 ```powershell
-.venv\python.exe -m gameshelf.tools.detect_directory "D:\Games\目标游戏" --sanitized > engine-diagnostic.json
+.venv\python.exe -m gamesave_scout.tools.detect_directory "D:\Games\目标游戏" --sanitized > engine-diagnostic.json
 ```
 
 脱敏报告不包含游戏根绝对路径、用户名、文件正文、图片、音频、存档内容或归档载荷；
@@ -86,4 +86,4 @@
 2. 每个正式内置规则至少保留一个可访问的公开依据；无法确认时降为实验，不填充虚假链接。
 3. 规则 ID 一经进入业务数据便保持稳定；显示名称可以修订，ID 不随品牌写法变化。
 4. 真实游戏仅用于人工复核。可分享诊断必须经过脱敏，不得提交绝对路径、用户名、文件正文、游戏归档或存档内容。
-5. GARbro 等项目可继续作为同人游戏、Galgame 格式候选来源；是否加入 GameShelf 仍取决于排他性、受限读取能力和负向测试结果。
+5. GARbro 等项目可继续作为同人游戏、Galgame 格式候选来源；是否加入 GameSave Scout 仍取决于排他性、受限读取能力和负向测试结果。

@@ -346,18 +346,18 @@ V0.3 保持引擎规则与存档规则结构分离，但两者共用规则 ID、
 
 | 区域 | 主要职责 |
 | --- | --- |
-| `src/gameshelf/saves/templates.py` | 路径模板折叠、展开和越界保护 |
-| `src/gameshelf/saves/service.py` | 已确认位置的增删、验证、打开和去重 |
-| `src/gameshelf/saves/static_discovery.py` | 合并三类静态建议并生成稳定建议 ID |
-| `src/gameshelf/saves/ludusavi_parser.py` | 防御性解析 Ludusavi 子集 |
-| `src/gameshelf/saves/ludusavi_matcher.py` | 官方 Ludusavi 名称规范化和路径物化；V0.3.x 不再承担旧 custom 用户格式 |
-| `src/gameshelf/saves/ludusavi_provider.py` | 随包/活动三件套校验、显式更新、随包回退、按需重建和受锁索引会话 |
-| `src/gameshelf/saves/ludusavi_index_builder.py` | 从已验证清单构建并检查派生 SQLite |
-| `src/gameshelf/saves/ludusavi_index.py` | 校验索引元数据、只读加载名称目录并按命中游戏读取规则 |
-| `src/gameshelf/saves/ludusavi_index_matcher.py` | 精确优先、模糊后备的官方索引匹配，并保持现有证据与路径语义 |
-| `src/gameshelf/saves/engine_hints.py` | 有证据约束的引擎存档提示 |
-| `src/gameshelf/rules` | 用户存档规则文件仓储、共享快照、结构/安全校验、诊断与管理命令 |
-| `src/gameshelf/bridge/api.py` | 向前端提供稳定 API 和后台任务状态 |
+| `src/gamesave_scout/saves/templates.py` | 路径模板折叠、展开和越界保护 |
+| `src/gamesave_scout/saves/service.py` | 已确认位置的增删、验证、打开和去重 |
+| `src/gamesave_scout/saves/static_discovery.py` | 合并三类静态建议并生成稳定建议 ID |
+| `src/gamesave_scout/saves/ludusavi_parser.py` | 防御性解析 Ludusavi 子集 |
+| `src/gamesave_scout/saves/ludusavi_matcher.py` | 官方 Ludusavi 名称规范化和路径物化；V0.3.x 不再承担旧 custom 用户格式 |
+| `src/gamesave_scout/saves/ludusavi_provider.py` | 随包/活动三件套校验、显式更新、随包回退、按需重建和受锁索引会话 |
+| `src/gamesave_scout/saves/ludusavi_index_builder.py` | 从已验证清单构建并检查派生 SQLite |
+| `src/gamesave_scout/saves/ludusavi_index.py` | 校验索引元数据、只读加载名称目录并按命中游戏读取规则 |
+| `src/gamesave_scout/saves/ludusavi_index_matcher.py` | 精确优先、模糊后备的官方索引匹配，并保持现有证据与路径语义 |
+| `src/gamesave_scout/saves/engine_hints.py` | 有证据约束的引擎存档提示 |
+| `src/gamesave_scout/rules` | 用户存档规则文件仓储、共享快照、结构/安全校验、诊断与管理命令 |
+| `src/gamesave_scout/bridge/api.py` | 向前端提供稳定 API 和后台任务状态 |
 | `frontend/src/features/saves` | 存档列表、添加对话框、建议审核和规则设置界面 |
 | `scripts/update_ludusavi_snapshot.py` | 维护内置 YAML、元数据、许可证和匹配索引 |
 | `scripts/benchmark_ludusavi_index.py` | 只读测量真实索引的冷、热查询性能 |

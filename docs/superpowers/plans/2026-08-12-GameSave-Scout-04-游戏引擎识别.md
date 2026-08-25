@@ -197,16 +197,16 @@ V0.3.x 继续以文件为唯一事实来源。内置与用户规则连同 `data/
 
 | 区域 | 主要职责 |
 | --- | --- |
-| `src/gameshelf/engines/base.py` | 检测器协议和上下文 |
-| `src/gameshelf/engines/registry.py` | 执行、阈值、歧义和候选排序 |
-| `src/gameshelf/engines/detectors` | 复杂专用检测器 |
-| `src/gameshelf/engines/rule_detector.py` | 声明式规则执行 |
-| `src/gameshelf/engines/rule_schema.py` | YAML 结构校验和安全限制 |
-| `src/gameshelf/engines/bounded_reader.py` | 受限文件读取 |
-| `src/gameshelf/engines/service.py` | 组合检测器、标签与用户选项 |
+| `src/gamesave_scout/engines/base.py` | 检测器协议和上下文 |
+| `src/gamesave_scout/engines/registry.py` | 执行、阈值、歧义和候选排序 |
+| `src/gamesave_scout/engines/detectors` | 复杂专用检测器 |
+| `src/gamesave_scout/engines/rule_detector.py` | 声明式规则执行 |
+| `src/gamesave_scout/engines/rule_schema.py` | YAML 结构校验和安全限制 |
+| `src/gamesave_scout/engines/bounded_reader.py` | 受限文件读取 |
+| `src/gamesave_scout/engines/service.py` | 组合检测器、标签与用户选项 |
 | `resources/rules/builtin/engines.yaml` | 可审查、可版本化的只读内置引擎规则 |
 | `data/rules/user/engines/*.yaml` | 一条一个文件的用户引擎规则 |
-| `src/gameshelf/rules` | 共享文件仓储、快照、冲突、安全校验和诊断 |
+| `src/gamesave_scout/rules` | 共享文件仓储、快照、冲突、安全校验和诊断 |
 | `frontend/src/features/engines` | 结果、证据和手动覆盖界面 |
 
 ## 12. 验收基准
@@ -234,7 +234,7 @@ V0.3.x 继续以文件为唯一事实来源。内置与用户规则连同 `data/
 - 初次在独立轻量版冻结副本中验收时，干净规则的发布清单和 JSON smoke 均通过；将 `engines.yaml` 替换为无法解析的 YAML 后，冻结进程退出码为 1，错误能够指出 YAML 解析位置，但 `applicationBootstrap` 未完成，整个应用未启动。因此本项当时未通过，并触发本次修复。
 - 根因边界已经定位：`build_application()` 启动期间直接调用 `EngineDetectionService.from_rules_file()`，后者同步调用 `load_engine_rules()`；`RuleSchemaError` 未在检测器组合边界转换为“禁用声明式检测器并继续”，而是直接中止应用构建。
 - 测试后已恢复原规则，恢复后的冻结 smoke 再次退出 0。
-- 已确认的修复边界：应用构建层只在规则路径仍是现有普通文件、但内容无法解析或结构校验失败时捕获 `RuleSchemaError`，向程序旁 `data/logs/gameshelf.log` 写入 WARNING，然后仅使用内置专用检测器继续启动。V0.1 不增加前端横幅或原生弹窗，避免可恢复的识别能力降级阻断用户。
+- 已确认的修复边界：应用构建层只在规则路径仍是现有普通文件、但内容无法解析或结构校验失败时捕获 `RuleSchemaError`，向程序旁 `data/logs/gamesave-scout.log` 写入 WARNING，然后仅使用内置专用检测器继续启动。V0.1 不增加前端横幅或原生弹窗，避免可恢复的识别能力降级阻断用户。
 - 规则文件缺失或不再是普通文件仍属于发布完整性故障，必须保留启动失败；命令行诊断工具继续使用严格规则加载，不改变其失败语义。
 - 修复已在应用构建层实现：损坏 YAML 和结构错误写入 WARNING 后使用 `EngineDetectionService.builtins_only()` 继续启动；规则加载前移到数据库迁移和后台写线程之前，缺失文件仍严格失败且不再产生半初始化数据库。`EngineDetectionService.from_rules_file()` 保持严格语义。
 - 测试先行证据为新增 3 个用例先全部失败、实现后全部通过；应用与引擎相关回归为 90 项，全量 Python 为 558 项，前端为 88 项，并通过 Ruff、mypy、前端类型检查、生产构建和源码 smoke。

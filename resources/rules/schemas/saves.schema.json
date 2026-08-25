@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://gameshelf.local/schemas/saves.schema.json",
-  "title": "GameShelf declarative save-location rules",
+  "$id": "https://gamesave-scout.local/schemas/saves.schema.json",
+  "title": "GameSave Scout declarative save-location rules",
   "type": "object",
   "additionalProperties": false,
   "required": ["version", "rules"],
@@ -29,7 +29,7 @@
     "location": {
       "type": "object",
       "additionalProperties": false,
-      "x-gameshelf-filesystem-tokens": [
+      "x-gamesave-scout-filesystem-tokens": [
         "<game>",
         "<home>",
         "<winAppData>",
@@ -41,13 +41,13 @@
         "<winPublic>",
         "<winDir>"
       ],
-      "x-gameshelf-metadata-fields": [
+      "x-gamesave-scout-metadata-fields": [
         "company_name",
         "product_name",
         "project_name",
         "renpy_save_directory"
       ],
-      "x-gameshelf-registry-roots": [
+      "x-gamesave-scout-registry-roots": [
         "HKEY_CURRENT_USER",
         "HKEY_LOCAL_MACHINE"
       ],

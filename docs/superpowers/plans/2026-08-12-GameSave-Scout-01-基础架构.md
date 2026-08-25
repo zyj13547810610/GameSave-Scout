@@ -1,6 +1,6 @@
 # GameSave Scout 基础架构
 
-> 文档性质：当前有效的模块设计与验收基准；适用版本：V0.1 及后续迭代；最后更新：2026-08-23；状态：V0.1 基础能力及后续增强、V0.2.0 自定义分组、V0.2.1 批量存档发现、V0.3.0 双规则资源装配和 V0.3.1 自定义规则文件仓储/不可变快照均已实现；配置版本 5、schema 4、任务、桥接及事务边界保持不变。
+> 文档性质：当前有效的模块设计与验收基准；适用版本：V0.1 及后续迭代；最后更新：2026-08-25；状态：V0.1 基础能力及后续增强、V0.2.0 自定义分组、V0.2.1 批量存档发现、V0.3.0 双规则资源装配、V0.3.1 自定义规则文件仓储/不可变快照和 V0.3.3 产品技术身份迁移均已实现；配置版本 5、schema 4、任务、桥接及事务边界保持不变。
 
 ## 1. 模块目标
 
@@ -55,25 +55,25 @@ npm --prefix frontend install
 
 关闭时停止后台任务、数据库写入线程和本地资源服务。新后台任务在关闭开始后不得继续提交。
 
-### 3.1 V0.3.3 产品技术身份（设计已确认，待实现）
+### 3.1 V0.3.3 产品技术身份（源码与发布链已实现）
 
 V0.3.3 采用单一新身份，不保留旧运行入口：
 
 - Python 分发名与命令为 `gamesave-scout`，导入包和 `python -m` 入口为 `gamesave_scout`。
 - 前端桥接类型为 `GameSaveScoutBridge`，桥接返回的 `appName`、HTML 标题、窗口标题和用户提示统一为 `GameSave Scout`。
-- 源码 Vite 地址只读取 `GAMESAVE_SCOUT_DEV_SERVER_URL`；旧 `GAMESHELF_DEV_SERVER_URL` 不再接受。
-- logger 名称和持久日志改为 `gamesave_scout` 与 `data/logs/gamesave-scout.log`；旧 `gameshelf.log` 不迁移、不删除。
+- 源码 Vite 地址只读取 `GAMESAVE_SCOUT_DEV_SERVER_URL`；旧环境变量不再接受。
+- logger 名称和持久日志为 `gamesave_scout` 与 `data/logs/gamesave-scout.log`；旧日志不迁移、不删除。
 - 数据库、配置、封面、规则、Ludusavi 活动快照、WebView 用户数据及其他 `data` 内路径不改，SQLite schema 保持 4。
 
-实施采用分层收口：后端包与运行时身份、前端身份、发布链、文档与历史原型依次修改，每层完成相应测试；最终对运行时代码、构建资源和当前文档执行旧入口审计。
+实施已按分层收口完成后端包与运行时身份、前端身份和发布链迁移；文档与历史原型同步后执行完整质量门禁和双版本便携构建。
 
 ## 4. 便携目录
 
 所有由 GameSave Scout 管理的持久数据都位于程序旁的 `data`：
 
 ```text
-GameShelf/
-├─ GameShelf.exe                 # 冻结版；源码运行时不存在
+GameSave-Scout/
+├─ GameSaveScout.exe             # 冻结版；源码运行时不存在
 ├─ resources/
 │  ├─ ui/
 │  └─ rules/
@@ -253,7 +253,7 @@ schema 4 继续沿用开发期“不迁移旧库”的决定。检测到 schema 
 - 进度包含已完成数量、可选总量和当前阶段消息。
 - 前端通过任务 ID 轮询快照。
 - 取消是协作式取消；任务在安全检查点响应。
-- 未捕获异常写入 `data/logs/gameshelf.log`，前端只收到稳定、可读的错误提示。
+- 未捕获异常写入 `data/logs/gamesave-scout.log`，前端只收到稳定、可读的错误提示。
 
 任务池当前最多同时运行 2 个任务。需要修改数据库的任务仍通过单一写入线程提交事务。
 
@@ -299,7 +299,7 @@ V0.2 分组桥接增加查询、新建、重命名、删除、单游戏原子替
 - 封面路径必须位于受管的 `data/covers` 目录。
 - 响应带有限制性 CSP，不提供目录列表和任意文件读取。
 
-开发时可使用 `GAMESHELF_DEV_SERVER_URL` 指向 Vite；冻结版忽略该变量并始终加载随包 UI。
+开发时可使用 `GAMESAVE_SCOUT_DEV_SERVER_URL` 指向 Vite；冻结版忽略该变量并始终加载随包 UI。
 
 ## 10. 错误处理与日志
 
@@ -313,13 +313,13 @@ V0.2 分组桥接增加查询、新建、重命名、删除、单游戏原子替
 
 | 区域 | 主要职责 |
 | --- | --- |
-| `src/gameshelf/bootstrap` | 路径、配置、日志和应用组装 |
-| `src/gameshelf/db` | SQLite 连接、迁移与串行写入 |
-| `src/gameshelf/library` | 游戏库服务，以及 V0.2 分组仓储、名称规则和事务命令 |
-| `src/gameshelf/bridge` | API 响应、请求校验与后台任务 |
-| `src/gameshelf/web` | 只读 UI/封面资源服务 |
-| `src/gameshelf/platform/windows` | Windows 外壳、注册表、进程和已知目录适配 |
-| `src/gameshelf/rules` | 规则文件仓储、共享结构校验、目录合并、不可变快照、诊断和管理命令 |
+| `src/gamesave_scout/bootstrap` | 路径、配置、日志和应用组装 |
+| `src/gamesave_scout/db` | SQLite 连接、迁移与串行写入 |
+| `src/gamesave_scout/library` | 游戏库服务，以及 V0.2 分组仓储、名称规则和事务命令 |
+| `src/gamesave_scout/bridge` | API 响应、请求校验与后台任务 |
+| `src/gamesave_scout/web` | 只读 UI/封面资源服务 |
+| `src/gamesave_scout/platform/windows` | Windows 外壳、注册表、进程和已知目录适配 |
+| `src/gamesave_scout/rules` | 规则文件仓储、共享结构校验、目录合并、不可变快照、诊断和管理命令 |
 | `frontend/src/api` | TypeScript 合约、桥接客户端和测试模拟 |
 | `frontend/src/features/rules` | 独立规则管理工作台、引导式表单、只读 YAML 预览、测试和诊断 |
 | `frontend/src/App.vue` | 应用启动、总体布局、一级导航和模块组合 |
