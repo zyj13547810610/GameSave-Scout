@@ -24,17 +24,17 @@ GameShelf 不需要账号或云服务。游戏库、配置、封面、日志和 
 
 ## 版本更新记录
 
-以下记录按源码开发里程碑整理；`V0.1.0`、`V0.1.4` 和 `V0.2.1` 已生成本地双版本便携候选包，V0.3.2 当前只表示最新源码里程碑，尚未构建对应便携包。详细设计、实现边界和验证记录以[固定设计文档](docs/superpowers/plans)为准。
+以下记录按源码开发里程碑整理；`V0.1.0`、`V0.1.4`、`V0.2.1` 和 `V0.3.2` 已生成本地双版本便携候选包。详细设计、实现边界和验证记录以[固定设计文档](docs/superpowers/plans)为准。
 
 <details open>
-<summary><strong>V0.3.2 — 2026-08-25（最新源码）</strong></summary>
+<summary><strong>V0.3.2 — 2026-08-25（最新源码与便携候选）</strong></summary>
 
 - 逐项复核固定 GARbro 提交的 228 个 ArcFormats 顶层格式族，从 123 个引擎/系统相关族中筛出并实现 45 条强特征正式规则和 7 条短签名/加密头实验规则；现有安全证据操作无法可靠表达的候选继续留在开发台账；
 - 内置引擎规则增至 74 条（66 条正式、8 条实验），新增规则具有资料驱动的正反、近似魔数、截断、复合证据和跨格式碰撞夹具；缺少商业游戏样本的真实矩阵继续后置；
 - 存档位置新增 `require_existing`，规则编辑器以“始终建议 / 仅找到时显示”下拉框呈现，并在 schema、序列化、导入导出、本地测试、单游戏查找和批量扫描中保持同一语义；
 - 内置存档规则增至 11 条；Ren'Py 只由受限解析器提供安全 `{renpy_save_directory}` 元数据，RPG Maker 各世代与 NScripter 的等价候选已迁入可见、可禁用的 YAML，旧代码分支移除且不产生重复候选；
-- 完整自动门禁为 Python 1274 项通过、1 项平台条件跳过，前端 57 个测试文件共 241 项通过，并通过 Ruff、mypy、Vue 类型检查、141 模块生产构建和隔离 schema 4 源码 smoke；
-- 版本统一为 0.3.2，SQLite schema 仍为 4、配置版本仍为 5；V0.3.x 便携包尚未构建，V0.2.1 仍是最新便携候选。
+- 正式发布门禁为 Python 1276 项通过、1 项平台条件跳过，前端 57 个测试文件共 241 项通过，并通过 Ruff、mypy、Vue 类型检查、141 模块生产构建和隔离 schema 4 源码 smoke；
+- 从干净提交 `55d8024` 构建完整离线版和轻量联网版，两个冻结 smoke、清单、模式隔离、无 `data`、ZIP 与 SHA-256 独立复核通过；完整版/轻量版 ZIP 为 326.15/35.23 MiB。
 
 </details>
 
@@ -48,7 +48,7 @@ GameShelf 不需要账号或云服务。游戏库、配置、封面、日志和 
 - 游戏详情可预填“游戏专属存档规则”；Ludusavi 更新、恢复随包版本和活动/随包状态集中到规则管理，联网更新仍只由用户显式触发；
 - 规则资源统一到 `resources/rules` 和 `data/rules`；旧 `resources/manifests` 与 `data/manifests/custom` 不再加载或创建，只在检测到时提示，不迁移也不自动删除；
 - 版本统一为 0.3.1，SQLite schema 保持 4；完整自动门禁为 Python 1057 项通过、1 项平台条件跳过，前端 56 个测试文件共 234 项通过，并通过 Ruff、mypy、Vue 类型检查、141 模块生产构建和隔离 schema 4 源码 smoke；
-- 2026-08-25 已完成真实 pywebview 规则工作台验收；缺少样本的真实游戏矩阵继续后置。V0.3.1 便携包尚未构建，V0.2.1 仍是最新便携候选。
+- 2026-08-25 已完成真实 pywebview 规则工作台验收；缺少样本的真实游戏矩阵继续后置。V0.3.1 未单独构建便携包，相应功能随后随 V0.3.2 进入最新候选。
 
 </details>
 
@@ -68,7 +68,7 @@ GameShelf 不需要账号或云服务。游戏库、配置、封面、日志和 
 </details>
 
 <details>
-<summary><strong>V0.2.1 — 2026-08-20（最新便携候选）</strong></summary>
+<summary><strong>V0.2.1 — 2026-08-20</strong></summary>
 
 - 新增独立“批量存档”一级工作台；扫描只在用户确认后启动，并与游戏库 quick/full 磁盘扫描互斥；
 - 使用自定义清单、完整 Ludusavi 路径反向索引、引擎提示、已记录位置与受限元数据扫描生成候选，结果覆盖已安装、本体失效、未关联、已记录、已忽略和不可用状态；完全无法识别名称时标题才显示“未知游戏”；
@@ -148,7 +148,7 @@ GameShelf 不需要账号或云服务。游戏库、配置、封面、日志和 
 
 ## 当前状态
 
-V0.1.x、V0.2.0 和 V0.2.1 已完成既定源码与验收收口；V0.2.1 仍是最新本地双版本便携候选。V0.3.1 自定义规则编辑器及真实 pywebview 工作台验收已完成，V0.3.2 第二批引擎与存档规则也已完成源码实现，schema 保持 4；缺少样本的真实游戏规则矩阵和 V0.3.x 便携构建仍保留为后续工作。完整目标 Windows 10/11 设备、SmartScreen、UNC/只读目录和特殊运行时故障矩阵没有全部执行，作为后续可选兼容性复核。
+V0.1.x、V0.2.0、V0.2.1 和 V0.3.2 已完成既定源码与验收收口；V0.3.2 是最新本地双版本便携候选。V0.3.1 自定义规则编辑器及真实 pywebview 工作台验收已完成，V0.3.2 第二批引擎与存档规则及便携构建也已完成，schema 保持 4；缺少样本的真实游戏规则矩阵仍保留为后续工作。完整目标 Windows 10/11 设备、SmartScreen、UNC/只读目录和特殊运行时故障矩阵没有全部执行，作为后续可选兼容性复核。
 
 V0.2 批量存档发现展示已安装、失效、未关联及已记录存档位置，而不只显示“孤立”结果；候选始终由用户审核，不自动确认归属。存档备份、恢复、同步和版本管理继续后置，目前尚未实现。
 
@@ -184,12 +184,12 @@ V0.2 批量存档发现展示已安装、失效、未关联及已记录存档位
 
 ## 便携版选择与使用
 
-当前 V0.2.1 提供两个本地 Windows x64 便携候选包；尚未上传 GitHub Release：
+当前 V0.3.2 提供两个本地 Windows x64 便携候选包；尚未上传 GitHub Release：
 
 | 版本 | 目录/ZIP 名称 | WebView2 | 适用场景 |
 | --- | --- | --- | --- |
-| 完整离线版 | `GameShelf-0.2.1-win-x64` | 自带 Fixed Version Runtime | 体积较大，可在系统没有 WebView2 时离线启动 |
-| 轻量联网版 | `GameShelf-0.2.1-win-x64-lite` | 使用系统 Evergreen Runtime | 下载体积较小，系统缺失 Runtime 时需要联网手动安装 |
+| 完整离线版 | `GameShelf-0.3.2-win-x64` | 自带 Fixed Version Runtime | 体积较大，可在系统没有 WebView2 时离线启动 |
+| 轻量联网版 | `GameShelf-0.3.2-win-x64-lite` | 使用系统 Evergreen Runtime | 下载体积较小，系统缺失 Runtime 时需要联网手动安装 |
 
 使用步骤：
 
@@ -229,7 +229,7 @@ npm --prefix frontend ci
 conda activate .\.venv
 ```
 
-当前 V0.3.2 源码和 V0.2.1 便携候选包均使用 SQLite schema 4，并按开发期约定不迁移 schema 1/2/3 数据库。如果程序提示检测到旧库，请先完全退出 GameShelf，再自行移走或删除可舍弃的 `data\library.db` 后重启。该操作会丢失旧数据库记录；程序不会自动删除 `data\covers` 中的图片，但新库也不会自动恢复旧封面关联。
+当前 V0.3.2 源码和便携候选包均使用 SQLite schema 4，并按开发期约定不迁移 schema 1/2/3 数据库。如果程序提示检测到旧库，请先完全退出 GameShelf，再自行移走或删除可舍弃的 `data\library.db` 后重启。该操作会丢失旧数据库记录；程序不会自动删除 `data\covers` 中的图片，但新库也不会自动恢复旧封面关联。
 
 后端检查：
 
@@ -283,28 +283,28 @@ $webView2Bootstrapper = (Resolve-Path ".\webview安装包\MicrosoftEdgeWebview2S
 
 ```text
 dist/
-├─ GameShelf-0.2.1-win-x64/
-├─ GameShelf-0.2.1-win-x64.zip
-├─ GameShelf-0.2.1-win-x64.zip.sha256
-├─ GameShelf-0.2.1-win-x64-lite/
-├─ GameShelf-0.2.1-win-x64-lite.zip
-└─ GameShelf-0.2.1-win-x64-lite.zip.sha256
+├─ GameShelf-0.3.2-win-x64/
+├─ GameShelf-0.3.2-win-x64.zip
+├─ GameShelf-0.3.2-win-x64.zip.sha256
+├─ GameShelf-0.3.2-win-x64-lite/
+├─ GameShelf-0.3.2-win-x64-lite.zip
+└─ GameShelf-0.3.2-win-x64-lite.zip.sha256
 ```
 
 可以独立复核两个 ZIP：
 
 ```powershell
-Get-FileHash .\dist\GameShelf-0.2.1-win-x64.zip -Algorithm SHA256
-Get-Content .\dist\GameShelf-0.2.1-win-x64.zip.sha256
+Get-FileHash .\dist\GameShelf-0.3.2-win-x64.zip -Algorithm SHA256
+Get-Content .\dist\GameShelf-0.3.2-win-x64.zip.sha256
 
-Get-FileHash .\dist\GameShelf-0.2.1-win-x64-lite.zip -Algorithm SHA256
-Get-Content .\dist\GameShelf-0.2.1-win-x64-lite.zip.sha256
+Get-FileHash .\dist\GameShelf-0.3.2-win-x64-lite.zip -Algorithm SHA256
+Get-Content .\dist\GameShelf-0.3.2-win-x64-lite.zip.sha256
 ```
 
-2026-08-20 本地 V0.2.1 候选包的 ZIP SHA-256 为：
+2026-08-25 本地 V0.3.2 候选包的 ZIP SHA-256 为：
 
-- 完整离线版：`bf821d6b0d00a00f9c184cdbf1b7df3ba1da0001cf7aa3e7ced9851b79064af5`
-- 轻量联网版：`8e8749a44343ce021aaaca840c81fef73b1777d58fd59f3289753659f7f5f44f`
+- 完整离线版：`af4c7b50236a25ed0f3529e6466078904b8b20a910d93af26ee39ee40491e252`
+- 轻量联网版：`181dbb7156b97778a7739dac59baa3107d99decaa94cced7bb8d387d628880bb`
 
 构建失败时，脚本不会用不完整的新结果覆盖上一组六个正式产物。`build/`、`dist/` 与 `webview安装包/` 都是本地内容，不应提交到 Git。
 
