@@ -58,6 +58,59 @@ rules:
     assert rules[1].locations[0].metadata_fields == ("project_name",)
 
 
+def test_location_existing_policy_and_renpy_metadata_are_strictly_parsed() -> None:
+    document = {
+        "version": "1",
+        "rules": [
+            {
+                "id": "renpy_save",
+                "label": "Ren'Py 存档",
+                "type": "save_engine",
+                "engine_ids": ["renpy"],
+                "locations": [
+                    {
+                        "kind": "directory",
+                        "path": "<winDocuments>\\Game",
+                        "category": "save",
+                        "confidence": 0.8,
+                    },
+                    {
+                        "kind": "directory",
+                        "path": "<winDocuments>\\Existing",
+                        "category": "save",
+                        "confidence": 0.9,
+                        "require_existing": True,
+                    },
+                    {
+                        "kind": "directory",
+                        "path": "<winAppData>\\RenPy\\{renpy_save_directory}",
+                        "category": "save",
+                        "confidence": 0.96,
+                    },
+                ],
+            }
+        ],
+    }
+
+    rule = parse_save_rule_document(
+        document,
+        source="user",
+        require_single=True,
+    )[0]
+
+    assert rule.locations[0].require_existing is False
+    assert rule.locations[1].require_existing is True
+    assert rule.locations[2].metadata_fields == ("renpy_save_directory",)
+
+    document["rules"][0]["locations"][1]["require_existing"] = "yes"
+    with pytest.raises(SaveRuleSchemaError, match="require_existing"):
+        parse_save_rule_document(
+            document,
+            source="user",
+            require_single=True,
+        )
+
+
 @pytest.mark.parametrize(
     ("target", "replacement", "message"),
     [

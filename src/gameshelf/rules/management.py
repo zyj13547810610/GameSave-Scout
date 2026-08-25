@@ -633,8 +633,14 @@ def _draft_from_rule(rule: RuleDefinition) -> dict[str, object]:
     entries = document["rules"]
     assert isinstance(entries, list) and isinstance(entries[0], dict)
     draft: dict[str, object] = {"version": document["version"], **entries[0]}
-    if isinstance(rule, SaveRule) and rule.metadata.rule_type == "save_game":
-        draft.setdefault("product_ids", [])
+    if isinstance(rule, SaveRule):
+        if rule.metadata.rule_type == "save_game":
+            draft.setdefault("product_ids", [])
+        locations = draft.get("locations")
+        if isinstance(locations, list):
+            for location in locations:
+                if isinstance(location, dict):
+                    location.setdefault("require_existing", False)
     return draft
 
 

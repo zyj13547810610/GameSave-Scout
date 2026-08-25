@@ -120,9 +120,12 @@ def _evidence_mapping(evidence: EvidenceRule) -> dict[str, Any]:
 
 
 def _location_mapping(location: SaveRuleLocation) -> dict[str, Any]:
-    return {
+    result = {
         "kind": location.kind,
         "path": location.path_template,
         "category": location.category,
         "confidence": location.confidence,
     }
+    if location.require_existing:
+        result["require_existing"] = True
+    return result

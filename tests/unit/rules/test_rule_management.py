@@ -78,6 +78,7 @@ def test_rule_list_detail_and_validation_are_normalized_and_path_safe(
     )
     assert detail.source_file == "builtin/engines.yaml"
     assert save_detail.draft["product_ids"] == []
+    assert save_detail.draft["locations"][0]["require_existing"] is False
     assert "product_ids" not in save_detail.yaml_preview
     assert str(tmp_path) not in detail.yaml_preview
     assert invalid.valid is False

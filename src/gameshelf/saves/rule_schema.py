@@ -35,7 +35,7 @@ _COMMON_RULE_KEYS = {
 }
 _GAME_RULE_KEYS = _COMMON_RULE_KEYS | {"titles", "product_ids"}
 _ENGINE_RULE_KEYS = _COMMON_RULE_KEYS | {"engine_ids"}
-_LOCATION_KEYS = {"kind", "path", "category", "confidence"}
+_LOCATION_KEYS = {"kind", "path", "category", "confidence", "require_existing"}
 _LOCATION_KINDS = {"directory", "file", "glob", "registry"}
 _CATEGORIES = {"save", "config", "other"}
 _FILESYSTEM_TOKENS = {
@@ -50,7 +50,12 @@ _FILESYSTEM_TOKENS = {
     "<winPublic>",
     "<winDir>",
 }
-_METADATA_FIELDS = {"company_name", "product_name", "project_name"}
+_METADATA_FIELDS = {
+    "company_name",
+    "product_name",
+    "project_name",
+    "renpy_save_directory",
+}
 _REGISTRY_ROOTS = {"HKEY_CURRENT_USER", "HKEY_LOCAL_MACHINE"}
 _SOURCES = {"builtin", "user"}
 _PRODUCT_ID = re.compile(
@@ -59,7 +64,7 @@ _PRODUCT_ID = re.compile(
 _ENGINE_ID = re.compile(r"[a-z0-9_]{1,80}\Z")
 _ROOT_TEMPLATE = re.compile(r"(<[^<>\\/]+>)(?:[\\/](.*))?\Z")
 _PLACEHOLDER_SEGMENT = re.compile(
-    r"\{(company_name|product_name|project_name)\}\Z"
+    r"\{(company_name|product_name|project_name|renpy_save_directory)\}\Z"
 )
 
 
@@ -74,6 +79,7 @@ class SaveRuleLocation:
     category: SuggestionCategory
     confidence: float
     metadata_fields: tuple[str, ...]
+    require_existing: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -234,12 +240,16 @@ def _parse_location(
         cast(SaveLocationKind, kind),
         source,
     )
+    require_existing = raw.get("require_existing", False)
+    if not isinstance(require_existing, bool):
+        raise SaveRuleSchemaError("location require_existing must be a boolean")
     return SaveRuleLocation(
         kind=cast(SaveLocationKind, kind),
         path_template=path_template,
         category=cast(SuggestionCategory, category),
         confidence=float(confidence_raw),
         metadata_fields=metadata_fields,
+        require_existing=require_existing,
     )
 
 

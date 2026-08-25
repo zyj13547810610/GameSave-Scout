@@ -44,7 +44,8 @@
       "x-gameshelf-metadata-fields": [
         "company_name",
         "product_name",
-        "project_name"
+        "project_name",
+        "renpy_save_directory"
       ],
       "x-gameshelf-registry-roots": [
         "HKEY_CURRENT_USER",
@@ -57,10 +58,15 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 1024,
-          "description": "文件系统路径从白名单令牌开始；注册表仅允许 HKCU/HKLM。元数据占位符仅允许 company_name、product_name、project_name。"
+          "description": "文件系统路径从白名单令牌开始；注册表仅允许 HKCU/HKLM。元数据占位符仅允许 company_name、product_name、project_name、renpy_save_directory。"
         },
         "category": {"enum": ["save", "config", "other"]},
-        "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "require_existing": {
+          "type": "boolean",
+          "default": false,
+          "description": "为 true 时，仅在声明的位置实际存在后显示候选。"
+        }
       },
       "allOf": [
         {

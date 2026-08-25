@@ -240,3 +240,29 @@ def test_save_fingerprint_changes_with_selectors_or_locations() -> None:
     assert verification_fingerprint(replace(rule, locations=(changed_location,))) != (
         verification_fingerprint(rule)
     )
+
+
+def test_save_location_serialization_only_writes_strict_existing_policy() -> None:
+    draft = {
+        **GAME_SAVE_DRAFT,
+        "locations": [
+            {**GAME_SAVE_DRAFT["locations"][0], "require_existing": True},
+            {
+                "kind": "directory",
+                "path": "<winDocuments>\\Yuzusoft\\Predicted",
+                "category": "save",
+                "confidence": 0.75,
+            },
+        ],
+    }
+    rule = parse_save_rule_document(
+        {"version": "1", "rules": [draft]},
+        source="user",
+        require_single=True,
+    )[0]
+
+    loaded = yaml.safe_load(serialize_rule_document(rule))
+    locations = loaded["rules"][0]["locations"]
+
+    assert locations[0]["require_existing"] is True
+    assert "require_existing" not in locations[1]
