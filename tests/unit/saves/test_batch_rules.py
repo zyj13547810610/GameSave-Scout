@@ -18,7 +18,7 @@ from gameshelf.saves.ludusavi_index import LudusaviIndex
 from gameshelf.saves.ludusavi_index_builder import build_ludusavi_index
 from gameshelf.saves.ludusavi_parser import parse_manifest
 from gameshelf.saves.models import SaveLocation
-from gameshelf.saves.rule_schema import parse_save_rule_document
+from gameshelf.saves.rule_schema import load_save_rules, parse_save_rule_document
 from gameshelf.saves.templates import PathTemplateResolver
 from gameshelf.scanning.path_keys import windows_path_key
 
@@ -299,6 +299,50 @@ def test_batch_rule_provider_uses_latest_snapshot_on_next_collect(
     assert {item.display_path for item in first_catalog.candidates} == {str(first)}
     assert {item.display_path for item in second_catalog.candidates} == {str(second)}
     assert first_catalog.rules_version != second_catalog.rules_version
+
+
+def test_batch_rule_provider_only_collects_existing_bundled_engine_save(
+    tmp_path: Path,
+) -> None:
+    resolver = PathTemplateResolver(_folders(tmp_path))
+    game_dir = tmp_path / "Games" / "RpgMakerVx"
+    game_dir.mkdir(parents=True)
+    game = _game("game-rpg-vx", "RpgMakerVx", "installed", "rpg_maker_vx")
+    snapshots = _SnapshotProvider(
+        _Snapshot(
+            "catalog-builtin",
+            SaveRuleProvider(
+                load_save_rules(Path("resources/rules/builtin/saves.yaml")),
+                resolver,
+            ),
+        )
+    )
+    provider = BatchRuleProvider(
+        library=_Library((game,), {game.id: game_dir}),
+        save_repository=_SaveLocations(()),
+        resolver=resolver,
+        ludusavi_provider=_Ludusavi(_index(tmp_path, "{}")),
+        engine_hints=EngineSaveHintProvider(resolver),
+        rule_snapshot_provider=snapshots,  # type: ignore[arg-type]
+        registry=_Registry(set(), []),
+    )
+
+    missing = provider.collect(BatchRuleContext(()))
+    assert not any(
+        item.path_template == r"<game>\Save*.rvdata"
+        for item in missing.candidates
+    )
+
+    (game_dir / "Save1.rvdata").write_bytes(b"save")
+    found = provider.collect(BatchRuleContext(()))
+    matching = [
+        item
+        for item in found.candidates
+        if item.path_template == r"<game>\Save*.rvdata"
+    ]
+
+    assert len(matching) == 1
+    assert matching[0].sources == ("builtin",)
 
 
 def _folders(tmp_path: Path) -> KnownFolders:

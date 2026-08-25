@@ -34,18 +34,6 @@ _WINDOWS_RESERVED_NAMES = {
     *(f"com{index}" for index in range(1, 10)),
     *(f"lpt{index}" for index in range(1, 10)),
 }
-_RGSS_PATTERNS = {
-    "rpg_maker_2k": ("Save*.lsd",),
-    "rpg_maker_xp": ("Save*.rxdata",),
-    "rpg_maker_vx": ("Save*.rvdata",),
-    "rpg_maker_vx_ace": ("Save*.rvdata2",),
-}
-_JS_RPG_PATTERNS = {
-    "rpg_maker_mv": ("save/*.rpgsave", "www/save/*.rpgsave"),
-    "rpg_maker_mz": ("save/*.rmmzsave", "www/save/*.rmmzsave"),
-}
-
-
 class EngineSaveHintProvider:
     def __init__(self, resolver: PathTemplateResolver) -> None:
         self._resolver = resolver
@@ -57,68 +45,16 @@ class EngineSaveHintProvider:
         engine_metadata: Mapping[str, str],
     ) -> tuple[SaveLocationSuggestion, ...]:
         engine_id = game.engine_id
-        if engine_id == "renpy":
-            return self._renpy(install_dir)
         if engine_id == "unity":
             return self._unity(install_dir, engine_metadata)
         if engine_id == "unreal":
             return self._unreal(install_dir, engine_metadata)
         if engine_id == "godot":
             return self._godot(install_dir, engine_metadata)
-        if engine_id in _RGSS_PATTERNS:
-            return self._existing_globs(
-                install_dir,
-                _RGSS_PATTERNS[engine_id],
-                "发现对应 RPG Maker 世代的现有存档文件",
-            )
-        if engine_id in _JS_RPG_PATTERNS:
-            return self._existing_globs(
-                install_dir,
-                _JS_RPG_PATTERNS[engine_id],
-                "发现 RPG Maker save 目录中的现有存档文件",
-            )
         if engine_id == "wolf_rpg":
             return self._wolf(install_dir)
         if engine_id == "kirikiri":
             return self._kirikiri(install_dir)
-        if engine_id == "nscripter":
-            return self._nscripter(install_dir)
-        return ()
-
-    def _renpy(self, install_dir: Path) -> tuple[SaveLocationSuggestion, ...]:
-        scripts_dir = install_dir / "game"
-        if not scripts_dir.is_dir():
-            return ()
-        for script in islice(sorted(scripts_dir.rglob("*.rpy")), 256):
-            try:
-                text = read_text_limit(script)
-            except OSError:
-                continue
-            for match in _RENPY_SAVE_DIRECTORY.finditer(text):
-                segment = match.group("value").strip()
-                if not _safe_windows_segment(segment):
-                    continue
-                template = f"<winAppData>\\RenPy\\{segment}"
-                try:
-                    display = str(self._resolver.expand(template, install_dir))
-                except InvalidPathTemplate:
-                    continue
-                return (
-                    SaveLocationSuggestion(
-                        kind="directory",
-                        path_template=template,
-                        display_path=display,
-                        source="engine",
-                        confidence=0.96,
-                        evidence=(
-                            f"{script.relative_to(install_dir).as_posix()} 中存在 "
-                            "config.save_directory 字符串字面量",
-                        ),
-                        availability=(
-                            "found" if Path(display).is_dir() else "predicted"
-                        ),
-                    ),
-                )
         return ()
 
     def _unity(
@@ -228,28 +164,6 @@ class EngineSaveHintProvider:
             availability="found" if Path(display).is_dir() else "predicted",
         )
 
-    def _existing_globs(
-        self,
-        install_dir: Path,
-        patterns: tuple[str, ...],
-        evidence: str,
-    ) -> tuple[SaveLocationSuggestion, ...]:
-        suggestions: list[SaveLocationSuggestion] = []
-        for pattern in patterns:
-            if not any(path.is_file() for path in islice(install_dir.glob(pattern), 1)):
-                continue
-            candidate = install_dir.joinpath(*Path(pattern).parts)
-            suggestion = self._filesystem_suggestion(
-                "glob",
-                candidate,
-                install_dir,
-                0.96,
-                (evidence, f"匹配模式：{pattern}"),
-            )
-            if suggestion is not None:
-                suggestions.append(suggestion)
-        return tuple(suggestions)
-
     def _wolf(self, install_dir: Path) -> tuple[SaveLocationSuggestion, ...]:
         candidates = (
             install_dir / "Save",
@@ -300,33 +214,6 @@ class EngineSaveHintProvider:
             )
             return () if suggestion is None else (suggestion,)
         return ()
-
-    def _nscripter(self, install_dir: Path) -> tuple[SaveLocationSuggestion, ...]:
-        suggestions: list[SaveLocationSuggestion] = []
-        if any(path.is_file() for path in islice(install_dir.glob("save*.dat"), 1)):
-            suggestion = self._filesystem_suggestion(
-                "glob",
-                install_dir / "save*.dat",
-                install_dir,
-                0.94,
-                ("游戏根目录存在 NScripter save*.dat",),
-            )
-            if suggestion is not None:
-                suggestions.append(suggestion)
-        for name in ("envdata", "kidoku.dat"):
-            path = install_dir / name
-            if not path.is_file():
-                continue
-            suggestion = self._filesystem_suggestion(
-                "file",
-                path,
-                install_dir,
-                0.92,
-                (f"游戏根目录存在 NScripter {name}",),
-            )
-            if suggestion is not None:
-                suggestions.append(suggestion)
-        return tuple(suggestions)
 
     def _filesystem_suggestion(
         self,

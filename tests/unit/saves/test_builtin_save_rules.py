@@ -189,21 +189,66 @@ rules:
     assert provider.suggest_engine(_game(engine_id="unity"), tmp_path, {}) == ()
 
 
-def test_bundled_catalog_contains_only_publicly_supported_generic_templates() -> None:
+def test_bundled_catalog_contains_publicly_supported_generic_templates() -> None:
     rules = load_save_rules(Path("resources/rules/builtin/saves.yaml"))
+    rules_by_id = {rule.metadata.rule_id: rule for rule in rules}
 
-    assert {rule.metadata.rule_id for rule in rules} == {
+    assert set(rules_by_id) == {
         "godot_user_data",
         "unity_user_data",
         "unreal_save_games",
+        "renpy_save_directory",
+        "rpg_maker_2k_saves",
+        "rpg_maker_xp_saves",
+        "rpg_maker_vx_saves",
+        "rpg_maker_vx_ace_saves",
+        "rpg_maker_mv_saves",
+        "rpg_maker_mz_saves",
+        "nscripter_saves",
     }
     assert all(rule.metadata.status == "formal" for rule in rules)
     assert all(rule.metadata.references for rule in rules)
-    assert {rule.label for rule in rules} == {
-        "Godot 用户数据目录",
-        "Unity 持久化数据与注册表",
-        "Unreal Engine SaveGames",
+
+    expected_locations = {
+        "renpy_save_directory": (
+            ("directory", r"<winAppData>\RenPy\{renpy_save_directory}", 0.96, False),
+        ),
+        "rpg_maker_2k_saves": (
+            ("glob", r"<game>\Save*.lsd", 0.96, True),
+        ),
+        "rpg_maker_xp_saves": (
+            ("glob", r"<game>\Save*.rxdata", 0.96, True),
+        ),
+        "rpg_maker_vx_saves": (
+            ("glob", r"<game>\Save*.rvdata", 0.96, True),
+        ),
+        "rpg_maker_vx_ace_saves": (
+            ("glob", r"<game>\Save*.rvdata2", 0.96, True),
+        ),
+        "rpg_maker_mv_saves": (
+            ("glob", r"<game>\save\*.rpgsave", 0.96, True),
+            ("glob", r"<game>\www\save\*.rpgsave", 0.96, True),
+        ),
+        "rpg_maker_mz_saves": (
+            ("glob", r"<game>\save\*.rmmzsave", 0.96, True),
+            ("glob", r"<game>\www\save\*.rmmzsave", 0.96, True),
+        ),
+        "nscripter_saves": (
+            ("glob", r"<game>\save*.dat", 0.94, True),
+            ("file", r"<game>\envdata", 0.92, True),
+            ("file", r"<game>\kidoku.dat", 0.92, True),
+        ),
     }
+    for rule_id, expected in expected_locations.items():
+        assert tuple(
+            (
+                location.kind,
+                location.path_template,
+                location.confidence,
+                location.require_existing,
+            )
+            for location in rules_by_id[rule_id].locations
+        ) == expected
 
 
 def test_provider_orders_user_and_game_rules_first_and_hashes_full_content(

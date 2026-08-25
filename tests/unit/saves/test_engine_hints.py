@@ -115,54 +115,38 @@ def test_unity_suggests_local_low_and_player_prefs_from_reliable_metadata(
 
 
 @pytest.mark.parametrize(
-    ("engine_id", "filename", "expected"),
+    ("engine_id", "relative"),
     [
-        ("rpg_maker_2k", "Save01.lsd", r"<game>\Save*.lsd"),
-        ("rpg_maker_xp", "Save1.rxdata", r"<game>\Save*.rxdata"),
-        ("rpg_maker_vx", "Save2.rvdata", r"<game>\Save*.rvdata"),
-        ("rpg_maker_vx_ace", "Save3.rvdata2", r"<game>\Save*.rvdata2"),
+        ("renpy", "game/options.rpy"),
+        ("rpg_maker_2k", "Save01.lsd"),
+        ("rpg_maker_xp", "Save1.rxdata"),
+        ("rpg_maker_vx", "Save2.rvdata"),
+        ("rpg_maker_vx_ace", "Save3.rvdata2"),
+        ("rpg_maker_mv", "save/slot1.rpgsave"),
+        ("rpg_maker_mz", "www/save/file1.rmmzsave"),
+        ("nscripter", "save1.dat"),
     ],
 )
-def test_rgss_hint_requires_existing_generation_specific_file(
-    tmp_path: Path,
-    hint_provider: EngineSaveHintProvider,
-    engine_id: str,
-    filename: str,
-    expected: str,
-) -> None:
-    root = tmp_path / engine_id
-    root.mkdir()
-    assert hint_provider.suggest(_game(engine_id), root, {}) == ()
-    (root / filename).write_bytes(b"save")
-
-    assert hint_provider.suggest(_game(engine_id), root, {})[0].path_template == expected
-    assert hint_provider.suggest(_game(engine_id), root, {})[0].availability == "found"
-
-
-@pytest.mark.parametrize(
-    ("engine_id", "relative", "expected"),
-    [
-        ("rpg_maker_mv", "save/slot1.rpgsave", r"<game>\save\*.rpgsave"),
-        ("rpg_maker_mz", "www/save/file1.rmmzsave", r"<game>\www\save\*.rmmzsave"),
-    ],
-)
-def test_javascript_rpg_maker_hint_requires_existing_save_file(
+def test_migrated_engines_no_longer_emit_code_suggestions(
     tmp_path: Path,
     hint_provider: EngineSaveHintProvider,
     engine_id: str,
     relative: str,
-    expected: str,
 ) -> None:
     root = tmp_path / engine_id
-    save = root.joinpath(*relative.split("/"))
-    save.parent.mkdir(parents=True)
-    save.write_bytes(b"save")
+    evidence = root.joinpath(*relative.split("/"))
+    evidence.parent.mkdir(parents=True)
+    if engine_id == "renpy":
+        evidence.write_text(
+            'define config.save_directory = "Migrated"', encoding="utf-8"
+        )
+    else:
+        evidence.write_bytes(b"save")
 
-    assert hint_provider.suggest(_game(engine_id), root, {})[0].path_template == expected
-    assert hint_provider.suggest(_game(engine_id), root, {})[0].availability == "found"
+    assert hint_provider.suggest(_game(engine_id), root, {}) == ()
 
 
-def test_wolf_kirikiri_and_nscripter_require_existing_layout_evidence(
+def test_wolf_and_kirikiri_require_existing_layout_evidence(
     tmp_path: Path,
     hint_provider: EngineSaveHintProvider,
 ) -> None:
@@ -175,19 +159,8 @@ def test_wolf_kirikiri_and_nscripter_require_existing_layout_evidence(
     kiri_save = kirikiri / "savedata"
     kiri_save.mkdir(parents=True)
     (kiri_save / "slot.sav").write_bytes(b"save")
-    nscripter = tmp_path / "NScripter"
-    nscripter.mkdir()
-    (nscripter / "save1.dat").write_bytes(b"save")
-    (nscripter / "kidoku.dat").write_bytes(b"read")
-
     assert hint_provider.suggest(_game("wolf_rpg"), wolf, {})[0].kind == "directory"
     assert hint_provider.suggest(_game("kirikiri"), kirikiri, {})[0].kind == "directory"
-    nscripter_hints = hint_provider.suggest(_game("nscripter"), nscripter, {})
-    assert {item.path_template for item in nscripter_hints} == {
-        r"<game>\save*.dat",
-        r"<game>\kidoku.dat",
-    }
-    assert all(item.availability == "found" for item in nscripter_hints)
 
 
 def test_unreal_requires_a_valid_project_file_and_never_guesses_from_directory(

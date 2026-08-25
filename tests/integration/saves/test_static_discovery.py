@@ -26,7 +26,7 @@ from gameshelf.saves.ludusavi_provider import SnapshotUpdateError
 from gameshelf.saves.models import SaveLocationSuggestion, SuggestionEvidence
 from gameshelf.saves.repository import SaveLocationRepository
 from gameshelf.saves.rule_probe import BoundedRuleProbe
-from gameshelf.saves.rule_schema import parse_save_rule_document
+from gameshelf.saves.rule_schema import load_save_rules, parse_save_rule_document
 from gameshelf.saves.service import SaveLocationService
 from gameshelf.saves.static_discovery import StaticSaveDiscovery
 from gameshelf.saves.templates import PathTemplateResolver
@@ -234,11 +234,86 @@ def test_static_discovery_merges_same_path_and_keeps_all_source_evidence(
         "user",
         "builtin",
         "ludusavi",
-        "engine",
     }
     assert suggestions[0].preselected is True
     assert suggestions[0].availability == "found"
     assert static_harness.save_service.list_for_game(static_harness.game_id) == ()
+
+
+def test_bundled_renpy_rule_replaces_code_hint_without_duplicate(
+    static_harness: StaticHarness,
+) -> None:
+    resolver = static_harness.discovery._resolver
+    static_harness.snapshot.save_rules = SaveRuleProvider(
+        load_save_rules(Path("resources/rules/builtin/saves.yaml")),
+        resolver,
+    )
+
+    suggestions = static_harness.discovery.suggest_for_game(static_harness.game_id)
+    matching = [
+        item
+        for item in suggestions
+        if item.path_template == r"<winAppData>\RenPy\Alice"
+    ]
+
+    assert len(matching) == 1
+    assert matching[0].confidence == 1.0
+    assert {item.source for item in matching[0].source_evidence} == {
+        "builtin",
+        "ludusavi",
+    }
+
+
+def test_bundled_renpy_rule_keeps_safe_missing_path_as_prediction(
+    static_harness: StaticHarness,
+) -> None:
+    resolver = static_harness.discovery._resolver
+    static_harness.snapshot.save_rules = SaveRuleProvider(
+        load_save_rules(Path("resources/rules/builtin/saves.yaml")),
+        resolver,
+    )
+    predicted_path = resolver.expand(r"<winAppData>\RenPy\Alice", None)
+    predicted_path.rmdir()
+
+    suggestions = static_harness.discovery.suggest_for_game(static_harness.game_id)
+    matching = [
+        item
+        for item in suggestions
+        if item.path_template == r"<winAppData>\RenPy\Alice"
+    ]
+
+    assert len(matching) == 1
+    assert matching[0].availability == "predicted"
+    assert matching[0].preselected is False
+
+
+def test_bundled_rpg_maker_rule_requires_existing_save_file(
+    static_harness: StaticHarness,
+) -> None:
+    resolver = static_harness.discovery._resolver
+    static_harness.snapshot.save_rules = SaveRuleProvider(
+        load_save_rules(Path("resources/rules/builtin/saves.yaml")),
+        resolver,
+    )
+    static_harness.discovery._library.set_game_engine(
+        static_harness.game_id,
+        "rpg_maker_vx",
+    )
+    template = r"<game>\Save*.rvdata"
+
+    missing = static_harness.discovery.suggest_for_game(static_harness.game_id)
+    assert not any(item.path_template == template for item in missing)
+
+    install_dir = static_harness.discovery._library.install_directory(
+        static_harness.game_id
+    )
+    (install_dir / "Save1.rvdata").write_bytes(b"save")
+    found = static_harness.discovery.suggest_for_game(static_harness.game_id)
+    matching = [item for item in found if item.path_template == template]
+
+    assert len(matching) == 1
+    assert matching[0].availability == "found"
+    assert {item.source for item in matching[0].source_evidence} == {"builtin"}
 
 
 def test_static_discovery_keeps_captured_snapshot_until_next_click(
@@ -477,7 +552,6 @@ def test_static_discovery_skips_unavailable_official_manifest(
     assert {evidence.source for item in suggestions for evidence in item.source_evidence} == {
         "user",
         "builtin",
-        "engine",
     }
 
 

@@ -1,5 +1,152 @@
 version: 2026.08.21-2
 rules:
+  - id: renpy_save_directory
+    label: Ren'Py 存档目录
+    type: save_engine
+    status: formal
+    priority: 20
+    enabled: true
+    references:
+      - https://www.renpy.org/doc/html/config.html#var-config.save_directory
+    engine_ids:
+      - renpy
+    locations:
+      - kind: directory
+        path: <winAppData>\RenPy\{renpy_save_directory}
+        category: save
+        confidence: 0.96
+  - id: rpg_maker_2k_saves
+    label: RPG Maker 2000/2003 存档文件
+    type: save_engine
+    status: formal
+    priority: 20
+    enabled: true
+    references:
+      - https://github.com/EasyRPG/Player/blob/212f3466c9f276ff7cade5a5ead78d3a151343ac/src/scene_save.cpp
+    engine_ids:
+      - rpg_maker_2k
+    locations:
+      - kind: glob
+        path: <game>\Save*.lsd
+        category: save
+        confidence: 0.96
+        require_existing: true
+  - id: rpg_maker_xp_saves
+    label: RPG Maker XP 存档文件
+    type: save_engine
+    status: formal
+    priority: 20
+    enabled: true
+    references:
+      - https://github.com/mkxp-z/mkxp-z/tree/826929eeb3ebc4b887c011604919217a790770f4
+    engine_ids:
+      - rpg_maker_xp
+    locations:
+      - kind: glob
+        path: <game>\Save*.rxdata
+        category: save
+        confidence: 0.96
+        require_existing: true
+  - id: rpg_maker_vx_saves
+    label: RPG Maker VX 存档文件
+    type: save_engine
+    status: formal
+    priority: 20
+    enabled: true
+    references:
+      - https://github.com/mkxp-z/mkxp-z/tree/826929eeb3ebc4b887c011604919217a790770f4
+    engine_ids:
+      - rpg_maker_vx
+    locations:
+      - kind: glob
+        path: <game>\Save*.rvdata
+        category: save
+        confidence: 0.96
+        require_existing: true
+  - id: rpg_maker_vx_ace_saves
+    label: RPG Maker VX Ace 存档文件
+    type: save_engine
+    status: formal
+    priority: 20
+    enabled: true
+    references:
+      - https://github.com/mkxp-z/mkxp-z/tree/826929eeb3ebc4b887c011604919217a790770f4
+    engine_ids:
+      - rpg_maker_vx_ace
+    locations:
+      - kind: glob
+        path: <game>\Save*.rvdata2
+        category: save
+        confidence: 0.96
+        require_existing: true
+  - id: rpg_maker_mv_saves
+    label: RPG Maker MV 存档文件
+    type: save_engine
+    status: formal
+    priority: 20
+    enabled: true
+    references:
+      - https://github.com/rpgtkoolmv/corescript/blob/182e31449707ba7e406db0485c44c2a9d11e2dcd/js/rpg_managers/StorageManager.js
+    engine_ids:
+      - rpg_maker_mv
+    locations:
+      - kind: glob
+        path: <game>\save\*.rpgsave
+        category: save
+        confidence: 0.96
+        require_existing: true
+      - kind: glob
+        path: <game>\www\save\*.rpgsave
+        category: save
+        confidence: 0.96
+        require_existing: true
+  - id: rpg_maker_mz_saves
+    label: RPG Maker MZ 存档文件
+    type: save_engine
+    status: formal
+    priority: 20
+    enabled: true
+    references:
+      - https://developer.rpgmakerweb.com/rpg-maker-mz/StorageManager.html
+    engine_ids:
+      - rpg_maker_mz
+    locations:
+      - kind: glob
+        path: <game>\save\*.rmmzsave
+        category: save
+        confidence: 0.96
+        require_existing: true
+      - kind: glob
+        path: <game>\www\save\*.rmmzsave
+        category: save
+        confidence: 0.96
+        require_existing: true
+  - id: nscripter_saves
+    label: NScripter 存档与阅读状态
+    type: save_engine
+    status: formal
+    priority: 20
+    enabled: true
+    references:
+      - https://github.com/wcwac/em-onscripter/blob/d9d7239f61ba9bd1903884e2709dca5479993cab/ScriptHandler.cpp
+    engine_ids:
+      - nscripter
+    locations:
+      - kind: glob
+        path: <game>\save*.dat
+        category: save
+        confidence: 0.94
+        require_existing: true
+      - kind: file
+        path: <game>\envdata
+        category: config
+        confidence: 0.92
+        require_existing: true
+      - kind: file
+        path: <game>\kidoku.dat
+        category: config
+        confidence: 0.92
+        require_existing: true
   - id: godot_user_data
     label: Godot 用户数据目录
     type: save_engine
