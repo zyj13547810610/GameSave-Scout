@@ -26,9 +26,9 @@ if is_pure_conda:
 datas = [
     (str(repository_root / "resources"), "resources"),
     *[
-        (str(migration), "gameshelf/db/migrations")
+        (str(migration), "gamesave_scout/db/migrations")
         for migration in sorted(
-            (repository_root / "src" / "gameshelf" / "db" / "migrations").glob(
+            (repository_root / "src" / "gamesave_scout" / "db" / "migrations").glob(
                 "*.sql"
             )
         )
@@ -56,7 +56,7 @@ hiddenimports = [
 ]
 
 analysis = Analysis(
-    [str(repository_root / "src" / "gameshelf" / "app.py")],
+    [str(repository_root / "src" / "gamesave_scout" / "app.py")],
     pathex=[str(repository_root / "src")],
     binaries=binaries,
     datas=datas,
@@ -91,7 +91,7 @@ exe = EXE(
     analysis.scripts,
     [],
     exclude_binaries=True,
-    name="GameShelf",
+    name="GameSaveScout",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -112,5 +112,5 @@ collection = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name="GameShelf",
+    name="GameSaveScout",
 )

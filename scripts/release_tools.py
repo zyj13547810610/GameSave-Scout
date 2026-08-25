@@ -68,15 +68,15 @@ class ReleaseVersions:
     def load(cls, repository_root: Path) -> ReleaseVersions:
         root = repository_root.resolve(strict=True)
         project = _project_version(root / "pyproject.toml")
-        package = _package_version(root / "src" / "gameshelf" / "__init__.py")
+        package = _package_version(root / "src" / "gamesave_scout" / "__init__.py")
         frontend = _frontend_version(root / "frontend" / "package.json")
         if len({project, package, frontend}) != 1:
             raise ReleaseToolError(
-                "GameShelf 版本不一致："
+                "GameSave Scout 版本不一致："
                 f"pyproject={project}, package={package}, frontend={frontend}"
             )
         if _VERSION_PATTERN.fullmatch(project) is None:
-            raise ReleaseToolError(f"GameShelf 版本格式无效：{project}")
+            raise ReleaseToolError(f"GameSave Scout 版本格式无效：{project}")
         return cls(project)
 
     @property
@@ -84,7 +84,7 @@ class ReleaseVersions:
         return self.name_for(ReleaseMode.FIXED)
 
     def name_for(self, mode: ReleaseMode) -> str:
-        base = f"GameShelf-{self.version}-win-x64"
+        base = f"GameSave-Scout-{self.version}-win-x64"
         return base if mode is ReleaseMode.FIXED else f"{base}-lite"
 
 
@@ -534,7 +534,7 @@ def verify_release_tree(
     if manifest.get("formatVersion") != 2:
         raise ReleaseToolError("发布清单 formatVersion 必须为 2。")
     if manifest.get("appVersion") != versions.version:
-        raise ReleaseToolError("发布清单中的 GameShelf 版本不匹配。")
+        raise ReleaseToolError("发布清单中的 GameSave Scout 版本不匹配。")
     if manifest.get("platform") != "windows-x64":
         raise ReleaseToolError("发布清单平台必须为 windows-x64。")
     if manifest.get("runtimeMode") != mode.value:
@@ -904,7 +904,7 @@ def collect_release_metadata(
     node_version = _capture_command(("node", "--version"), root).removeprefix("v")
     npm_version = _capture_command(("npm.cmd", "--version"), root)
     database_schema_version = _python_integer_constant(
-        root / "src" / "gameshelf" / "db" / "migrator.py",
+        root / "src" / "gamesave_scout" / "db" / "migrator.py",
         "LATEST_SCHEMA_VERSION",
     )
     try:
@@ -1166,7 +1166,7 @@ def _validate_release_layout(
         raise ReleaseToolError("发布根目录不能是重解析点或链接。")
     top_level = {child.name: child for child in release_root.iterdir()}
     required = {
-        "GameShelf.exe",
+        "GameSaveScout.exe",
         "_internal",
         "README.txt",
         "LICENSE",
@@ -1184,8 +1184,8 @@ def _validate_release_layout(
         raise ReleaseToolError("发布目录不能包含 data。")
     if unexpected:
         raise ReleaseToolError(f"发布目录包含意外顶层内容：{', '.join(unexpected)}")
-    if not top_level["GameShelf.exe"].is_file():
-        raise ReleaseToolError("GameShelf.exe 必须是普通文件。")
+    if not top_level["GameSaveScout.exe"].is_file():
+        raise ReleaseToolError("GameSaveScout.exe 必须是普通文件。")
     readme = top_level["README.txt"]
     if not readme.is_file():
         raise ReleaseToolError("README.txt 必须是普通文件。")
@@ -1193,8 +1193,8 @@ def _validate_release_layout(
         readme_text = readme.read_text(encoding="utf-8")
     except (OSError, UnicodeError) as error:
         raise ReleaseToolError(f"无法读取发布 README：{error}") from error
-    if f"GameShelf {versions.version}" not in readme_text:
-        raise ReleaseToolError("发布 README 中的 GameShelf 版本不匹配。")
+    if f"GameSave Scout {versions.version}" not in readme_text:
+        raise ReleaseToolError("发布 README 中的 GameSave Scout 版本不匹配。")
     mode_directory = "runtime" if mode is ReleaseMode.FIXED else "prerequisites"
     if not top_level["_internal"].is_dir() or not top_level[mode_directory].is_dir():
         raise ReleaseToolError(f"_internal 和 {mode_directory} 必须是目录。")
@@ -1209,10 +1209,10 @@ def _validate_release_layout(
         "_internal/resources/rules/ludusavi/manifest-meta.json",
         "_internal/resources/rules/ludusavi/manifest-index.sqlite",
         "_internal/resources/rules/ludusavi/LICENSE",
-        "_internal/gameshelf/db/migrations/0001_initial.sql",
-        "_internal/gameshelf/db/migrations/0002_initial.sql",
-        "_internal/gameshelf/db/migrations/0003_initial.sql",
-        "_internal/gameshelf/db/migrations/0004_initial.sql",
+        "_internal/gamesave_scout/db/migrations/0001_initial.sql",
+        "_internal/gamesave_scout/db/migrations/0002_initial.sql",
+        "_internal/gamesave_scout/db/migrations/0003_initial.sql",
+        "_internal/gamesave_scout/db/migrations/0004_initial.sql",
     ]
     critical_files.append(
         "runtime/msedgewebview2.exe"
@@ -1318,7 +1318,7 @@ def _is_reparse_point(path: Path) -> bool:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="GameShelf 离线发布工具。")
+    parser = argparse.ArgumentParser(description="GameSave Scout 离线发布工具。")
     subparsers = parser.add_subparsers(dest="command", required=True)
     verify = subparsers.add_parser("verify-context")
     verify.add_argument("--repository-root", type=Path, default=REPOSITORY_ROOT)

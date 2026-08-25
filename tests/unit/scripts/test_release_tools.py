@@ -41,7 +41,12 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 def test_repository_versions_are_consistent() -> None:
     versions = ReleaseVersions.load(REPOSITORY_ROOT)
 
-    assert versions.version == "0.3.2"
+    assert versions.version == "0.3.3"
+    assert versions.name_for(ReleaseMode.FIXED) == "GameSave-Scout-0.3.3-win-x64"
+    assert (
+        versions.name_for(ReleaseMode.EVERGREEN)
+        == "GameSave-Scout-0.3.3-win-x64-lite"
+    )
 
 
 @pytest.mark.parametrize("template_name", ("README.txt", "README-lite.txt"))
@@ -214,7 +219,7 @@ def test_validate_bootstrapper_requires_absolute_matching_regular_file(
 
 
 def test_sha256_file_hashes_large_files_in_binary_mode(tmp_path: Path) -> None:
-    payload = b"GameShelf\x00" * 200_000
+    payload = b"GameSave Scout\x00" * 200_000
     archive = tmp_path / "large.cab"
     archive.write_bytes(payload)
 
@@ -245,7 +250,7 @@ def test_validate_managed_target_accepts_only_current_release_outputs(
         tmp_path.parent,
         tmp_path / "build",
         tmp_path / "dist",
-        tmp_path / "dist" / "GameShelf-old-win-x64",
+        tmp_path / "dist" / "GameSave-Scout-old-win-x64",
     ):
         with pytest.raises(ReleaseToolError, match="受控发布目标"):
             validate_managed_target(tmp_path, rejected, versions)
@@ -426,14 +431,14 @@ def test_release_manifest_records_environment_and_every_payload_file(
     paths = [entry["path"] for entry in manifest["files"]]
     assert paths == sorted(paths)
     assert paths == [
-        "GameShelf.exe",
+        "GameSaveScout.exe",
         "LICENSE",
         "README.txt",
         "THIRD_PARTY_NOTICES.md",
-        "_internal/gameshelf/db/migrations/0001_initial.sql",
-        "_internal/gameshelf/db/migrations/0002_initial.sql",
-        "_internal/gameshelf/db/migrations/0003_initial.sql",
-        "_internal/gameshelf/db/migrations/0004_initial.sql",
+        "_internal/gamesave_scout/db/migrations/0001_initial.sql",
+        "_internal/gamesave_scout/db/migrations/0002_initial.sql",
+        "_internal/gamesave_scout/db/migrations/0003_initial.sql",
+        "_internal/gamesave_scout/db/migrations/0004_initial.sql",
         "_internal/resources/rules/builtin/engines.yaml",
         "_internal/resources/rules/builtin/saves.yaml",
         "_internal/resources/rules/ludusavi/LICENSE",
@@ -448,10 +453,10 @@ def test_release_manifest_records_environment_and_every_payload_file(
         "runtime/msedgewebview2.exe",
     ]
     executable = next(
-        entry for entry in manifest["files"] if entry["path"] == "GameShelf.exe"
+        entry for entry in manifest["files"] if entry["path"] == "GameSaveScout.exe"
     )
     assert executable == {
-        "path": "GameShelf.exe",
+        "path": "GameSaveScout.exe",
         "size": len(b"frozen exe"),
         "sha256": hashlib.sha256(b"frozen exe").hexdigest(),
     }
@@ -461,10 +466,10 @@ def test_release_manifest_records_environment_and_every_payload_file(
 @pytest.mark.parametrize(
     ("mode", "release_name", "required", "forbidden"),
     [
-        (ReleaseMode.FIXED, "GameShelf-0.1.0-win-x64", "runtime", "prerequisites"),
+        (ReleaseMode.FIXED, "GameSave-Scout-0.1.0-win-x64", "runtime", "prerequisites"),
         (
             ReleaseMode.EVERGREEN,
-            "GameShelf-0.1.0-win-x64-lite",
+            "GameSave-Scout-0.1.0-win-x64-lite",
             "prerequisites",
             "runtime",
         ),
@@ -542,7 +547,7 @@ def test_build_release_manifest_rejects_data_unexpected_files_and_links(
 def test_verify_release_tree_detects_payload_changes(tmp_path: Path) -> None:
     release_root = _minimal_release_tree(tmp_path)
     write_release_manifest(release_root, _release_metadata(), ReleaseMode.FIXED)
-    (release_root / "GameShelf.exe").write_bytes(b"tampered")
+    (release_root / "GameSaveScout.exe").write_bytes(b"tampered")
 
     with pytest.raises(ReleaseToolError, match="SHA-256|大小"):
         verify_release_tree(
@@ -580,7 +585,7 @@ def test_build_release_manifest_rejects_retired_or_user_state(
 def test_release_manifest_rejects_stale_readme_version(tmp_path: Path) -> None:
     release_root = _minimal_release_tree(tmp_path)
     (release_root / "README.txt").write_text(
-        "GameShelf 0.1.4 Windows x64 便携版\n",
+        "GameSave Scout 0.1.4 Windows x64 便携版\n",
         encoding="utf-8",
     )
 
@@ -597,7 +602,7 @@ def test_verify_release_tree_requires_schema_four_payload(tmp_path: Path) -> Non
     migration = (
         release_root
         / "_internal"
-        / "gameshelf"
+        / "gamesave_scout"
         / "db"
         / "migrations"
         / "0004_initial.sql"
@@ -709,13 +714,13 @@ def _write_versions(
     package: str,
     frontend: str,
 ) -> None:
-    (root / "src" / "gameshelf").mkdir(parents=True)
+    (root / "src" / "gamesave_scout").mkdir(parents=True)
     (root / "frontend").mkdir()
     (root / "pyproject.toml").write_text(
         f'[project]\nversion = "{project}"\n',
         encoding="utf-8",
     )
-    (root / "src" / "gameshelf" / "__init__.py").write_text(
+    (root / "src" / "gamesave_scout" / "__init__.py").write_text(
         f'__version__ = "{package}"\n',
         encoding="utf-8",
     )
@@ -847,14 +852,14 @@ def _minimal_release_tree(
     (root / "_internal" / "resources" / "rules" / "schemas").mkdir(
         parents=True
     )
-    (root / "_internal" / "gameshelf" / "db" / "migrations").mkdir(
+    (root / "_internal" / "gamesave_scout" / "db" / "migrations").mkdir(
         parents=True
     )
     if mode is ReleaseMode.FIXED:
         (root / "runtime").mkdir()
     else:
         (root / "prerequisites").mkdir()
-    (root / "GameShelf.exe").write_bytes(b"frozen exe")
+    (root / "GameSaveScout.exe").write_bytes(b"frozen exe")
     (root / "_internal" / "resources" / "ui" / "index.html").write_text(
         "<!doctype html>",
         encoding="utf-8",
@@ -890,19 +895,19 @@ def _minimal_release_tree(
     (ludusavi / "manifest-meta.json").write_text("{}\n", encoding="utf-8")
     (ludusavi / "manifest-index.sqlite").write_bytes(b"sqlite")
     (ludusavi / "LICENSE").write_text("license\n", encoding="utf-8")
-    (root / "_internal" / "gameshelf" / "db" / "migrations" / "0001_initial.sql").write_text(
+    (root / "_internal" / "gamesave_scout" / "db" / "migrations" / "0001_initial.sql").write_text(
         "PRAGMA user_version = 1;\n",
         encoding="utf-8",
     )
-    (root / "_internal" / "gameshelf" / "db" / "migrations" / "0002_initial.sql").write_text(
+    (root / "_internal" / "gamesave_scout" / "db" / "migrations" / "0002_initial.sql").write_text(
         "PRAGMA user_version = 2;\n",
         encoding="utf-8",
     )
-    (root / "_internal" / "gameshelf" / "db" / "migrations" / "0003_initial.sql").write_text(
+    (root / "_internal" / "gamesave_scout" / "db" / "migrations" / "0003_initial.sql").write_text(
         "PRAGMA user_version = 3;\n",
         encoding="utf-8",
     )
-    (root / "_internal" / "gameshelf" / "db" / "migrations" / "0004_initial.sql").write_text(
+    (root / "_internal" / "gamesave_scout" / "db" / "migrations" / "0004_initial.sql").write_text(
         "PRAGMA user_version = 4;\n",
         encoding="utf-8",
     )
@@ -919,7 +924,7 @@ def _minimal_release_tree(
             b"bootstrapper"
         )
     (root / "README.txt").write_text(
-        "GameShelf 0.1.0 Windows x64 便携版\n",
+        "GameSave Scout 0.1.0 Windows x64 便携版\n",
         encoding="utf-8",
     )
     (root / "LICENSE").write_text("MIT", encoding="utf-8")

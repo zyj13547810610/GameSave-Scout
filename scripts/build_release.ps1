@@ -89,7 +89,7 @@ function Invoke-FrozenSmoke {
     $frozenSmoke = Join-Path $smokeCopy 'frozen-smoke.json'
     $smokeArguments = "--smoke-test --json-output `"$frozenSmoke`""
     $smokeProcess = Start-Process `
-        -FilePath (Join-Path $smokeCopy 'GameShelf.exe') `
+        -FilePath (Join-Path $smokeCopy 'GameSaveScout.exe') `
         -ArgumentList $smokeArguments `
         -Wait `
         -PassThru `
@@ -151,7 +151,7 @@ if (-not (Test-Path -LiteralPath $bootstrapperPath -PathType Leaf)) {
     throw "WebView2Bootstrapper does not exist or is not a file: $bootstrapperPath"
 }
 if (-not [Environment]::Is64BitOperatingSystem -or -not [Environment]::Is64BitProcess) {
-    throw 'GameShelf release builds require 64-bit Windows and a 64-bit process.'
+    throw 'GameSave Scout release builds require 64-bit Windows and a 64-bit process.'
 }
 
 Assert-MicrosoftSignature -Path $archivePath -Label 'WebView2 Fixed Runtime CAB'
@@ -233,7 +233,7 @@ Invoke-Native $expectedPython @('-m', 'mypy', 'src', 'scripts')
 $sourceSmoke = Join-Path $buildRoot 'source-smoke.json'
 $sourceSmokeRoot = Join-Path $buildRoot 'source-smoke-app'
 Invoke-Native $expectedPython @(
-    '-m', 'gameshelf.app',
+    '-m', 'gamesave_scout.app',
     '--smoke-test',
     '--json-output', $sourceSmoke,
     '--app-root', $sourceSmokeRoot
@@ -249,13 +249,13 @@ Invoke-Native $expectedPython @(
     '-m', 'PyInstaller',
     '--clean',
     '--noconfirm',
-    (Join-Path $repositoryRoot 'GameShelf.spec'),
+    (Join-Path $repositoryRoot 'GameSaveScout.spec'),
     '--distpath', $pyinstallerDist,
     '--workpath', $pyinstallerWork
 )
-$frozenDirectory = Join-Path $pyinstallerDist 'GameShelf'
-if (-not (Test-Path -LiteralPath (Join-Path $frozenDirectory 'GameShelf.exe') -PathType Leaf)) {
-    throw 'PyInstaller did not produce GameShelf.exe.'
+$frozenDirectory = Join-Path $pyinstallerDist 'GameSaveScout'
+if (-not (Test-Path -LiteralPath (Join-Path $frozenDirectory 'GameSaveScout.exe') -PathType Leaf)) {
+    throw 'PyInstaller did not produce GameSaveScout.exe.'
 }
 
 $extractedDirectory = Join-Path $buildRoot 'webview2-extracted'
@@ -366,4 +366,4 @@ Invoke-Native $expectedPython @(
     '--evergreen-checksum', $evergreenChecksum
 )
 
-Write-Host "GameShelf release candidates created: dist\$fixedReleaseName and dist\$evergreenReleaseName"
+Write-Host "GameSave Scout release candidates created: dist\$fixedReleaseName and dist\$evergreenReleaseName"

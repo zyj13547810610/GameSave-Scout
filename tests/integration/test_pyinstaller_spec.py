@@ -27,7 +27,7 @@ def pyinstaller_build(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, P
             "PyInstaller",
             "--clean",
             "--noconfirm",
-            str(repository_root / "GameShelf.spec"),
+            str(repository_root / "GameSaveScout.spec"),
             "--distpath",
             str(dist_path),
             "--workpath",
@@ -50,8 +50,8 @@ def test_pyinstaller_bundle_includes_conda_libexpat(
     pyinstaller_build: tuple[Path, Path],
 ) -> None:
     dist_path, work_path = pyinstaller_build
-    assert (dist_path / "GameShelf" / "_internal" / "libexpat.dll").is_file()
-    warnings = (work_path / "GameShelf" / "warn-GameShelf.txt").read_text(
+    assert (dist_path / "GameSaveScout" / "_internal" / "libexpat.dll").is_file()
+    warnings = (work_path / "GameSaveScout" / "warn-GameSaveScout.txt").read_text(
         encoding="utf-8"
     )
     assert "could not resolve 'libexpat.dll'" not in warnings
@@ -61,7 +61,7 @@ def test_pyinstaller_bundle_uses_active_conda_openssl(
     pyinstaller_build: tuple[Path, Path],
 ) -> None:
     dist_path, _ = pyinstaller_build
-    internal = dist_path / "GameShelf" / "_internal"
+    internal = dist_path / "GameSaveScout" / "_internal"
     conda_bin = Path(sys.prefix) / "Library" / "bin"
 
     for dll_name in ("libcrypto-3-x64.dll", "libssl-3-x64.dll"):
@@ -78,7 +78,7 @@ def test_pyinstaller_bundle_contains_pywebview_edge_runtime_paths(
     pyinstaller_build: tuple[Path, Path],
 ) -> None:
     dist_path, _ = pyinstaller_build
-    webview_lib = dist_path / "GameShelf" / "_internal" / "webview" / "lib"
+    webview_lib = dist_path / "GameSaveScout" / "_internal" / "webview" / "lib"
 
     assert (webview_lib / "Microsoft.Web.WebView2.Core.dll").is_file()
     assert (webview_lib / "Microsoft.Web.WebView2.WinForms.dll").is_file()
@@ -101,7 +101,7 @@ def test_pyinstaller_bundle_includes_only_migration_payload(
 ) -> None:
     dist_path, _ = pyinstaller_build
     migrations = (
-        dist_path / "GameShelf" / "_internal" / "gameshelf" / "db" / "migrations"
+        dist_path / "GameSaveScout" / "_internal" / "gamesave_scout" / "db" / "migrations"
     )
 
     assert (migrations / "0001_initial.sql").is_file()
@@ -115,7 +115,7 @@ def test_pyinstaller_bundle_includes_both_declarative_rule_catalogs(
     pyinstaller_build: tuple[Path, Path],
 ) -> None:
     dist_path, _ = pyinstaller_build
-    resources = dist_path / "GameShelf" / "_internal" / "resources"
+    resources = dist_path / "GameSaveScout" / "_internal" / "resources"
     rules = resources / "rules"
 
     assert (rules / "builtin" / "engines.yaml").is_file()
