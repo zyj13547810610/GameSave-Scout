@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import type { GameShelfBridge, RootInput, ScanRoot } from '../../api/contracts'
+import type { GameSaveScoutBridge, RootInput, ScanRoot } from '../../api/contracts'
 
-const props = defineProps<{ bridge: GameShelfBridge; root?: ScanRoot }>()
+const props = defineProps<{ bridge: GameSaveScoutBridge; root?: ScanRoot }>()
 const emit = defineEmits<{ saved: [root: ScanRoot, created: boolean]; close: [] }>()
 const displayPath = ref(props.root?.displayPath ?? '')
 const recursive = ref(props.root?.scanMode === 'recursive')

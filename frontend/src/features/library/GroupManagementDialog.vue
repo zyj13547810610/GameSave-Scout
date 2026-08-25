@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import type { GameGroup, GameShelfBridge } from '../../api/contracts'
+import type { GameGroup, GameSaveScoutBridge } from '../../api/contracts'
 
-const props = defineProps<{ bridge: GameShelfBridge; groups: GameGroup[] }>()
+const props = defineProps<{ bridge: GameSaveScoutBridge; groups: GameGroup[] }>()
 const emit = defineEmits<{ changed: []; close: [] }>()
 const newName = ref('')
 const error = ref('')

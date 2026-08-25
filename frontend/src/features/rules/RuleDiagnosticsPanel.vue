@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import type { GameShelfBridge, RuleDiagnostic } from '../../api/contracts'
+import type { GameSaveScoutBridge, RuleDiagnostic } from '../../api/contracts'
 
 const props = defineProps<{
-  bridge: GameShelfBridge
+  bridge: GameSaveScoutBridge
   diagnostics: RuleDiagnostic[]
 }>()
 

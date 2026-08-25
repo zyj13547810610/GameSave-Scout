@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
 import { computed, ref, watch } from 'vue'
-import type { GameShelfBridge, GuidedSaveDiscovery } from '../../api/contracts'
+import type { GameSaveScoutBridge, GuidedSaveDiscovery } from '../../api/contracts'
 import { confidenceLabel, saveKindLabel } from './saveLocationLabels'
 import { useGuidedSaveStore } from './guidedSaveStore'
 
-const props = defineProps<{ bridge: GameShelfBridge }>()
+const props = defineProps<{ bridge: GameSaveScoutBridge }>()
 const emit = defineEmits<{ accepted: [] }>()
 const store = useGuidedSaveStore()
 const { discoveries, error, session } = storeToRefs(store)

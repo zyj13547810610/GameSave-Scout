@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import type {
   BatchSaveCandidate,
-  GameShelfBridge,
+  GameSaveScoutBridge,
   TaskSnapshot,
 } from '../../api/contracts'
 
@@ -45,12 +45,12 @@ export const useBatchSaveStore = defineStore('batch-save', {
       if (this.pollTimer !== null) window.clearTimeout(this.pollTimer)
       this.pollTimer = null
     },
-    async refreshCurrent(bridge: GameShelfBridge) {
+    async refreshCurrent(bridge: GameSaveScoutBridge) {
       const result = await bridge.current_batch_save_task()
       if (!result.ok) return this.fail(result.error.message)
       this.task = result.data
     },
-    async open(bridge: GameShelfBridge) {
+    async open(bridge: GameSaveScoutBridge) {
       this.clearPolling()
       this.error = ''
       await this.refreshCurrent(bridge)
@@ -60,7 +60,7 @@ export const useBatchSaveStore = defineStore('batch-save', {
       }
     },
     async startScan(
-      bridge: GameShelfBridge,
+      bridge: GameSaveScoutBridge,
       standardScopeIds: string[],
       customRootIds: string[],
     ) {
@@ -76,12 +76,12 @@ export const useBatchSaveStore = defineStore('batch-save', {
       this.task = snapshot.data
       await this.startPolling(bridge)
     },
-    async startPolling(bridge: GameShelfBridge) {
+    async startPolling(bridge: GameSaveScoutBridge) {
       this.clearPolling()
       const revision = this.pollRevision
       await this.pollTask(bridge, revision)
     },
-    async pollTask(bridge: GameShelfBridge, revision?: number) {
+    async pollTask(bridge: GameSaveScoutBridge, revision?: number) {
       const activeRevision = revision ?? this.pollRevision
       const taskId = this.task?.id
       if (!taskId) return
@@ -104,7 +104,7 @@ export const useBatchSaveStore = defineStore('batch-save', {
       }
       await this.loadPage(bridge)
     },
-    async cancelScan(bridge: GameShelfBridge) {
+    async cancelScan(bridge: GameSaveScoutBridge) {
       const taskId = this.task?.id
       if (!taskId || !activeStatuses.has(this.task?.status ?? 'completed')) return
       this.actionBusy = true
@@ -113,7 +113,7 @@ export const useBatchSaveStore = defineStore('batch-save', {
       if (!result.ok) return this.fail(result.error.message)
       await this.pollTask(bridge)
     },
-    async loadPage(bridge: GameShelfBridge) {
+    async loadPage(bridge: GameSaveScoutBridge) {
       this.loading = true
       const result = await bridge.list_batch_save_candidates({ ...this.filters })
       this.loading = false
@@ -126,7 +126,7 @@ export const useBatchSaveStore = defineStore('batch-save', {
         }
       }
     },
-    async selectCurrentFiltered(bridge: GameShelfBridge) {
+    async selectCurrentFiltered(bridge: GameSaveScoutBridge) {
       this.actionBusy = true
       const result = await bridge.select_batch_save_candidate_ids({
         status: this.filters.status,
@@ -164,7 +164,7 @@ export const useBatchSaveStore = defineStore('batch-save', {
       this.selectedCandidateDetails = details
     },
     async acceptCandidates(
-      bridge: GameShelfBridge,
+      bridge: GameSaveScoutBridge,
       candidateIds: string[],
       confirmRegistry: boolean,
     ) {
@@ -183,7 +183,7 @@ export const useBatchSaveStore = defineStore('batch-save', {
       await this.finishCandidateAction(bridge, candidateIds)
       return true
     },
-    async ignoreCandidates(bridge: GameShelfBridge, candidateIds: string[]) {
+    async ignoreCandidates(bridge: GameSaveScoutBridge, candidateIds: string[]) {
       return this.updateCandidateStatus(
         bridge,
         candidateIds,
@@ -191,7 +191,7 @@ export const useBatchSaveStore = defineStore('batch-save', {
         '已忽略所选候选。',
       )
     },
-    async restoreCandidates(bridge: GameShelfBridge, candidateIds: string[]) {
+    async restoreCandidates(bridge: GameSaveScoutBridge, candidateIds: string[]) {
       return this.updateCandidateStatus(
         bridge,
         candidateIds,
@@ -199,7 +199,7 @@ export const useBatchSaveStore = defineStore('batch-save', {
         '已恢复所选候选。',
       )
     },
-    async clearUnavailable(bridge: GameShelfBridge, candidateIds: string[]) {
+    async clearUnavailable(bridge: GameSaveScoutBridge, candidateIds: string[]) {
       return this.updateCandidateStatus(
         bridge,
         candidateIds,
@@ -208,10 +208,10 @@ export const useBatchSaveStore = defineStore('batch-save', {
       )
     },
     async updateCandidateStatus(
-      bridge: GameShelfBridge,
+      bridge: GameSaveScoutBridge,
       candidateIds: string[],
       operation: () => ReturnType<
-        GameShelfBridge['ignore_batch_save_candidates']
+        GameSaveScoutBridge['ignore_batch_save_candidates']
       >,
       notice: string,
     ) {
@@ -227,7 +227,7 @@ export const useBatchSaveStore = defineStore('batch-save', {
       await this.finishCandidateAction(bridge, candidateIds)
       return true
     },
-    async finishCandidateAction(bridge: GameShelfBridge, candidateIds: string[]) {
+    async finishCandidateAction(bridge: GameSaveScoutBridge, candidateIds: string[]) {
       const processed = new Set(candidateIds)
       this.selectedIds = new Set([...this.selectedIds].filter((id) => !processed.has(id)))
       this.selectedCandidateDetails = Object.fromEntries(

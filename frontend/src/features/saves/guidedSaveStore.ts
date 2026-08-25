@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import type {
   ApiResult,
-  GameShelfBridge,
+  GameSaveScoutBridge,
   GuidedSaveDiscovery,
   GuidedSaveSession,
 } from '../../api/contracts'
@@ -27,7 +27,7 @@ export const useGuidedSaveStore = defineStore('guided-save', {
       if (this.pollTimer !== null) window.clearTimeout(this.pollTimer)
       this.pollTimer = null
     },
-    async refreshActive(bridge: GameShelfBridge) {
+    async refreshActive(bridge: GameSaveScoutBridge) {
       this.clearPolling()
       this.error = ''
       const result = await bridge.current_guided_save_detection()
@@ -41,7 +41,7 @@ export const useGuidedSaveStore = defineStore('guided-save', {
         await this.loadDiscoveries(bridge, result.data.id)
       }
     },
-    async refreshForGame(bridge: GameShelfBridge, gameId: string) {
+    async refreshForGame(bridge: GameSaveScoutBridge, gameId: string) {
       this.requestedGameId = gameId
       if (this.session && activeStatuses.has(this.session.status)) return
       this.clearPolling()
@@ -54,12 +54,12 @@ export const useGuidedSaveStore = defineStore('guided-save', {
         await this.loadDiscoveries(bridge, result.data.id)
       }
     },
-    async startPolling(bridge: GameShelfBridge, sessionId: string) {
+    async startPolling(bridge: GameSaveScoutBridge, sessionId: string) {
       this.clearPolling()
       const revision = this.pollRevision
       await this.pollOnce(bridge, sessionId, revision)
     },
-    async pollOnce(bridge: GameShelfBridge, sessionId: string, revision: number) {
+    async pollOnce(bridge: GameSaveScoutBridge, sessionId: string, revision: number) {
       const result = await bridge.guided_save_detection_status({ sessionId })
       if (revision !== this.pollRevision) return
       if (!result.ok) return this.fail(result.error.message)
@@ -76,13 +76,13 @@ export const useGuidedSaveStore = defineStore('guided-save', {
         await this.loadDiscoveries(bridge, sessionId)
       }
     },
-    async loadDiscoveries(bridge: GameShelfBridge, sessionId: string) {
+    async loadDiscoveries(bridge: GameSaveScoutBridge, sessionId: string) {
       const result = await bridge.list_guided_save_discoveries({ sessionId })
       if (!result.ok) return this.fail(result.error.message)
       this.discoveries = result.data.filter((item) => item.reviewStatus === 'unreviewed')
     },
     async start(
-      bridge: GameShelfBridge,
+      bridge: GameSaveScoutBridge,
       gameId: string,
       selectedScopeIds: string[],
       additionalDirectories: string[],
@@ -99,21 +99,21 @@ export const useGuidedSaveStore = defineStore('guided-save', {
       this.discoveries = []
       await this.startPolling(bridge, result.data.id)
     },
-    async markSaved(bridge: GameShelfBridge) {
+    async markSaved(bridge: GameSaveScoutBridge) {
       if (!this.session) return
       await this.applySessionCommand(
         bridge,
         bridge.mark_guided_save_saved({ sessionId: this.session.id }),
       )
     },
-    async stopAndAnalyze(bridge: GameShelfBridge) {
+    async stopAndAnalyze(bridge: GameSaveScoutBridge) {
       if (!this.session) return
       await this.applySessionCommand(
         bridge,
         bridge.stop_guided_save_detection({ sessionId: this.session.id }),
       )
     },
-    async cancel(bridge: GameShelfBridge) {
+    async cancel(bridge: GameSaveScoutBridge) {
       if (!this.session) return
       await this.applySessionCommand(
         bridge,
@@ -121,7 +121,7 @@ export const useGuidedSaveStore = defineStore('guided-save', {
       )
     },
     async applySessionCommand(
-      bridge: GameShelfBridge,
+      bridge: GameSaveScoutBridge,
       pending: Promise<ApiResult<GuidedSaveSession>>,
     ) {
       this.error = ''
@@ -144,7 +144,7 @@ export const useGuidedSaveStore = defineStore('guided-save', {
       }
     },
     async accept(
-      bridge: GameShelfBridge,
+      bridge: GameSaveScoutBridge,
       discoveryIds: string[],
       confirmRegistry: boolean,
     ) {
@@ -163,7 +163,7 @@ export const useGuidedSaveStore = defineStore('guided-save', {
       if (this.discoveries.length === 0) this.session = null
       return true
     },
-    async discard(bridge: GameShelfBridge) {
+    async discard(bridge: GameSaveScoutBridge) {
       if (!this.session) return false
       this.error = ''
       const result = await bridge.discard_guided_save_detection({
@@ -179,7 +179,7 @@ export const useGuidedSaveStore = defineStore('guided-save', {
       return true
     },
     async resolveClose(
-      bridge: GameShelfBridge,
+      bridge: GameSaveScoutBridge,
       resolution: 'return' | 'cancel_and_exit' | 'analyze_and_exit',
     ) {
       const result = await bridge.resolve_guided_close({ resolution })

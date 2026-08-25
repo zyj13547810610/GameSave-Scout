@@ -1,6 +1,6 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { GameShelfBridge, RuleDetail, RuleSummary } from '../src/api/contracts'
+import type { GameSaveScoutBridge, RuleDetail, RuleSummary } from '../src/api/contracts'
 import { createMockBridge, ok } from '../src/api/mockBridge'
 import { useRuleManagementStore } from '../src/features/rules/ruleManagementStore'
 
@@ -62,7 +62,7 @@ describe('ruleManagementStore', () => {
 
   it('debounces query changes by 300ms while enum filters load immediately', async () => {
     vi.useFakeTimers()
-    const listRules = vi.fn(async (_input: Parameters<GameShelfBridge['list_rules']>[0]) => ok({ items: [], total: 0 }))
+    const listRules = vi.fn(async (_input: Parameters<GameSaveScoutBridge['list_rules']>[0]) => ok({ items: [], total: 0 }))
     const bridge = createMockBridge({ list_rules: listRules })
     const store = useRuleManagementStore()
 

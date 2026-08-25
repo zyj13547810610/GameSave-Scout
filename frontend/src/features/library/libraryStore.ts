@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import type { Game, GameGroup, GameShelfBridge, GroupFilter, MoveSuggestion, RootInput, ScanResult, ScanRoot, TaskSnapshot } from '../../api/contracts'
+import type { Game, GameGroup, GameSaveScoutBridge, GroupFilter, MoveSuggestion, RootInput, ScanResult, ScanRoot, TaskSnapshot } from '../../api/contracts'
 
 export const useLibraryStore = defineStore('library', {
   state: () => ({
@@ -18,7 +18,7 @@ export const useLibraryStore = defineStore('library', {
     groupFilter: 'all' as GroupFilter,
   }),
   actions: {
-    async load(bridge: GameShelfBridge) {
+    async load(bridge: GameSaveScoutBridge) {
       this.loading = true
       this.error = ''
       const [roots, games, groups] = await Promise.all([
@@ -41,17 +41,17 @@ export const useLibraryStore = defineStore('library', {
         this.groupFilter = 'all'
       }
     },
-    async addRoot(bridge: GameShelfBridge, input: RootInput) {
+    async addRoot(bridge: GameSaveScoutBridge, input: RootInput) {
       const result = await bridge.add_root(input)
       if (!result.ok) return this.fail(result.error.message)
       this.roots = [...this.roots.filter((root) => root.id !== result.data.id), result.data]
     },
-    async removeRoot(bridge: GameShelfBridge, rootId: string) {
+    async removeRoot(bridge: GameSaveScoutBridge, rootId: string) {
       const result = await bridge.remove_root({ rootId })
       if (!result.ok) return this.fail(result.error.message)
       await this.load(bridge)
     },
-    async updateRoot(bridge: GameShelfBridge, root: ScanRoot, enabled: boolean) {
+    async updateRoot(bridge: GameSaveScoutBridge, root: ScanRoot, enabled: boolean) {
       const result = await bridge.update_root({
         rootId: root.id,
         displayPath: root.displayPath,
@@ -63,12 +63,12 @@ export const useLibraryStore = defineStore('library', {
       if (!result.ok) return this.fail(result.error.message)
       this.roots = this.roots.map((item) => item.id === root.id ? result.data : item)
     },
-    async remapRoot(bridge: GameShelfBridge, rootId: string, displayPath: string) {
+    async remapRoot(bridge: GameSaveScoutBridge, rootId: string, displayPath: string) {
       const result = await bridge.remap_root({ rootId, displayPath })
       if (!result.ok) return this.fail(result.error.message)
       this.roots = this.roots.map((root) => root.id === rootId ? result.data : root)
     },
-    async scan(bridge: GameShelfBridge, rootId: string, kind: 'quick' | 'full') {
+    async scan(bridge: GameSaveScoutBridge, rootId: string, kind: 'quick' | 'full') {
       const result = await bridge.start_scan({ rootId, kind })
       if (!result.ok) {
         return this.fail(
@@ -81,7 +81,7 @@ export const useLibraryStore = defineStore('library', {
       this.scanTasks[rootId] = result.data.taskId
       window.setTimeout(() => void this.refreshTask(bridge, rootId), 250)
     },
-    async refreshTask(bridge: GameShelfBridge, rootId: string) {
+    async refreshTask(bridge: GameSaveScoutBridge, rootId: string) {
       const taskId = this.scanTasks[rootId]
       if (!taskId) return
       const result = await bridge.task_snapshot(taskId)
@@ -103,14 +103,14 @@ export const useLibraryStore = defineStore('library', {
         this.fail(result.data.error?.message ?? '扫描失败，已有游戏状态未改变')
       }
     },
-    async cancelScan(bridge: GameShelfBridge, rootId: string) {
+    async cancelScan(bridge: GameSaveScoutBridge, rootId: string) {
       const taskId = this.scanTasks[rootId]
       if (taskId) await bridge.cancel_task(taskId)
     },
     updateGame(game: Game) {
       this.games = this.games.map((item) => item.id === game.id ? game : item)
     },
-    async confirmMove(bridge: GameShelfBridge, suggestion: MoveSuggestion) {
+    async confirmMove(bridge: GameSaveScoutBridge, suggestion: MoveSuggestion) {
       const result = await bridge.confirm_move(suggestion)
       if (!result.ok) return this.fail(result.error.message)
       this.moveSuggestions = this.moveSuggestions.filter((item) => item !== suggestion)

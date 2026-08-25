@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
 import { computed, onMounted, ref } from 'vue'
-import type { GameShelfBridge, GuidedSavePreview } from '../../api/contracts'
+import type { GameSaveScoutBridge, GuidedSavePreview } from '../../api/contracts'
 import GuidedSaveDiscoveries from './GuidedSaveDiscoveries.vue'
 import { useGuidedSaveStore } from './guidedSaveStore'
 
-const props = defineProps<{ gameId: string; bridge: GameShelfBridge }>()
+const props = defineProps<{ gameId: string; bridge: GameSaveScoutBridge }>()
 const emit = defineEmits<{ accepted: [] }>()
 const store = useGuidedSaveStore()
 const { session, error } = storeToRefs(store)
@@ -156,7 +156,7 @@ function resetTerminal() {
       <p v-if="currentSession.error">{{ currentSession.error.message }}</p>
       <button type="button" class="secondary" @click="resetTerminal">重新开始</button>
     </div>
-    <p v-else-if="!preview" class="empty-save-message">由 GameShelf 启动游戏并观察一次存档前后的本地元数据变化。</p>
+    <p v-else-if="!preview" class="empty-save-message">由 GameSave Scout 启动游戏并观察一次存档前后的本地元数据变化。</p>
 
     <p v-if="localMessage || error" class="status-message" role="alert">{{ localMessage || error }}</p>
   </section>

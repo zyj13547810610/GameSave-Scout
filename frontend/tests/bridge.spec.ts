@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createBridge, createDeferredBridge, ruleBridgeMethods } from '../src/api/bridge'
-import type { GameShelfBridge } from '../src/api/contracts'
+import type { GameSaveScoutBridge } from '../src/api/contracts'
 
 describe('desktop bridge', () => {
   it('uses the development mock when pywebview is absent', async () => {
@@ -11,7 +11,7 @@ describe('desktop bridge', () => {
     expect(result).toEqual({
       ok: true,
       data: {
-        appName: 'GameShelf', schemaVersion: 4, portable: true, uiScale: 1,
+        appName: 'GameSave Scout', schemaVersion: 4, portable: true, uiScale: 1,
         libraryScanSettings: { startupQuickScan: true, scanConcurrency: 1 },
         coverWizardSettings: {
           coverOnlineEnabled: false,
@@ -36,7 +36,7 @@ describe('desktop bridge', () => {
     const api = Object.fromEntries(ruleBridgeMethods.map((name) => [
       name,
       async () => { calls.push(name); return { ok: true, data: name } },
-    ])) as unknown as GameShelfBridge
+    ])) as unknown as GameSaveScoutBridge
     Object.assign(windowObject, { pywebview: { api } })
     ready?.()
 

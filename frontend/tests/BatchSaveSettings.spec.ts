@@ -14,7 +14,7 @@ describe('BatchSaveSettings', () => {
     const bridge = createMockBridge({
       async bootstrap() {
         return ok({
-          appName: 'GameShelf', schemaVersion: 4, portable: true, uiScale: 1,
+          appName: 'GameSave Scout', schemaVersion: 4, portable: true, uiScale: 1,
           coverWizardSettings: { coverOnlineEnabled: false, coverVndbCandidateLimit: 5, coverLocalScanCandidateLimit: 10 },
           libraryScanSettings: { startupQuickScan: true, scanConcurrency: 1 },
           batchSaveSettings: { customRoots: [] },

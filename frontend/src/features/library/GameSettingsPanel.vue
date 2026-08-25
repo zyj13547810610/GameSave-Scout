@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from 'vue'
-import type { Game, GameShelfBridge } from '../../api/contracts'
+import type { Game, GameSaveScoutBridge } from '../../api/contracts'
 
-const props = defineProps<{ game: Game; bridge: GameShelfBridge }>()
+const props = defineProps<{ game: Game; bridge: GameSaveScoutBridge }>()
 const emit = defineEmits<{ updated: [game: Game] }>()
 const title = ref('')
 const version = ref('')

@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, watch } from 'vue'
-import type { Game, GameGroup, GameShelfBridge } from '../../api/contracts'
+import type { Game, GameGroup, GameSaveScoutBridge } from '../../api/contracts'
 import GameCard from './GameCard.vue'
 import GameDetailDrawer from './GameDetailDrawer.vue'
 
 const props = withDefaults(defineProps<{
   games: Game[]
-  bridge: GameShelfBridge
+  bridge: GameSaveScoutBridge
   groups?: GameGroup[]
   batchMode?: boolean
   selectedGameIds?: Set<string>

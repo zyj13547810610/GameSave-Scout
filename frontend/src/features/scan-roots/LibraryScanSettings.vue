@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import type { GameShelfBridge, LibraryScanSettings } from '../../api/contracts'
+import type { GameSaveScoutBridge, LibraryScanSettings } from '../../api/contracts'
 
 const props = defineProps<{
-  bridge: GameShelfBridge
+  bridge: GameSaveScoutBridge
   settings: LibraryScanSettings
 }>()
 const emit = defineEmits<{ updated: [settings: LibraryScanSettings] }>()

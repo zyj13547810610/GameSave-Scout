@@ -4,7 +4,7 @@ import '../src/features/saves/batch-save.css'
 import '../src/features/rules/rules.css'
 
 describe('scrollbar theme', () => {
-  it('defines the GameShelf dark scrollbar palette', () => {
+  it('defines the GameSave Scout dark scrollbar palette', () => {
     const root = getComputedStyle(document.documentElement)
     expect(root.getPropertyValue('--scrollbar-track').trim()).toBe('transparent')
     expect(root.getPropertyValue('--scrollbar-thumb').trim()).toBe('#4d4856')

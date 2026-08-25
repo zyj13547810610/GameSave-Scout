@@ -1,4 +1,4 @@
-import type { ApiResult, CoverWizardSnapshot, Game, GameGroup, GameShelfBridge, GuidedSaveSession, ScanRoot } from './contracts'
+import type { ApiResult, CoverWizardSnapshot, Game, GameGroup, GameSaveScoutBridge, GuidedSaveSession, ScanRoot } from './contracts'
 
 export function ok<T>(data: T): ApiResult<T> {
   return { ok: true, data }
@@ -63,7 +63,7 @@ export function fixtureGroup(overrides: Partial<GameGroup> = {}): GameGroup {
   }
 }
 
-export function createMockBridge(overrides: Partial<GameShelfBridge> = {}): GameShelfBridge {
+export function createMockBridge(overrides: Partial<GameSaveScoutBridge> = {}): GameSaveScoutBridge {
   let nextGroupId = 1
   let groups: GameGroup[] = []
   const memberships = new Map<string, Set<string>>()
@@ -75,10 +75,10 @@ export function createMockBridge(overrides: Partial<GameShelfBridge> = {}): Game
     }))
   }
 
-  const bridge: GameShelfBridge = {
+  const bridge: GameSaveScoutBridge = {
     async bootstrap() {
       return ok({
-        appName: 'GameShelf', schemaVersion: 4, portable: true, uiScale: 1,
+        appName: 'GameSave Scout', schemaVersion: 4, portable: true, uiScale: 1,
         coverWizardSettings: {
           coverOnlineEnabled: false,
           coverVndbCandidateLimit: 5,

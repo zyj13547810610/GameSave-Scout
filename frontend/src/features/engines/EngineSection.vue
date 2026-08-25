@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { Game, GameShelfBridge } from '../../api/contracts'
+import type { Game, GameSaveScoutBridge } from '../../api/contracts'
 import EngineDetails from './EngineDetails.vue'
 import EnginePicker from './EnginePicker.vue'
 
-const props = defineProps<{ game: Game; bridge: GameShelfBridge }>()
+const props = defineProps<{ game: Game; bridge: GameSaveScoutBridge }>()
 defineEmits<{ updated: [game: Game] }>()
 
 const warning = computed(() => (

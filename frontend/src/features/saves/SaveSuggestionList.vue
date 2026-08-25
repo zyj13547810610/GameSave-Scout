@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import type { GameShelfBridge, SaveLocation, SaveSuggestion } from '../../api/contracts'
+import type { GameSaveScoutBridge, SaveLocation, SaveSuggestion } from '../../api/contracts'
 import { confidenceLabel, saveKindLabel } from './saveLocationLabels'
 
 const props = defineProps<{
   gameId: string
-  bridge: GameShelfBridge
+  bridge: GameSaveScoutBridge
   suggestions?: SaveSuggestion[]
 }>()
 const emit = defineEmits<{ accepted: [locations: SaveLocation[]] }>()

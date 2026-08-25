@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
 import { nextTick, onMounted, ref } from 'vue'
-import type { Game, GameShelfBridge, RuleImportDecision, RuleType } from '../../api/contracts'
+import type { Game, GameSaveScoutBridge, RuleImportDecision, RuleType } from '../../api/contracts'
 import LudusaviRulePanel from './LudusaviRulePanel.vue'
 import RuleDetailPane from './RuleDetailPane.vue'
 import RuleDiagnosticsPanel from './RuleDiagnosticsPanel.vue'
@@ -11,7 +11,7 @@ import { useRuleManagementStore, type RuleManagementTab } from './ruleManagement
 import './rules.css'
 
 const props = withDefaults(defineProps<{
-  bridge: GameShelfBridge
+  bridge: GameSaveScoutBridge
   games?: Pick<Game, 'id' | 'title' | 'status'>[]
 }>(), { games: () => [] })
 const emit = defineEmits<{ leave: [] }>()

@@ -1,6 +1,6 @@
 import { enableAutoUnmount, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { GameShelfBridge } from '../src/api/contracts'
+import type { GameSaveScoutBridge } from '../src/api/contracts'
 import { createMockBridge, fixtureGame, ok } from '../src/api/mockBridge'
 import GameDetailDrawer from '../src/features/library/GameDetailDrawer.vue'
 import '../src/features/library/library.css'
@@ -212,7 +212,7 @@ describe('GameDetailDrawer', () => {
   it('removes an installed game and adds its root exclusion after confirmation', async () => {
     const bridge = createMockBridge()
     const remove = vi.fn(async () => ok({ removed: true }))
-    ;(bridge as GameShelfBridge & { remove_game_and_exclude: typeof remove }).remove_game_and_exclude = remove
+    ;(bridge as GameSaveScoutBridge & { remove_game_and_exclude: typeof remove }).remove_game_and_exclude = remove
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     const game = fixtureGame({ status: 'installed' })
     const wrapper = mount(GameDetailDrawer, {
@@ -229,7 +229,7 @@ describe('GameDetailDrawer', () => {
   it('deletes only a missing game record after confirmation', async () => {
     const bridge = createMockBridge()
     const remove = vi.fn(async () => ok({ removed: true }))
-    ;(bridge as GameShelfBridge & { delete_missing_game: typeof remove }).delete_missing_game = remove
+    ;(bridge as GameSaveScoutBridge & { delete_missing_game: typeof remove }).delete_missing_game = remove
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     const game = fixtureGame({ status: 'missing', scanRootId: null })
     const wrapper = mount(GameDetailDrawer, {

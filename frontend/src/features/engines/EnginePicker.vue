@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import type { EngineOption, Game, GameShelfBridge } from '../../api/contracts'
+import type { EngineOption, Game, GameSaveScoutBridge } from '../../api/contracts'
 
-const props = defineProps<{ game: Game; bridge: GameShelfBridge }>()
+const props = defineProps<{ game: Game; bridge: GameSaveScoutBridge }>()
 const emit = defineEmits<{ updated: [game: Game] }>()
 const options = ref<EngineOption[]>([])
 const selected = ref(selectionFor(props.game))

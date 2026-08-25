@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { inject, ref } from 'vue'
-import type { Game, GameShelfBridge } from '../../api/contracts'
+import type { Game, GameSaveScoutBridge } from '../../api/contracts'
 import { readClipboardPng } from './coverClipboard'
 
-const props = defineProps<{ gameId: string; hasCover: boolean; bridge: GameShelfBridge }>()
+const props = defineProps<{ gameId: string; hasCover: boolean; bridge: GameSaveScoutBridge }>()
 const emit = defineEmits<{ updated: [game: Game] }>()
 const clipboard = inject<Clipboard>('clipboard', navigator.clipboard)
 const busy = ref(false)
@@ -44,7 +44,7 @@ async function remove() {
   finish(result, '封面已移除')
 }
 
-function finish(result: Awaited<ReturnType<GameShelfBridge['remove_cover']>>, success = '封面已更新') {
+function finish(result: Awaited<ReturnType<GameSaveScoutBridge['remove_cover']>>, success = '封面已更新') {
   if (!result.ok) return void (message.value = result.error.message)
   emit('updated', result.data)
   message.value = success

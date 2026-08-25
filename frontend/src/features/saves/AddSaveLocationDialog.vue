@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import type { GameShelfBridge, SaveLocationKind } from '../../api/contracts'
+import type { GameSaveScoutBridge, SaveLocationKind } from '../../api/contracts'
 
-const props = defineProps<{ gameId: string; bridge: GameShelfBridge }>()
+const props = defineProps<{ gameId: string; bridge: GameSaveScoutBridge }>()
 const emit = defineEmits<{ close: []; saved: [] }>()
 const kind = ref<SaveLocationKind>('directory')
 const selectedPath = ref('')

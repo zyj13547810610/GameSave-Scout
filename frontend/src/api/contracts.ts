@@ -124,7 +124,7 @@ export type CoverUpload = {
 }
 
 export type BootstrapState = {
-  appName: 'GameShelf'
+  appName: 'GameSave Scout'
   schemaVersion: number
   portable: true
   uiScale: UiScaleValue
@@ -569,7 +569,7 @@ export type GameSaveRulePrefill = {
   engineId: string | null
 }
 
-export interface GameShelfBridge {
+export interface GameSaveScoutBridge {
   bootstrap(): Promise<ApiResult<BootstrapState>>
   list_rules(input: {
     kind: 'all' | 'engine' | 'save'

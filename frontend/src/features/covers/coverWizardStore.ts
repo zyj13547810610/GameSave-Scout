@@ -5,7 +5,7 @@ import type {
   CoverUpload,
   CoverWizardSnapshot,
   Game,
-  GameShelfBridge,
+  GameSaveScoutBridge,
   TaskSnapshot,
 } from '../../api/contracts'
 
@@ -35,7 +35,7 @@ export const useCoverWizardStore = defineStore('cover-wizard', {
       if (this.pollTimer !== null) window.clearTimeout(this.pollTimer)
       this.pollTimer = null
     },
-    async open(bridge: GameShelfBridge, includeExisting = false) {
+    async open(bridge: GameSaveScoutBridge, includeExisting = false) {
       this.clearPolling()
       this.error = ''
       this.sourceError = ''
@@ -50,7 +50,7 @@ export const useCoverWizardStore = defineStore('cover-wizard', {
       if (this.selectedGameId) await this.loadCandidates(bridge, this.selectedGameId)
       return true
     },
-    async refresh(bridge: GameShelfBridge) {
+    async refresh(bridge: GameSaveScoutBridge) {
       if (!this.session) return
       const sessionId = this.session.id
       const revision = this.requestRevision
@@ -60,7 +60,7 @@ export const useCoverWizardStore = defineStore('cover-wizard', {
       this.session = result.data
       if (this.selectedGameId) await this.loadCandidates(bridge, this.selectedGameId)
     },
-    async selectGame(bridge: GameShelfBridge, gameId: string | null) {
+    async selectGame(bridge: GameSaveScoutBridge, gameId: string | null) {
       this.requestRevision += 1
       this.selectedGameId = gameId
       this.selectedCandidateId = null
@@ -68,7 +68,7 @@ export const useCoverWizardStore = defineStore('cover-wizard', {
       this.error = ''
       if (gameId) await this.loadCandidates(bridge, gameId)
     },
-    async loadCandidates(bridge: GameShelfBridge, gameId: string) {
+    async loadCandidates(bridge: GameSaveScoutBridge, gameId: string) {
       if (!this.session) return
       const sessionId = this.session.id
       const revision = this.requestRevision
@@ -84,7 +84,7 @@ export const useCoverWizardStore = defineStore('cover-wizard', {
         this.selectedCandidateId = null
       }
     },
-    async setIncludeExisting(bridge: GameShelfBridge, includeExisting: boolean) {
+    async setIncludeExisting(bridge: GameSaveScoutBridge, includeExisting: boolean) {
       if (!this.session) return false
       const sessionId = this.session.id
       const result = await bridge.set_cover_wizard_include_existing({
@@ -100,7 +100,7 @@ export const useCoverWizardStore = defineStore('cover-wizard', {
       return true
     },
     async addUploads(
-      bridge: GameShelfBridge,
+      bridge: GameSaveScoutBridge,
       uploads: CoverUpload[],
       source: 'clipboard' | 'drop',
     ) {
@@ -125,7 +125,7 @@ export const useCoverWizardStore = defineStore('cover-wizard', {
       return true
     },
     async startSourceTask(
-      bridge: GameShelfBridge,
+      bridge: GameSaveScoutBridge,
       pending: Promise<SourceTaskResult>,
     ) {
       this.sourceError = ''
@@ -141,7 +141,7 @@ export const useCoverWizardStore = defineStore('cover-wizard', {
       await this.pollTask(bridge, result.data.taskId, pollRevision)
       return true
     },
-    async pollTask(bridge: GameShelfBridge, taskId: string, pollRevision: number) {
+    async pollTask(bridge: GameSaveScoutBridge, taskId: string, pollRevision: number) {
       const result = await bridge.task_snapshot(taskId)
       if (pollRevision !== this.pollRevision || this.activeTaskId !== taskId) return
       if (!result.ok) {
@@ -164,7 +164,7 @@ export const useCoverWizardStore = defineStore('cover-wizard', {
       }
       await this.refresh(bridge)
     },
-    async adopt(bridge: GameShelfBridge): Promise<Game | null> {
+    async adopt(bridge: GameSaveScoutBridge): Promise<Game | null> {
       if (!this.session || !this.selectedCandidateId) return null
       const sessionId = this.session.id
       const selected = this.selectedCandidateId
@@ -183,7 +183,7 @@ export const useCoverWizardStore = defineStore('cover-wizard', {
       await this.selectGame(bridge, result.data.snapshot.currentGameId)
       return result.data.game
     },
-    async skip(bridge: GameShelfBridge) {
+    async skip(bridge: GameSaveScoutBridge) {
       if (!this.session || !this.selectedGameId) return false
       const result = await bridge.skip_cover_wizard_game({
         sessionId: this.session.id,
@@ -194,7 +194,7 @@ export const useCoverWizardStore = defineStore('cover-wizard', {
       await this.selectGame(bridge, result.data.currentGameId)
       return true
     },
-    async requestClose(bridge: GameShelfBridge) {
+    async requestClose(bridge: GameSaveScoutBridge) {
       if (!this.session || this.closing) return false
       this.closing = true
       const sessionId = this.session.id
@@ -209,7 +209,7 @@ export const useCoverWizardStore = defineStore('cover-wizard', {
         this.closing = false
       }
     },
-    async waitForTaskTerminal(bridge: GameShelfBridge, taskId: string) {
+    async waitForTaskTerminal(bridge: GameSaveScoutBridge, taskId: string) {
       for (;;) {
         const result = await bridge.task_snapshot(taskId)
         if (!result.ok || !activeTaskStatuses.has(result.data.status)) return
@@ -217,7 +217,7 @@ export const useCoverWizardStore = defineStore('cover-wizard', {
       }
     },
     async close(
-      bridge: GameShelfBridge,
+      bridge: GameSaveScoutBridge,
       sessionId?: string,
     ): Promise<boolean> {
       const targetSessionId = sessionId ?? this.session?.id

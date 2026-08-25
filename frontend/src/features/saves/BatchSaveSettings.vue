@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import type { BatchSaveCustomRoot, GameShelfBridge } from '../../api/contracts'
+import type { BatchSaveCustomRoot, GameSaveScoutBridge } from '../../api/contracts'
 
-const props = defineProps<{ bridge: GameShelfBridge; active: boolean }>()
+const props = defineProps<{ bridge: GameSaveScoutBridge; active: boolean }>()
 const emit = defineEmits<{ start: [standardScopeIds: string[], customRootIds: string[]] }>()
 
 const standardScopes = [

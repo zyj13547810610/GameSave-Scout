@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import type { GameShelfBridge, LudusaviStatus, LudusaviUpdateResult } from '../../api/contracts'
+import type { GameSaveScoutBridge, LudusaviStatus, LudusaviUpdateResult } from '../../api/contracts'
 
-const props = defineProps<{ bridge: GameShelfBridge }>()
+const props = defineProps<{ bridge: GameSaveScoutBridge }>()
 const status = ref<LudusaviStatus | null>(null)
 const loadingStatus = ref(false)
 const updating = ref(false)

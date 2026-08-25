@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import type { BatchSaveCandidate, GameShelfBridge } from '../../api/contracts'
+import type { BatchSaveCandidate, GameSaveScoutBridge } from '../../api/contracts'
 import { useLibraryStore } from '../library/libraryStore'
 import BatchSaveAssociationDialog from './BatchSaveAssociationDialog.vue'
 import BatchSaveBatchBar from './BatchSaveBatchBar.vue'
@@ -13,7 +13,7 @@ import BatchSaveSettings from './BatchSaveSettings.vue'
 import { useBatchSaveStore } from './batchSaveStore'
 import SaveOnlyGameDialog from './SaveOnlyGameDialog.vue'
 
-const props = defineProps<{ bridge: GameShelfBridge }>()
+const props = defineProps<{ bridge: GameSaveScoutBridge }>()
 const emit = defineEmits<{ libraryChanged: [] }>()
 const store = useBatchSaveStore()
 const library = useLibraryStore()
@@ -65,7 +65,7 @@ function confirmWrite(candidates: BatchSaveCandidate[], action: string) {
     : ''
   return window.confirm(
     `${action}\n\n${selectionSummary(candidates)}${registryWarning}\n\n`
-    + 'GameShelf 只更新本地数据库，不会移动、修改或删除实际存档。',
+    + 'GameSave Scout 只更新本地数据库，不会移动、修改或删除实际存档。',
   )
 }
 

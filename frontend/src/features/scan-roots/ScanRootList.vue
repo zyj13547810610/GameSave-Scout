@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import type { GameShelfBridge, LibraryScanSettings, ScanResult, ScanRoot, TaskSnapshot } from '../../api/contracts'
+import type { GameSaveScoutBridge, LibraryScanSettings, ScanResult, ScanRoot, TaskSnapshot } from '../../api/contracts'
 import LibraryScanSettingsControl from './LibraryScanSettings.vue'
 
 const props = defineProps<{
-  bridge: GameShelfBridge
+  bridge: GameSaveScoutBridge
   roots: ScanRoot[]
   libraryScanSettings: LibraryScanSettings
   scanTasks: Record<string, string>

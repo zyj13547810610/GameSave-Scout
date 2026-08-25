@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import type { Game, GameShelfBridge } from '../../api/contracts'
+import type { Game, GameSaveScoutBridge } from '../../api/contracts'
 
 const props = defineProps<{
   open: boolean
-  bridge: GameShelfBridge
+  bridge: GameSaveScoutBridge
   games: Game[]
   candidateIds: string[]
 }>()

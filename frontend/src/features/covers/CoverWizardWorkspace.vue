@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import type { CoverUpload, CoverWizardSettings, Game, GameShelfBridge } from '../../api/contracts'
+import type { CoverUpload, CoverWizardSettings, Game, GameSaveScoutBridge } from '../../api/contracts'
 import { readClipboardPng } from './coverClipboard'
 import CoverCandidateGallery from './CoverCandidateGallery.vue'
 import CoverCandidateToolbar from './CoverCandidateToolbar.vue'
@@ -10,7 +10,7 @@ import CoverWizardSettingsPanel from './CoverWizardSettings.vue'
 import { useCoverWizardStore } from './coverWizardStore'
 
 const props = defineProps<{
-  bridge: GameShelfBridge
+  bridge: GameSaveScoutBridge
   games: Game[]
   settings: CoverWizardSettings
 }>()

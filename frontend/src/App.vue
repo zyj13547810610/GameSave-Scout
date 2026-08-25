@@ -349,7 +349,7 @@ function restoreGuidedSave(gameId: string) {
 <template>
   <main class="app-shell">
     <aside class="app-sidebar" :inert="showCoverWizard || showGroupManager || showBatchGroup">
-      <div class="app-brand"><h1>GameShelf</h1><p>便携游戏库与存档管理器</p></div>
+      <div class="app-brand"><h1>GameSave Scout</h1><p>便携游戏库与存档管理器</p></div>
       <nav class="primary-navigation" aria-label="主要功能">
         <button data-test="nav-library" type="button" :aria-current="activeView === 'library' ? 'page' : undefined" @click="changeView('library')">游戏库</button>
         <button data-test="nav-batch-saves" type="button" :aria-current="activeView === 'batch_saves' ? 'page' : undefined" @click="changeView('batch_saves')">批量存档</button>

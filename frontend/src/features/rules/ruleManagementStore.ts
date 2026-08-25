@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import type {
-  GameShelfBridge,
+  GameSaveScoutBridge,
   RuleDetail,
   RuleDiagnostic,
   RuleDraft,
@@ -129,11 +129,11 @@ export const useRuleManagementStore = defineStore('rule-management', {
     ),
   },
   actions: {
-    async ensureLoaded(bridge: GameShelfBridge) {
+    async ensureLoaded(bridge: GameSaveScoutBridge) {
       if (this.initialized) return
       await this.loadList(bridge)
     },
-    async loadList(bridge: GameShelfBridge) {
+    async loadList(bridge: GameSaveScoutBridge) {
       const requestId = ++this.listRequestSequence
       this.listLoading = true
       this.listError = ''
@@ -148,7 +148,7 @@ export const useRuleManagementStore = defineStore('rule-management', {
       this.items = result.data.items
       this.total = result.data.total
     },
-    setQuery(bridge: GameShelfBridge, query: string) {
+    setQuery(bridge: GameSaveScoutBridge, query: string) {
       this.filters.query = query
       this.filters.offset = 0
       if (this.queryTimer !== null) window.clearTimeout(this.queryTimer)
@@ -158,7 +158,7 @@ export const useRuleManagementStore = defineStore('rule-management', {
       }, 300)
     },
     async setFilter<K extends EnumFilterKey>(
-      bridge: GameShelfBridge,
+      bridge: GameSaveScoutBridge,
       key: K,
       value: RuleFilters[K],
     ) {
@@ -170,7 +170,7 @@ export const useRuleManagementStore = defineStore('rule-management', {
       this.filters.offset = 0
       await this.loadList(bridge)
     },
-    async setTab(bridge: GameShelfBridge, tab: RuleManagementTab) {
+    async setTab(bridge: GameSaveScoutBridge, tab: RuleManagementTab) {
       if (this.queryTimer !== null) {
         window.clearTimeout(this.queryTimer)
         this.queryTimer = null
@@ -182,7 +182,7 @@ export const useRuleManagementStore = defineStore('rule-management', {
       await this.loadList(bridge)
     },
     async openIntent(
-      bridge: GameShelfBridge,
+      bridge: GameSaveScoutBridge,
       intent: { tab: RuleManagementTab; gameId?: string },
     ) {
       this.prefillError = ''
@@ -222,7 +222,7 @@ export const useRuleManagementStore = defineStore('rule-management', {
       this.dirty = true
       await this.validateDraft(bridge, draft)
     },
-    async selectRule(bridge: GameShelfBridge, qualifiedId: string) {
+    async selectRule(bridge: GameSaveScoutBridge, qualifiedId: string) {
       const requestId = ++this.detailRequestSequence
       this.detailLoading = true
       this.detailError = ''
@@ -303,7 +303,7 @@ export const useRuleManagementStore = defineStore('rule-management', {
       this.mutationError = ''
       this.notice = ''
     },
-    async validateDraft(bridge: GameShelfBridge, draft: RuleDraft) {
+    async validateDraft(bridge: GameSaveScoutBridge, draft: RuleDraft) {
       const requestId = ++this.validationRequestSequence
       this.validating = true
       const result = await bridge.validate_rule_draft({ draft })
@@ -318,7 +318,7 @@ export const useRuleManagementStore = defineStore('rule-management', {
       }
       this.validation = result.data
     },
-    async testDraft(bridge: GameShelfBridge, gameId: string) {
+    async testDraft(bridge: GameSaveScoutBridge, gameId: string) {
       const sourceDraft = this.draft ?? this.detail?.draft
       if (!sourceDraft || this.testing) return
       this.testing = true
@@ -346,7 +346,7 @@ export const useRuleManagementStore = defineStore('rule-management', {
       this.validation = null
       this.dirty = true
     },
-    async saveDraft(bridge: GameShelfBridge) {
+    async saveDraft(bridge: GameSaveScoutBridge) {
       if (!this.draft || !this.validation?.valid || this.mutating) return
       this.mutating = true
       this.mutationError = ''
@@ -364,7 +364,7 @@ export const useRuleManagementStore = defineStore('rule-management', {
       this.applySavedDetail(result.data.detail, result.data.generation)
       this.notice = '规则已保存；变更只影响下一次识别或查找任务。'
     },
-    async copyRule(bridge: GameShelfBridge, qualifiedId: string) {
+    async copyRule(bridge: GameSaveScoutBridge, qualifiedId: string) {
       if (this.mutating) return
       this.mutating = true
       this.mutationError = ''
@@ -377,7 +377,7 @@ export const useRuleManagementStore = defineStore('rule-management', {
       this.applySavedDetail(result.data.detail, result.data.generation)
       this.notice = '已复制为新的用户实验规则。'
     },
-    async toggleRule(bridge: GameShelfBridge, detail: RuleDetail) {
+    async toggleRule(bridge: GameSaveScoutBridge, detail: RuleDetail) {
       if (this.mutating) return
       this.mutating = true
       this.mutationError = ''
@@ -393,7 +393,7 @@ export const useRuleManagementStore = defineStore('rule-management', {
       this.applySavedDetail(result.data.detail, result.data.generation)
       this.notice = `规则已${result.data.detail.enabled ? '启用' : '停用'}；只影响下一次任务。`
     },
-    async deleteRule(bridge: GameShelfBridge, qualifiedId: string) {
+    async deleteRule(bridge: GameSaveScoutBridge, qualifiedId: string) {
       if (this.mutating) return
       const index = this.items.findIndex((item) => item.qualifiedId === qualifiedId)
       this.mutating = true
@@ -422,7 +422,7 @@ export const useRuleManagementStore = defineStore('rule-management', {
     clearFocusRequest() {
       this.focusQualifiedId = null
     },
-    async exportRule(bridge: GameShelfBridge, qualifiedId: string) {
+    async exportRule(bridge: GameSaveScoutBridge, qualifiedId: string) {
       if (this.mutating) return
       this.mutating = true
       this.mutationError = ''
@@ -436,7 +436,7 @@ export const useRuleManagementStore = defineStore('rule-management', {
         ? '已取消导出，规则没有改变。'
         : `规则已导出为 ${result.data.fileName ?? 'YAML 文件'}。`
     },
-    async beginImport(bridge: GameShelfBridge) {
+    async beginImport(bridge: GameSaveScoutBridge) {
       if (this.importing) return
       this.importing = true
       this.importError = ''
@@ -458,7 +458,7 @@ export const useRuleManagementStore = defineStore('rule-management', {
       this.importPreview = null
       this.importError = ''
     },
-    async confirmImport(bridge: GameShelfBridge, decisions: RuleImportDecision[]) {
+    async confirmImport(bridge: GameSaveScoutBridge, decisions: RuleImportDecision[]) {
       if (!this.importPreview || this.importing) return
       this.importing = true
       this.importError = ''
@@ -506,7 +506,7 @@ export const useRuleManagementStore = defineStore('rule-management', {
       this.editing = false
       this.generation = generation
     },
-    async refreshRules(bridge: GameShelfBridge) {
+    async refreshRules(bridge: GameSaveScoutBridge) {
       this.refreshing = true
       this.refreshError = ''
       const result = await bridge.refresh_rules({})

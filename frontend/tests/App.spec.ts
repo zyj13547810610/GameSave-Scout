@@ -3,7 +3,7 @@ import { createPinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../src/App.vue'
 import { bridgeKey } from '../src/api/bridge'
-import type { ApiResult, Game, GameShelfBridge, UiScaleValue } from '../src/api/contracts'
+import type { ApiResult, Game, GameSaveScoutBridge, UiScaleValue } from '../src/api/contracts'
 import { createMockBridge, fixtureGame, fixtureGroup, fixtureGuidedSession, fixtureRoot, ok } from '../src/api/mockBridge'
 import { useRuleManagementStore } from '../src/features/rules/ruleManagementStore'
 import '../src/styles/base.css'
@@ -234,7 +234,7 @@ describe('App', () => {
     const bridge = createMockBridge({
       async bootstrap() {
         return ok({
-          appName: 'GameShelf', schemaVersion: 2, portable: true, uiScale: 1,
+          appName: 'GameSave Scout', schemaVersion: 2, portable: true, uiScale: 1,
           coverWizardSettings: {
             coverOnlineEnabled: false,
             coverVndbCandidateLimit: 5,
@@ -301,7 +301,7 @@ describe('App', () => {
     const bridge = createMockBridge({
       async bootstrap() {
         return ok({
-          appName: 'GameShelf', schemaVersion: 2, portable: true, uiScale: 1,
+          appName: 'GameSave Scout', schemaVersion: 2, portable: true, uiScale: 1,
           coverWizardSettings: {
             coverOnlineEnabled: false,
             coverVndbCandidateLimit: 5,
@@ -540,7 +540,7 @@ describe('App', () => {
 
   it('connects before rendering the empty-library message', async () => {
     const wrapper = mount(App, { global: { plugins: [createPinia()] } })
-    expect(wrapper.get('h1').text()).toBe('GameShelf')
+    expect(wrapper.get('h1').text()).toBe('GameSave Scout')
     expect(wrapper.text()).toContain('正在连接本地数据库…')
 
     await flushPromises()
@@ -549,12 +549,12 @@ describe('App', () => {
   })
 
   it('restores UI scale from bootstrap and persists changes through the bridge', async () => {
-    localStorage.setItem('gameshelf.ui-scale', '0.9')
+    localStorage.setItem('gamesave-scout.ui-scale', '0.9')
     const setUiScale = vi.fn(async (input: { uiScale: UiScaleValue }) => ok({ uiScale: input.uiScale }))
     const bridge = createMockBridge({
       async bootstrap() {
         return ok({
-          appName: 'GameShelf', schemaVersion: 1, portable: true, uiScale: 1.2,
+          appName: 'GameSave Scout', schemaVersion: 1, portable: true, uiScale: 1.2,
           libraryScanSettings: { startupQuickScan: true, scanConcurrency: 1 },
           coverWizardSettings: {
             coverOnlineEnabled: false,
@@ -581,7 +581,7 @@ describe('App', () => {
 
     expect(document.documentElement.style.getPropertyValue('--ui-scale')).toBe('0.8')
     expect(setUiScale).toHaveBeenCalledWith({ uiScale: 0.8 })
-    expect(localStorage.getItem('gameshelf.ui-scale')).toBe('0.9')
+    expect(localStorage.getItem('gamesave-scout.ui-scale')).toBe('0.9')
   })
 
   it('keeps the runtime scale and shows a warning when persistence fails', async () => {
@@ -745,7 +745,7 @@ describe('App', () => {
     ]
     let listCalls = 0
     const removeGames = vi.fn(
-      async (_input: Parameters<GameShelfBridge['remove_games']>[0]) => ok({
+      async (_input: Parameters<GameSaveScoutBridge['remove_games']>[0]) => ok({
         installedCount: 1,
         missingCount: 1,
         updatedRootCount: 1,

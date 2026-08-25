@@ -5,12 +5,12 @@ import type {
   EngineOption,
   Game,
   GameGroup,
-  GameShelfBridge,
+  GameSaveScoutBridge,
 } from '../../api/contracts'
 
 const props = defineProps<{
   open: boolean
-  bridge: GameShelfBridge
+  bridge: GameSaveScoutBridge
   groups: GameGroup[]
   candidates: BatchSaveCandidate[]
 }>()
@@ -87,7 +87,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
         <label>引擎（可选）<select v-model="engineId" :disabled="busy"><option value="">未知引擎</option><option v-for="engine in engines" :key="engine.id" :value="engine.id">{{ engine.label }}{{ engine.experimental ? '（实验）' : '' }}</option></select></label>
       </div>
       <fieldset v-if="groups.length" class="save-only-groups" :disabled="busy"><legend>分组（可多选）</legend><label v-for="group in groups" :key="group.id" class="check-row"><input :data-test="`save-only-group-${group.id}`" type="checkbox" :checked="groupIds.has(group.id)" @change="toggleGroup(group.id, ($event.target as HTMLInputElement).checked)" /> {{ group.name }}</label></fieldset>
-      <label v-if="hasRegistry" class="registry-confirmation"><input v-model="confirmRegistry" data-test="save-only-confirm-registry" type="checkbox" :disabled="busy" /> 我确认将所选注册表键记录为存档位置；GameShelf 不读取或修改键值。</label>
+      <label v-if="hasRegistry" class="registry-confirmation"><input v-model="confirmRegistry" data-test="save-only-confirm-registry" type="checkbox" :disabled="busy" /> 我确认将所选注册表键记录为存档位置；GameSave Scout 不读取或修改键值。</label>
       <p v-if="error" class="form-error" role="alert">{{ error }}</p>
       <div class="dialog-actions"><button type="button" class="secondary" :disabled="busy" @click="$emit('close')">取消</button><button data-test="create-save-only" type="submit" :disabled="!canSubmit">{{ busy ? '正在创建…' : '创建卡片' }}</button></div>
     </form>

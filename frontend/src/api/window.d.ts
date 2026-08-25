@@ -1,9 +1,9 @@
-import type { GameShelfBridge } from './contracts'
+import type { GameSaveScoutBridge } from './contracts'
 
 declare global {
   interface Window {
     pywebview?: {
-      api: GameShelfBridge
+      api: GameSaveScoutBridge
     }
   }
 }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
-import type { Game, GameGroup, GameShelfBridge } from '../../api/contracts'
+import type { Game, GameGroup, GameSaveScoutBridge } from '../../api/contracts'
 import CoverActions from '../covers/CoverActions.vue'
 import EngineSection from '../engines/EngineSection.vue'
 import SaveLocationList from '../saves/SaveLocationList.vue'
@@ -9,7 +9,7 @@ import GameGroupSection from './GameGroupSection.vue'
 
 const props = withDefaults(defineProps<{
   game: Game
-  bridge: GameShelfBridge
+  bridge: GameSaveScoutBridge
   groups?: GameGroup[]
 }>(), { groups: () => [] })
 const emit = defineEmits<{
@@ -92,7 +92,7 @@ async function removeGameRecord() {
   const installed = props.game.status === 'installed'
   const prompt = installed
     ? '从游戏库移除并忽略这个目录？不会删除游戏文件；以后扫描该根目录时会跳过它。'
-    : '删除这条失效游戏记录？不会删除游戏本体或外部存档，但会移除 GameShelf 管理的封面和存档位置记录。'
+    : '删除这条失效游戏记录？不会删除游戏本体或外部存档，但会移除 GameSave Scout 管理的封面和存档位置记录。'
   if (!window.confirm(prompt)) return
   removalBusy.value = true
   removalError.value = ''
@@ -178,7 +178,7 @@ onBeforeUnmount(() => {
         </summary>
         <div class="detail-section-body">
           <p v-if="game.status === 'installed'">从库中移除后会自动加入当前根目录排除项，不会删除游戏文件。</p>
-          <p v-else>只删除 GameShelf 中的失效记录，不会删除磁盘上的游戏或外部存档。</p>
+          <p v-else>只删除 GameSave Scout 中的失效记录，不会删除磁盘上的游戏或外部存档。</p>
           <button
             v-if="game.status === 'installed'"
             data-test="remove-game-and-exclude"

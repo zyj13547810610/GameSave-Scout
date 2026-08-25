@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import type { GameShelfBridge, LudusaviStatus, SaveLocation } from '../../api/contracts'
+import type { GameSaveScoutBridge, LudusaviStatus, SaveLocation } from '../../api/contracts'
 import AddSaveLocationDialog from './AddSaveLocationDialog.vue'
 import { confidenceLabel, saveKindLabel, saveSourceLabel } from './saveLocationLabels'
 import GuidedSavePanel from './GuidedSavePanel.vue'
@@ -8,7 +8,7 @@ import SaveSuggestionList from './SaveSuggestionList.vue'
 
 const props = defineProps<{
   gameId: string
-  bridge: GameShelfBridge
+  bridge: GameSaveScoutBridge
   locations?: SaveLocation[]
 }>()
 const emit = defineEmits<{ 'create-game-rule': []; 'open-ludusavi': [] }>()

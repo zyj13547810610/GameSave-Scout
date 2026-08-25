@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import type { GameGroup, GameShelfBridge, GroupMembershipUpdateResult } from '../../api/contracts'
+import type { GameGroup, GameSaveScoutBridge, GroupMembershipUpdateResult } from '../../api/contracts'
 
 export type BatchGroupMode = 'add' | 'remove'
 
@@ -8,7 +8,7 @@ const props = defineProps<{
   open: boolean
   groups: GameGroup[]
   selectedGameIds: string[]
-  bridge: GameShelfBridge
+  bridge: GameSaveScoutBridge
 }>()
 const emit = defineEmits<{
   close: []

@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import type { Game, GameGroup, GameShelfBridge } from '../../api/contracts'
+import type { Game, GameGroup, GameSaveScoutBridge } from '../../api/contracts'
 
 const props = defineProps<{
   game: Game
   groups: GameGroup[]
-  bridge: GameShelfBridge
+  bridge: GameSaveScoutBridge
 }>()
 const emit = defineEmits<{
   updated: [game: Game]

@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import type { BatchSaveCandidate, Game, GameShelfBridge } from '../../api/contracts'
+import type { BatchSaveCandidate, Game, GameSaveScoutBridge } from '../../api/contracts'
 import BatchSaveEvidence from './BatchSaveEvidence.vue'
 
 const props = defineProps<{
-  bridge: GameShelfBridge
+  bridge: GameSaveScoutBridge
   candidates: BatchSaveCandidate[]
   games: Game[]
   selectedIds: Set<string>

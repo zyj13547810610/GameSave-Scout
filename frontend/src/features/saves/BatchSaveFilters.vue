@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
 import { computed, onBeforeUnmount, watch } from 'vue'
-import type { GameShelfBridge } from '../../api/contracts'
+import type { GameSaveScoutBridge } from '../../api/contracts'
 import { useBatchSaveStore } from './batchSaveStore'
 
-const props = defineProps<{ bridge: GameShelfBridge }>()
+const props = defineProps<{ bridge: GameSaveScoutBridge }>()
 const store = useBatchSaveStore()
 const { filters, total, loading, actionBusy } = storeToRefs(store)
 const pageStart = computed(() => total.value === 0 ? 0 : filters.value.offset + 1)
