@@ -1,4 +1,4 @@
-# GameShelf 便携版打包与发布
+# GameSave Scout 便携版打包与发布
 
 > 文档性质：固定模块设计与发布基准；适用版本：V0.1 及后续版本；最后更新：2026-08-25；状态：V0.3.2 源码、发布元数据和本地双版本便携候选包已完成收口；最新候选包含 SQLite schema 4、自定义分组、批量存档发现、规则管理及第二批内置引擎/存档规则。V0.3.2 已通过完整自动门禁、两版冻结 smoke 和正式产物独立完整性复核；历史 V0.1 的本机真实窗口、路径与 Windows Sandbox 人工验收结论继续作为兼容性证据。完整发布负载绝对路径达到或超过 260 字符仍不受支持。完整目标 Windows 10/11、Evergreen 断网、安装器失败、特殊路径故障和 SmartScreen 实机矩阵保留为后续可选兼容性复核。
 
@@ -7,10 +7,10 @@
 当前版本产出两个基于同一份 PyInstaller onedir 核心的 Windows 10/11 x64 便携包：
 
 - `GameShelf-0.3.2-win-x64` 是完整离线版，自带 Microsoft Fixed Version WebView2 Runtime x64，可在没有系统 WebView2、没有网络的电脑上运行。
-- `GameShelf-0.3.2-win-x64-lite` 是轻量联网版，优先使用系统 Evergreen WebView2 Runtime；系统缺失时，经用户明确同意后打开 `prerequisites` 文件夹并选中微软官方 Bootstrapper，GameShelf 随即正常退出。用户手动双击安装，完成后重新启动 GameShelf。
+- `GameShelf-0.3.2-win-x64-lite` 是轻量联网版，优先使用系统 Evergreen WebView2 Runtime；系统缺失时，经用户明确同意后打开 `prerequisites` 文件夹并选中微软官方 Bootstrapper，GameSave Scout 随即正常退出。用户手动双击安装，完成后重新启动 GameSave Scout。
 - 两个版本都不要求用户安装 Python、Node.js、Visual Studio 或项目开发依赖。
 - 配置、数据库、封面、用户规则、活动 Ludusavi 快照、日志和 WebView 用户数据都位于 `GameShelf.exe` 旁的 `data`。
-- 整个程序目录在退出 GameShelf 后可以复制到其他本地磁盘位置继续使用。
+- 整个程序目录在退出 GameSave Scout 后可以复制到其他本地磁盘位置继续使用。
 - 两组发布物分别包含 MIT 许可证、第三方声明、构建清单和可独立验证的 SHA-256。
 
 首版明确只做以下交付物：
@@ -19,7 +19,7 @@
 - 每个目录各生成一个 zip。
 - 每个 zip 旁各生成一个记录其 SHA-256 的文本文件。
 
-当前仍不制作 onefile、GameShelf 安装器、自动更新器和精简开发包，构建脚本不上传产物，也不自动创建公开 Release。轻量版中的 WebView2 Bootstrapper 只是缺失系统运行时的受控先决条件安装器，不改变 GameShelf 本身的便携形态。V0.3.2 发布包携带 `0001`～`0004` 四个新库初始化结构并使用 schema 4；开发阶段不提供 schema 1/2/3 到 schema 4 的迁移，检测到旧库时在写入前拒绝启动并提示用户自行移走或删除数据库。
+当前仍不制作 onefile、GameSave Scout 安装器、自动更新器和精简开发包，构建脚本不上传产物，也不自动创建公开 Release。轻量版中的 WebView2 Bootstrapper 只是缺失系统运行时的受控先决条件安装器，不改变 GameSave Scout 本身的便携形态。V0.3.2 发布包携带 `0001`～`0004` 四个新库初始化结构并使用 schema 4；开发阶段不提供 schema 1/2/3 到 schema 4 的迁移，检测到旧库时在写入前拒绝启动并提示用户自行移走或删除数据库。
 
 ## 2. 当前实现状态与后续兼容性复核
 
@@ -40,7 +40,7 @@ V0.1 按当前自动、本机与 Windows Sandbox 证据完成收尾。以下场�
 - 干净目标 Windows 10/11 x64 设备中的两版完整复核。
 - 轻量版在已经安装 Evergreen 时断网启动，以及微软安装器断网或失败后的行为。
 - UNC/网络路径、只读目录、Fixed Runtime 缺失或损坏等补充故障场景。
-- 未签名 GameShelf 在不同 Windows 环境中的 SmartScreen 实际提示。
+- 未签名 GameSave Scout 在不同 Windows 环境中的 SmartScreen 实际提示。
 - 模块 06 在其他目标 Windows 10/11 设备上的重复验收。
 
 跨盘复制按当前范围决定不执行，不列为后续必做项。此前包含静默安装逻辑的候选只保留为历史证据。
@@ -120,7 +120,7 @@ _internal/resources/rules/
 - 源码模式：继续使用系统 Evergreen，不要求仓库存在发布清单、`runtime` 或 Bootstrapper。
 - 所有模式的 WebView 用户数据都写入 `data/webview`。
 
-轻量版缺失 Evergreen 时，程序必须先验证 `prerequisites/MicrosoftEdgeWebview2Setup.exe` 是绝对路径普通文件且与发布清单 SHA-256 一致，再显示原生中文确认框，说明安装需要联网、需要用户手动双击安装器，并且安装完成后要重新启动 GameShelf。用户同意后，程序只调用 Windows Explorer 打开 `prerequisites` 文件夹并选中该文件，随后正常退出；不得直接执行安装器、传递 `/silent /install`、等待外部安装进程、轮询安装结果或自动启动第二个 GameShelf 进程。用户取消以及成功打开安装位置都属于正常中止，退出码为 `0` 且不写错误堆栈。Bootstrapper 缺失或哈希错误、Evergreen 检测失败、Explorer 无法打开属于真实启动故障，应写入启动日志并显示可操作的中文错误。用户完成微软安装程序后手动再次启动 GameShelf，程序重新检测到 Evergreen 后正常创建主窗口。
+轻量版缺失 Evergreen 时，程序必须先验证 `prerequisites/MicrosoftEdgeWebview2Setup.exe` 是绝对路径普通文件且与发布清单 SHA-256 一致，再显示原生中文确认框，说明安装需要联网、需要用户手动双击安装器，并且安装完成后要重新启动 GameSave Scout。用户同意后，程序只调用 Windows Explorer 打开 `prerequisites` 文件夹并选中该文件，随后正常退出；不得直接执行安装器、传递 `/silent /install`、等待外部安装进程、轮询安装结果或自动启动第二个 GameSave Scout 进程。用户取消以及成功打开安装位置都属于正常中止，退出码为 `0` 且不写错误堆栈。Bootstrapper 缺失或哈希错误、Evergreen 检测失败、Explorer 无法打开属于真实启动故障，应写入启动日志并显示可操作的中文错误。用户完成微软安装程序后手动再次启动 GameSave Scout，程序重新检测到 Evergreen 后正常创建主窗口。
 
 当前两个包都仅支持本地文件系统路径。程序位于 UNC 或网络共享路径时直接拒绝启动，并提示用户将完整目录复制到本地可写位置。
 
@@ -227,7 +227,7 @@ GameShelf.exe --smoke-test --json-output <绝对临时文件路径>
 
 双版本发布后，`release-manifest.json` 使用 `formatVersion: 2`，至少记录：
 
-- GameShelf 版本、UTC 构建时间、Git 提交号和 `gitDirty`。
+- GameSave Scout 版本、UTC 构建时间、Git 提交号和 `gitDirty`。
 - 目标平台 `windows-x64`。
 - Python、Node、npm、PyInstaller 和 pywebview 版本。
 - 数据库架构版本、引擎规则版本、存档规则版本和规则 schema 版本。
@@ -248,17 +248,17 @@ V0.3.2 发布工具与冻结 smoke 已确认内置引擎/存档规则、两个 s
 
 ## 10. 许可证、第三方声明与签名
 
-GameShelf 使用 MIT License。仓库根目录和发布目录都包含 `LICENSE`，版权行为：
+GameSave Scout 使用 MIT License。仓库根目录和发布目录都包含 `LICENSE`，版权行为：
 
 ```text
-Copyright (c) 2026 GameShelf Contributors
+Copyright (c) 2026 GameSave Scout Contributors
 ```
 
 仓库中的 `THIRD_PARTY_NOTICES.md` 作为固定维护文件，按真正随包分发的 Python、Vue、Pinia、Ludusavi、WebView2 等组件人工核对并补齐。当前不引入自动许可证爬取器；完整离线版保留 Fixed Runtime 原归档自带的许可证材料，轻量联网版明确记录 Evergreen Bootstrapper 的官方来源与再分发说明。
 
-两个包使用各自的 `README.txt`：完整版明确可全程离线运行；轻量版明确依赖系统 Evergreen，系统缺失时 GameShelf 只打开并选中随包的微软 Bootstrapper，不会代替用户运行安装。README 必须说明手动双击、联网安装、安装后重新启动 GameShelf，以及取消、断网和微软安装器失败时的处理方式。
+两个包使用各自的 `README.txt`：完整版明确可全程离线运行；轻量版明确依赖系统 Evergreen，系统缺失时 GameSave Scout 只打开并选中随包的微软 Bootstrapper，不会代替用户运行安装。README 必须说明手动双击、联网安装、安装后重新启动 GameSave Scout，以及取消、断网和微软安装器失败时的处理方式。
 
-当前 GameShelf 本体不进行 Authenticode 签名，发布清单明确记录 `signed: false`。构建流水线预留“产物完整、压缩前”的未来签名点，但当前不要求证书或签名工具。发布说明应提示用户：未签名的新版本可能触发 Microsoft Defender SmartScreen 的“Windows 已保护你的电脑”或未知发布者提示，并且不同文件哈希的版本需要分别积累信誉。
+当前 GameSave Scout 本体不进行 Authenticode 签名，发布清单明确记录 `signed: false`。构建流水线预留“产物完整、压缩前”的未来签名点，但当前不要求证书或签名工具。发布说明应提示用户：未签名的新版本可能触发 Microsoft Defender SmartScreen 的“Windows 已保护你的电脑”或未知发布者提示，并且不同文件哈希的版本需要分别积累信誉。
 
 ## 11. 文件系统安全边界
 
@@ -280,16 +280,16 @@ Copyright (c) 2026 GameShelf Contributors
 
 1. 单元测试：`ResourcePaths` 的源码/冻结/缺失资源，UNC 拒绝，`fixed`/`evergreen` 模式选择，Fixed Runtime 缺失，Evergreen 已安装，用户同意或取消，Bootstrapper 缺失或哈希不一致，Explorer 成功打开或启动失败，版本不一致，两个输入哈希不一致，危险清理目标拒绝和两种发布清单生成。
 2. 全部现有质量门禁：Python 测试、Ruff、mypy、前端单元测试、TypeScript 类型检查、Vite 生产构建和源码冒烟。
-3. 运行时安装安全：程序在提示前验证 Bootstrapper，并且只有用户明确同意后才打开其所在文件夹并选中文件；自动测试必须证明 GameShelf 不执行安装器、不等待外部进程、不创建主窗口，正常引导与取消不写错误堆栈，Explorer 或完整性真实失败写启动日志。
+3. 运行时安装安全：程序在提示前验证 Bootstrapper，并且只有用户明确同意后才打开其所在文件夹并选中文件；自动测试必须证明 GameSave Scout 不执行安装器、不等待外部进程、不创建主窗口，正常引导与取消不写错误堆栈，Explorer 或完整性真实失败写启动日志。
 4. 真实 PyInstaller 构建：从同一核心生成两个独立副本并执行冻结版 JSON 冒烟，覆盖桌面原生依赖和 Edge 后端导入，并确认所有写入仅发生在副本的 `data`。
 5. 发布物完整性：两个正式目录都没有 `data`；完整版只含 `runtime`，轻量版只含 `prerequisites`；两个 zip 可重新打开，关键文件齐全，独立重算哈希与各自 `.sha256` 一致。
 6. 原子发布：在任一目录、清单、ZIP、SHA-256 或 smoke 失败时保留上一组完整的六个产物，不允许只替换其中一版。
 
 本机开发与构建默认使用项目内 Conda prefix（`.venv`）提供的 Python 3.12 和 Node.js 24；正式构建入口仍必须显式校验 Node 主版本为 24，不能依赖 Codex 或某台开发机的私有 Node 路径。
 
-2026-08-16 的手动引导修复前历史候选在 Windows 10 x64 使用受控 WebView2 151.0.4129.86 x64 CAB 和微软签名的 Evergreen Bootstrapper 1.3.257.13，从同一 PyInstaller 核心原子生成两个真实候选包。自动门禁为 Python 550 项、前端 86 项，并通过 Ruff、mypy、前端类型检查和生产构建；构建入口内部再次通过同一门禁。完整版目录/ZIP 为 746.52/324.64 MiB，轻量版为 87.24/33.72 MiB；两个发布副本的 JSON smoke 均退出 0，真实窗口均持续运行至少 8 秒并通过 `WM_CLOSE` 正常退出 0，未生成 `startup-error.log`。Fixed Runtime 与 Bootstrapper 的 Authenticode 签名均为有效 Microsoft Corporation，GameShelf 本体按 V0.1 设计未签名。该记录不替代下一节的干净虚拟机验收。
+2026-08-16 的手动引导修复前历史候选在 Windows 10 x64 使用受控 WebView2 151.0.4129.86 x64 CAB 和微软签名的 Evergreen Bootstrapper 1.3.257.13，从同一 PyInstaller 核心原子生成两个真实候选包。自动门禁为 Python 550 项、前端 86 项，并通过 Ruff、mypy、前端类型检查和生产构建；构建入口内部再次通过同一门禁。完整版目录/ZIP 为 746.52/324.64 MiB，轻量版为 87.24/33.72 MiB；两个发布副本的 JSON smoke 均退出 0，真实窗口均持续运行至少 8 秒并通过 `WM_CLOSE` 正常退出 0，未生成 `startup-error.log`。Fixed Runtime 与 Bootstrapper 的 Authenticode 签名均为有效 Microsoft Corporation，GameSave Scout 本体按 V0.1 设计未签名。该记录不替代下一节的干净虚拟机验收。
 
-同日 Windows Sandbox 验收确认旧轻量版在用户同意后会同时保留 `MicrosoftEdgeWebview2Setup` 和多个 `MicrosoftEdgeUpdate` 进程，而 GameShelf 因同步、无超时地等待静默安装器而长期没有窗口或状态反馈。Sandbox 中读取到的 `msedge_installer.log` 是镜像旧有 Edge 浏览器初始化记录，未能提供本次 WebView2 安装结果。上述轻量版候选因此不再视为可分发候选；其体积与下列旧哈希只作为历史构建证据保留，不能与修复后的新候选混用。
+同日 Windows Sandbox 验收确认旧轻量版在用户同意后会同时保留 `MicrosoftEdgeWebview2Setup` 和多个 `MicrosoftEdgeUpdate` 进程，而 GameSave Scout 因同步、无超时地等待静默安装器而长期没有窗口或状态反馈。Sandbox 中读取到的 `msedge_installer.log` 是镜像旧有 Edge 浏览器初始化记录，未能提供本次 WebView2 安装结果。上述轻量版候选因此不再视为可分发候选；其体积与下列旧哈希只作为历史构建证据保留，不能与修复后的新候选混用。
 
 该历史候选两个 ZIP 的 SHA-256 为：
 
@@ -305,9 +305,9 @@ Copyright (c) 2026 GameShelf Contributors
 - 完整离线版：`3f7677424866c52bb4ebdc38006c4757577afaf089712124dcfa1ec9beba7be9`
 - 轻量联网版：`d3a058b66c2d4ef40676bc995f4b70f7d6e2160551743ffa962196127eddd4b8`
 
-用户随后在全新 Windows Sandbox 按发布交接步骤验证轻量版主闭环：缺失 Evergreen 时显示新的手动安装提示；选择“是”后 Explorer 打开 `prerequisites` 并选中 Bootstrapper，GameShelf 正常退出，没有自动启动安装器且没有生成 `startup-error.log`；用户手动双击安装器并完成安装后，再次手动启动 GameShelf，主窗口正常出现。用户又在隔离副本中确认四项补充场景均通过：完整版在无系统 WebView2 且断网时直接启动；轻量版选择“否”后正常退出、不打开 Explorer 且不写错误日志；Bootstrapper 改名后显示缺失文件错误并生成启动日志；Bootstrapper 内容被修改后显示 SHA-256 错误并生成启动日志。上述结果覆盖本次 WebView2 修复的主路径和关键故障路径，但不替代完整 Windows 10/11、路径兼容性、微软安装器断网失败与 SmartScreen 场景矩阵。
+用户随后在全新 Windows Sandbox 按发布交接步骤验证轻量版主闭环：缺失 Evergreen 时显示新的手动安装提示；选择“是”后 Explorer 打开 `prerequisites` 并选中 Bootstrapper，GameSave Scout 正常退出，没有自动启动安装器且没有生成 `startup-error.log`；用户手动双击安装器并完成安装后，再次手动启动 GameSave Scout，主窗口正常出现。用户又在隔离副本中确认四项补充场景均通过：完整版在无系统 WebView2 且断网时直接启动；轻量版选择“否”后正常退出、不打开 Explorer 且不写错误日志；Bootstrapper 改名后显示缺失文件错误并生成启动日志；Bootstrapper 内容被修改后显示 SHA-256 错误并生成启动日志。上述结果覆盖本次 WebView2 修复的主路径和关键故障路径，但不替代完整 Windows 10/11、路径兼容性、微软安装器断网失败与 SmartScreen 场景矩阵。
 
-同日完成本机路径兼容性验收。完整版放入中文与空格父目录、轻量版放入日文与空格父目录后，发布清单、冻结 JSON smoke、真实窗口启动、正常关闭、程序旁数据库落点和无启动错误日志均通过。随后在 D 盘内移动到常规长路径：完整版/轻量版的 `GameShelf.exe` 绝对路径为 181/186 字符，发布清单中最长负载绝对路径为 249/254 字符；两版再次通过清单、smoke 和真实窗口验收。把 EXE 路径提高到 272/277 字符时 Windows 进程创建即失败；缩短至 243/248 字符但使包内负载超过 260 字符时，两版均弹出“文件名或扩展名太长”，未进入 GameShelf 业务启动。V0.1 因此明确只支持完整发布负载绝对路径低于 260 字符的安装位置，达到或超过 260 字符不支持；发布说明和验收步骤必须写明该边界。全程只在 D 盘隔离副本间复制或移动，按用户决定未执行跨盘复制。
+同日完成本机路径兼容性验收。完整版放入中文与空格父目录、轻量版放入日文与空格父目录后，发布清单、冻结 JSON smoke、真实窗口启动、正常关闭、程序旁数据库落点和无启动错误日志均通过。随后在 D 盘内移动到常规长路径：完整版/轻量版的 `GameShelf.exe` 绝对路径为 181/186 字符，发布清单中最长负载绝对路径为 249/254 字符；两版再次通过清单、smoke 和真实窗口验收。把 EXE 路径提高到 272/277 字符时 Windows 进程创建即失败；缩短至 243/248 字符但使包内负载超过 260 字符时，两版均弹出“文件名或扩展名太长”，未进入 GameSave Scout 业务启动。V0.1 因此明确只支持完整发布负载绝对路径低于 260 字符的安装位置，达到或超过 260 字符不支持；发布说明和验收步骤必须写明该边界。全程只在 D 盘隔离副本间复制或移动，按用户决定未执行跨盘复制。
 
 完成损坏声明式规则降级修复后，同日从干净提交 `6b29a8f1785dd123904e8e39dc9dadfa3bf89b9f` 再次运行正式构建入口。构建内部通过 Python 558 项、前端 88 项、Ruff、mypy、前端类型检查、生产构建、源码 smoke 和两版冻结 smoke，并原子发布六个当前候选产物。独立复核确认两个正式目录都没有 `data`，模式文件隔离正确，目录、ZIP、`.sha256` 和发布清单一致；完整版目录/ZIP 为 746.52/324.64 MiB，轻量版为 87.24/33.72 MiB。当前 ZIP SHA-256 为：
 
@@ -349,7 +349,7 @@ V0.3.2 本轮完成自动门禁、冻结 smoke 和本机构建产物独立完整
 - 轻量版在已经安装 Evergreen 时断网启动。
 - 微软 Evergreen 安装器在断网或安装失败时的实际界面与后续重启行为。
 - Explorer 无法打开、UNC/网络路径、只读目录，以及 Fixed Runtime 缺失或损坏等补充故障场景。
-- 未签名 GameShelf 在不同系统环境中的 SmartScreen 实际提示。
+- 未签名 GameSave Scout 在不同系统环境中的 SmartScreen 实际提示。
 
 ## 13. 实施顺序
 
@@ -370,15 +370,15 @@ V0.3.2 本轮完成自动门禁、冻结 smoke 和本机构建产物独立完整
 | 2026-08-13 | 明确当前只完成源码运行与便携路径，正式冻结发布仍未实施。 |
 | 2026-08-15 | 确认 V0.1 只生成本地完整离线 onedir、zip 和 SHA-256，不上传或自动创建公开 Release。 |
 | 2026-08-15 | 确认构建者手动提供官方 Fixed Version WebView2 x64 归档，脚本仅做固定版本与哈希校验、解压和随包放置，不自动联网或回退 Evergreen。 |
-| 2026-08-15 | 确认 MIT License、`GameShelf Contributors` 版权行、首版不签名、单一 PowerShell 构建入口、冻结副本 JSON 冒烟及候选包/可分发包验收边界。 |
+| 2026-08-15 | 确认 MIT License、`GameSave Scout Contributors` 版权行、首版不签名、单一 PowerShell 构建入口、冻结副本 JSON 冒烟及候选包/可分发包验收边界。 |
 | 2026-08-16 | 完成自动化发布实现并锁定 WebView2 151.0.4129.86 x64；真实构建审计补齐 Conda `libexpat.dll`、核对 pywebview 运行资源并更新第三方声明。本机候选包通过自动门禁，干净 Windows 10/11 离线验收仍待执行。 |
 | 2026-08-16 | 修复本机与 Windows Sandbox 冻结启动失败：PyInstaller 现优先从项目 Conda 前缀收集 OpenSSL 等原生 DLL，避免把 Python 3.12.13 的 `_ssl.pyd` 与父级 Anaconda OpenSSL 3.0.13 错配；同时保留 pywebview Edge 后端导入所需的三套 Loader 目录。冻结 smoke 新增桌面依赖与 Edge 后端导入检查，本机真实窗口启动后无 `startup-error.log`，Windows Sandbox 仍需用新候选包复验。 |
 | 2026-08-16 | 批准双版本发布：保留现有完整离线包名，并新增 `GameShelf-0.1.0-win-x64-lite`。轻量版使用系统 Evergreen，缺失时经用户同意运行随包官方 Bootstrapper，安装成功后同一进程继续启动；构建只执行一次核心和质量门，再原子发布两组目录、ZIP 与 SHA-256。 |
 | 2026-08-16 | 完成双版本发布实现和本机真实候选验证：受控 Bootstrapper 版本为 1.3.257.13；Python 550 项与前端 86 项门禁通过；一次核心构建原子生成六个产物，完整版/轻量版解压体积为 746.52/87.24 MiB，两个发布副本的 smoke 和 8 秒真实窗口启动/正常退出均通过。下一项转入四类干净 Windows 10/11 场景验收。 |
-| 2026-08-16 | Windows Sandbox 发现轻量版静默 Bootstrapper 在确认后长期无反馈；进程证据显示安装器与 Edge Update 仍在运行，而 GameShelf 的超时只覆盖安装器退出后的重检。批准改为手动安装引导：GameShelf 验证文件后只打开目录并选中安装器，正常退出；用户手动安装并重新启动。原轻量版候选作废，待修复后重建。 |
+| 2026-08-16 | Windows Sandbox 发现轻量版静默 Bootstrapper 在确认后长期无反馈；进程证据显示安装器与 Edge Update 仍在运行，而 GameSave Scout 的超时只覆盖安装器退出后的重检。批准改为手动安装引导：GameSave Scout 验证文件后只打开目录并选中安装器，正常退出；用户手动安装并重新启动。原轻量版候选作废，待修复后重建。 |
 | 2026-08-16 | 完成轻量版手动安装引导实现：删除 Bootstrapper 执行、等待、轮询和自动续启路径，改为校验后用系统 Explorer 选中文件并正常退出；提示与轻量版 README 明确由用户手动安装和重新启动。Python 553 项、前端 86 项、Ruff、mypy、类型检查、生产构建和源码 smoke 均通过，新的双版本候选与 Sandbox 闭环仍待完成。 |
 | 2026-08-16 | 使用手动安装引导源码重新完成正式双版本构建，六个新产物原子发布并通过独立目录/ZIP/校验文件、模式隔离、微软签名和两版冻结 smoke 复核；新 ZIP 哈希为 `3f767742…be9` 与 `d3a058b6…4b8`。真实窗口、干净 Sandbox 和 Windows 10/11 人工验收仍待完成。 |
-| 2026-08-16 | 用户在全新 Windows Sandbox 完成修复后轻量版主闭环：提示后只打开目录并选中安装器，GameShelf 正常退出且不自动运行安装器、不写崩溃日志；用户手动安装并重新启动后主窗口正常出现。取消、完整性故障、完整版断网及完整 Windows 10/11 验收仍保留为首发待办。 |
+| 2026-08-16 | 用户在全新 Windows Sandbox 完成修复后轻量版主闭环：提示后只打开目录并选中安装器，GameSave Scout 正常退出且不自动运行安装器、不写崩溃日志；用户手动安装并重新启动后主窗口正常出现。取消、完整性故障、完整版断网及完整 Windows 10/11 验收仍保留为首发待办。 |
 | 2026-08-16 | Windows Sandbox 四项补充验收均通过：完整版无系统 WebView2 断网启动；轻量版取消后不打开 Explorer、不写错误日志；Bootstrapper 缺失和 SHA-256 篡改均显示原生错误并生成启动日志。模块 07 剩余范围收敛为目标 Windows 10/11、路径/跨盘、安装器断网失败和 SmartScreen 验收。 |
 | 2026-08-16 | 用户确认当前没有可用于完整 Windows 10/11 验收的设备；目标系统矩阵暂缓但不视为通过或取消，仍保留为正式分发前门槛。现有设备可执行的路径、跨盘和故障降级检查可独立继续。 |
 | 2026-08-16 | 本机双版本已通过中文、日文、空格及最长负载绝对路径 249/254 字符的常规长路径清单、冻结 smoke 和真实窗口验收；负载路径达到或超过 260 字符时两版均在业务启动前失败。跨盘复制按用户决定未执行；确认 V0.1 明确不支持完整发布负载绝对路径达到或超过 260 字符。 |

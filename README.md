@@ -1,8 +1,10 @@
-# GameShelf
+# GameSave Scout
 
-GameShelf 是一个面向 Windows 10/11 x64 的本地优先、便携式个人游戏库与存档定位工具，目前主要面向同人游戏，也适用于其他能够独立启动的 Windows 游戏。它用于整理分散在不同目录中的游戏、维护启动配置与封面、识别常见游戏引擎，并帮助用户查找和确认存档位置。
+GameSave Scout 是一个面向 Windows 10/11 x64 的本地优先、便携式个人游戏库与存档定位工具，目前主要面向同人游戏，也适用于其他能够独立启动的 Windows 游戏。它用于整理分散在不同目录中的游戏、维护启动配置与封面、识别常见游戏引擎，并帮助用户查找和确认存档位置。
 
-GameShelf 不需要账号或云服务。游戏库、配置、封面、日志和 WebView 用户数据默认保存在程序旁的 `data` 目录，可以随整个程序目录迁移。当前源码范围与实现状态见[开发路线图](docs/superpowers/plans/2026-08-12-GameShelf-开发路线图.md)。
+GameSave Scout 不需要账号或云服务。游戏库、配置、封面、日志和 WebView 用户数据默认保存在程序旁的 `data` 目录，可以随整个程序目录迁移。当前源码范围与实现状态见[开发路线图](docs/superpowers/plans/2026-08-12-GameSave-Scout-开发路线图.md)。
+
+> 名称过渡说明：产品与当前维护文档已使用 **GameSave Scout**。为保证 V0.3.2 源码、命令和既有便携产物仍可准确复现，本阶段暂不修改 `GameShelf.exe`、Python 包 `gameshelf`、`GAMESHELF_*` 环境变量及已生成的 `GameShelf-0.3.2-*` 产物名称；这些技术标识将在后续代码改名时统一更新。
 
 ## 主要功能
 
@@ -166,19 +168,19 @@ V0.2 批量存档发现展示已安装、失效、未关联及已记录存档位
 
 ### 游戏库概览
 
-![GameShelf 游戏库概览](docs/assets/readme/library-overview.png)
+![GameSave Scout 游戏库概览](docs/assets/readme/library-overview.png)
 
 扫描多个游戏目录，在封面网格中搜索、筛选和管理已识别的游戏。
 
 ### 游戏详情与启动设置
 
-![GameShelf 游戏详情与启动设置](docs/assets/readme/game-detail.png)
+![GameSave Scout 游戏详情与启动设置](docs/assets/readme/game-detail.png)
 
 在右侧详情面板中启动游戏、管理封面，并调整标题、主程序和其他启动设置。
 
 ### 存档位置与引擎识别
 
-![GameShelf 存档位置与引擎识别](docs/assets/readme/save-locations.png)
+![GameSave Scout 存档位置与引擎识别](docs/assets/readme/save-locations.png)
 
 集中维护已确认的存档目录，按需查找或引导式寻找存档，并查看游戏引擎识别结果。
 
@@ -198,15 +200,15 @@ V0.2 批量存档发现展示已安装、失效、未关联及已记录存档位
 3. 双击 `GameShelf.exe` 启动。首次正常启动会在程序旁创建 `data`。
 4. 添加一个或多个游戏根目录并执行扫描；游戏详情中可以继续设置启动方式、封面、引擎和存档位置。
 
-轻量版如果检测不到系统 Evergreen WebView2 Runtime，会先校验随包的微软官方 `MicrosoftEdgeWebview2Setup.exe`，再询问是否打开安装位置。选择“是”后，GameShelf 只会在 Explorer 中选中安装器并正常退出；请手动双击安装器联网完成安装，然后重新启动 GameShelf。GameShelf 不会静默运行安装器，也不会自动重新启动自身。
+轻量版如果检测不到系统 Evergreen WebView2 Runtime，会先校验随包的微软官方 `MicrosoftEdgeWebview2Setup.exe`，再询问是否打开安装位置。选择“是”后，GameSave Scout 只会在 Explorer 中选中安装器并正常退出；请手动双击安装器联网完成安装，然后重新启动 GameSave Scout。GameSave Scout 不会静默运行安装器，也不会自动重新启动自身。
 
 便携使用注意事项：
 
-- 完全退出 GameShelf 后，复制整个程序目录即可迁移；不要只移动 `GameShelf.exe`。
-- 删除整个 GameShelf 目录即可删除程序及其便携数据；轻量版使用的系统 Evergreen Runtime 不会随之卸载。
+- 完全退出 GameSave Scout 后，复制整个程序目录即可迁移；不要只移动 `GameShelf.exe`。
+- 删除整个 GameSave Scout 目录即可删除程序及其便携数据；轻量版使用的系统 Evergreen Runtime 不会随之卸载。
 - 当前便携包只支持本地文件系统中的可写目录，且完整发布负载的绝对路径必须少于 260 个字符；不支持 UNC 或网络共享路径。
 - 启动错误日志位于 `data\logs\startup-error.log`，普通运行日志位于 `data\logs\gameshelf.log`。
-- 当前 GameShelf 本体未进行 Authenticode 签名，Windows 可能显示未知发布者或 SmartScreen 提示。请只使用可信来源的发布包并核对 ZIP 的 SHA-256，不要为运行程序而关闭系统安全功能。
+- 当前 GameSave Scout 本体未进行 Authenticode 签名，Windows 可能显示未知发布者或 SmartScreen 提示。请只使用可信来源的发布包并核对 ZIP 的 SHA-256，不要为运行程序而关闭系统安全功能。
 
 ## 开发环境
 
@@ -229,7 +231,7 @@ npm --prefix frontend ci
 conda activate .\.venv
 ```
 
-当前 V0.3.2 源码和便携候选包均使用 SQLite schema 4，并按开发期约定不迁移 schema 1/2/3 数据库。如果程序提示检测到旧库，请先完全退出 GameShelf，再自行移走或删除可舍弃的 `data\library.db` 后重启。该操作会丢失旧数据库记录；程序不会自动删除 `data\covers` 中的图片，但新库也不会自动恢复旧封面关联。
+当前 V0.3.2 源码和便携候选包均使用 SQLite schema 4，并按开发期约定不迁移 schema 1/2/3 数据库。如果程序提示检测到旧库，请先完全退出 GameSave Scout，再自行移走或删除可舍弃的 `data\library.db` 后重启。该操作会丢失旧数据库记录；程序不会自动删除 `data\covers` 中的图片，但新库也不会自动恢复旧封面关联。
 
 后端检查：
 
@@ -336,11 +338,11 @@ python -m gameshelf
 
 ## 项目文档与许可证
 
-- [总体设计](docs/superpowers/specs/2026-08-12-GameShelf-总体设计.md)
-- [开发路线图](docs/superpowers/plans/2026-08-12-GameShelf-开发路线图.md)
-- [封面与游戏库界面](docs/superpowers/plans/2026-08-12-GameShelf-03-封面与游戏库界面.md)
-- [静态存档位置](docs/superpowers/plans/2026-08-12-GameShelf-05-静态存档位置.md)
-- [引导式与批量存档发现](docs/superpowers/plans/2026-08-12-GameShelf-06-动态与孤立存档发现.md)
-- [便携版打包与发布设计](docs/superpowers/plans/2026-08-12-GameShelf-07-便携版打包与发布.md)
+- [总体设计](docs/superpowers/specs/2026-08-12-GameSave-Scout-总体设计.md)
+- [开发路线图](docs/superpowers/plans/2026-08-12-GameSave-Scout-开发路线图.md)
+- [封面与游戏库界面](docs/superpowers/plans/2026-08-12-GameSave-Scout-03-封面与游戏库界面.md)
+- [静态存档位置](docs/superpowers/plans/2026-08-12-GameSave-Scout-05-静态存档位置.md)
+- [引导式与批量存档发现](docs/superpowers/plans/2026-08-12-GameSave-Scout-06-动态与孤立存档发现.md)
+- [便携版打包与发布设计](docs/superpowers/plans/2026-08-12-GameSave-Scout-07-便携版打包与发布.md)
 - [MIT License](LICENSE)
 - [第三方声明](THIRD_PARTY_NOTICES.md)
