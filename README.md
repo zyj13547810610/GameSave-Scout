@@ -4,7 +4,7 @@ GameSave Scout 是一个面向 Windows 10/11 x64 的本地优先、便携式个�
 
 GameSave Scout 不需要账号或云服务。游戏库、配置、封面、日志和 WebView 用户数据默认保存在程序旁的 `data` 目录，可以随整个程序目录迁移。当前源码范围与实现状态见[开发路线图](docs/superpowers/plans/2026-08-12-GameSave-Scout-开发路线图.md)。
 
-> V0.3.3 源码与发布链已统一为 **GameSave Scout**：Python 包为 `gamesave_scout`，命令为 `gamesave-scout`，可执行文件为 `GameSaveScout.exe`，发布前缀为 `GameSave-Scout`。程序旁 `data` 和 SQLite schema 4 保持不变；V0.3.3 双版本便携包尚待最终构建复核。
+> V0.3.3 源码、发布链和双版本便携候选已统一为 **GameSave Scout**：Python 包为 `gamesave_scout`，命令为 `gamesave-scout`，可执行文件为 `GameSaveScout.exe`，发布前缀为 `GameSave-Scout`。程序旁 `data` 和 SQLite schema 4 保持不变；完整离线版与轻量联网版已通过完整门禁、冻结 smoke 和独立完整性复核。
 
 ## 主要功能
 
@@ -26,15 +26,15 @@ GameSave Scout 不需要账号或云服务。游戏库、配置、封面、日�
 
 ## 版本更新记录
 
-以下记录按源码开发里程碑整理；`V0.1.0`、`V0.1.4`、`V0.2.1` 和 `V0.3.2` 已生成本地双版本便携候选包，`V0.3.3` 技术改名已完成源码与发布链迁移，便携构建待最终步骤。详细设计、实现边界和验证记录以[固定设计文档](docs/superpowers/plans)为准。
+以下记录按源码开发里程碑整理；`V0.1.0`、`V0.1.4`、`V0.2.1`、`V0.3.2` 和 `V0.3.3` 已生成本地双版本便携候选包。详细设计、实现边界和验证记录以[固定设计文档](docs/superpowers/plans)为准。
 
 <details open>
-<summary><strong>V0.3.3 — 2026-08-25（最新源码，便携构建待完成）</strong></summary>
+<summary><strong>V0.3.3 — 2026-08-25（最新源码与便携候选）</strong></summary>
 
 - 产品技术身份统一为 GameSave Scout，不保留旧 Python 包、命令或开发环境变量兼容入口；
 - Python 包、前端桥接、日志、PyInstaller spec、EXE 和双版本发布前缀已同步改名，程序旁 `data` 与 schema 4 不变；
-- 后端迁移回归为 1233 项通过、1 项平台条件跳过，前端为 57 个测试文件共 241 项通过；发布工具、真实 PyInstaller 集成、Ruff、mypy、类型检查和源码 smoke 均已通过；
-- 完整离线版与轻量联网版将在最终质量门禁后生成，正式尺寸和 SHA-256 只记录实际构建结果。
+- 正式构建门禁为 Python 1276 项通过、1 项平台条件跳过，前端 57 个测试文件共 241 项通过，并通过 Ruff、mypy、Vue 类型检查、141 模块生产构建、schema 4 源码 smoke 和两版冻结 smoke；
+- 从干净提交 `b8ffb7d34a5945b50e4faaad582f1e29d6748d94` 原子生成六个候选产物；完整版/轻量版目录为 751.35/92.08 MiB，ZIP 为 326.16/35.24 MiB，清单、模式隔离、无 `data` 与 SHA-256 已独立复核。
 
 </details>
 
@@ -160,7 +160,7 @@ GameSave Scout 不需要账号或云服务。游戏库、配置、封面、日�
 
 ## 当前状态
 
-V0.1.x、V0.2.0、V0.2.1 和 V0.3.2 已完成既定源码与验收收口；V0.3.2 是最新本地双版本便携候选。V0.3.1 自定义规则编辑器及真实 pywebview 工作台验收已完成，V0.3.2 第二批引擎与存档规则及便携构建也已完成，schema 保持 4；缺少样本的真实游戏规则矩阵仍保留为后续工作。完整目标 Windows 10/11 设备、SmartScreen、UNC/只读目录和特殊运行时故障矩阵没有全部执行，作为后续可选兼容性复核。
+V0.1.x、V0.2.0、V0.2.1、V0.3.2 和 V0.3.3 已完成既定源码与本地候选收口；V0.3.3 是最新本地双版本便携候选。V0.3.1 自定义规则编辑器及真实 pywebview 工作台验收已完成，V0.3.2 第二批引擎与存档规则也已随 V0.3.3 新技术身份进入便携候选，schema 保持 4；缺少样本的真实游戏规则矩阵仍保留为后续工作。完整目标 Windows 10/11 设备、SmartScreen、UNC/只读目录和特殊运行时故障矩阵没有全部执行，作为后续可选兼容性复核。
 
 V0.2 批量存档发现展示已安装、失效、未关联及已记录存档位置，而不只显示“孤立”结果；候选始终由用户审核，不自动确认归属。存档备份、恢复、同步和版本管理继续后置，目前尚未实现。
 
@@ -196,7 +196,7 @@ V0.2 批量存档发现展示已安装、失效、未关联及已记录存档位
 
 ## 便携版选择与使用
 
-V0.3.3 最终构建将生成两个本地 Windows x64 便携候选包；当前源码与发布链已就绪，正式产物尚待最终质量门禁：
+V0.3.3 已生成两个本地 Windows x64 便携候选包；完整版/轻量版 ZIP 实测为 326.16/35.24 MiB：
 
 | 版本 | 目录/ZIP 名称 | WebView2 | 适用场景 |
 | --- | --- | --- | --- |
@@ -241,7 +241,7 @@ npm --prefix frontend ci
 conda activate .\.venv
 ```
 
-当前 V0.3.3 源码和待构建便携候选包均使用 SQLite schema 4，并按开发期约定不迁移 schema 1/2/3 数据库。如果程序提示检测到旧库，请先完全退出 GameSave Scout，再自行移走或删除可舍弃的 `data\library.db` 后重启。该操作会丢失旧数据库记录；程序不会自动删除 `data\covers` 中的图片，但新库也不会自动恢复旧封面关联。
+当前 V0.3.3 源码和便携候选包均使用 SQLite schema 4，并按开发期约定不迁移 schema 1/2/3 数据库。如果程序提示检测到旧库，请先完全退出 GameSave Scout，再自行移走或删除可舍弃的 `data\library.db` 后重启。该操作会丢失旧数据库记录；程序不会自动删除 `data\covers` 中的图片，但新库也不会自动恢复旧封面关联。
 
 后端检查：
 
@@ -313,7 +313,12 @@ Get-FileHash .\dist\GameSave-Scout-0.3.3-win-x64-lite.zip -Algorithm SHA256
 Get-Content .\dist\GameSave-Scout-0.3.3-win-x64-lite.zip.sha256
 ```
 
-2026-08-25 本地 V0.3.2 候选包的 ZIP SHA-256 为：
+2026-08-25 本地 V0.3.3 候选包的 ZIP SHA-256 为：
+
+- 完整离线版：`4458399b2a8d4e0f1a251253af4cb23dc99752815391f57593b239fad5444c4b`
+- 轻量联网版：`e29f26fd9e0e86c093555f61ab63747abdf857298d0d70437096af812f0fdeb1`
+
+同日历史 V0.3.2 候选包的 ZIP SHA-256 为：
 
 - 完整离线版：`af4c7b50236a25ed0f3529e6466078904b8b20a910d93af26ee39ee40491e252`
 - 轻量联网版：`181dbb7156b97778a7739dac59baa3107d99decaa94cced7bb8d387d628880bb`
