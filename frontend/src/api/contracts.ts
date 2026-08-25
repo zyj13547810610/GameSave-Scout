@@ -447,6 +447,7 @@ export type SaveRuleLocationDraft = {
   path: string
   category: 'save' | 'config' | 'other'
   confidence: number
+  require_existing?: boolean
 }
 
 type RuleDraftCommon = {

@@ -10,7 +10,9 @@ const filesystemRoots = [
   '<winDocuments>', '<winSavedGames>', '<winProgramData>', '<winPublic>', '<winDir>',
 ]
 const registryRoots = ['HKEY_CURRENT_USER', 'HKEY_LOCAL_MACHINE']
-const metadataPlaceholders = ['{company_name}', '{product_name}', '{project_name}']
+const metadataPlaceholders = [
+  '{company_name}', '{product_name}', '{project_name}', '{renpy_save_directory}',
+]
 const registry = computed(() => props.modelValue.kind === 'registry')
 const roots = computed(() => registry.value ? registryRoots : filesystemRoots)
 const selectedRoot = computed(() => {
@@ -53,6 +55,17 @@ function insertPlaceholder(placeholder: string) {
         <option value="save">save</option><option value="config">config</option><option value="other">other</option>
       </select>
     </label>
+    <label>显示条件
+      <select
+        data-test="location-existence-mode"
+        :disabled="readonly"
+        :value="String(modelValue.require_existing ?? false)"
+        @change="update({ require_existing: ($event.target as HTMLSelectElement).value === 'true' })"
+      >
+        <option value="false">始终建议</option>
+        <option value="true">仅找到时显示</option>
+      </select>
+    </label>
     <label>安全根
       <select data-test="location-root" :disabled="readonly" :value="selectedRoot" @change="updatePath(($event.target as HTMLSelectElement).value)">
         <option v-for="root in roots" :key="root" :value="root">{{ root }}</option>
@@ -67,6 +80,9 @@ function insertPlaceholder(placeholder: string) {
     <div v-if="!readonly && !registry" class="compact-actions placeholder-actions">
       <button v-for="placeholder in metadataPlaceholders" :key="placeholder" class="secondary" type="button" @click="insertPlaceholder(placeholder)">{{ placeholder }}</button>
     </div>
+    <p v-if="!registry" class="rule-field-help">
+      {renpy_save_directory} 只有在 Ren'Py 安全元数据可用时才会展开。
+    </p>
     <div v-if="!readonly" class="compact-actions">
       <button class="secondary" type="button" @click="$emit('up')">上移</button>
       <button class="secondary" type="button" @click="$emit('down')">下移</button>

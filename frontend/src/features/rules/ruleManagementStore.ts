@@ -214,6 +214,7 @@ export const useRuleManagementStore = defineStore('rule-management', {
           path: location.pathTemplate,
           category: location.category,
           confidence: location.confidence,
+          require_existing: false,
         })),
       }
       this.startNew('save_game')

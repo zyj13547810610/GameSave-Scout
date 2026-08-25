@@ -38,7 +38,15 @@ function updateLocation(index: number, value: SaveRuleLocationDraft) {
 
 function addLocation() {
   if (props.modelValue.locations.length >= 32) return
-  update({ locations: [...props.modelValue.locations, { kind: 'directory', path: '<winDocuments>', category: 'save', confidence: .8 }] })
+  update({
+    locations: [
+      ...props.modelValue.locations,
+      {
+        kind: 'directory', path: '<winDocuments>', category: 'save',
+        confidence: .8, require_existing: false,
+      },
+    ],
+  })
 }
 
 function removeLocation(index: number) {

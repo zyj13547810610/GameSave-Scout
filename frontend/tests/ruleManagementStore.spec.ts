@@ -172,6 +172,32 @@ describe('ruleManagementStore', () => {
     expect(store.mutationError).toBe('写入失败')
   })
 
+  it('prefills game save locations with an explicit relaxed existence policy', async () => {
+    const store = useRuleManagementStore()
+    const bridge = createMockBridge({
+      async list_rules() { return ok({ items: [], total: 0 }) },
+      async get_game_save_rule_prefill() {
+        return ok({
+          gameId: 'game-1', title: 'Alice', aliases: [], productIds: [], engineId: 'renpy',
+          locations: [{
+            kind: 'directory' as const,
+            pathTemplate: '<winDocuments>\\Alice',
+            category: 'save' as const,
+            confidence: 1,
+          }],
+        })
+      },
+      async validate_rule_draft({ draft }) {
+        return ok({ valid: true, normalizedDraft: draft, yamlPreview: 'id: game_game_1', errorCode: null, message: '有效' })
+      },
+    })
+
+    await store.openIntent(bridge, { tab: 'save', gameId: 'game-1' })
+
+    if (store.draft?.type !== 'save_game') throw new Error('expected game save draft')
+    expect(store.draft.locations[0]?.require_existing).toBe(false)
+  })
+
   it('keeps an import preview after batch failure and selects the first rule after success', async () => {
     const store = useRuleManagementStore()
     store.importPreview = {
