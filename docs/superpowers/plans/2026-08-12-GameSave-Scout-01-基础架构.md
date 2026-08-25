@@ -55,6 +55,18 @@ npm --prefix frontend install
 
 关闭时停止后台任务、数据库写入线程和本地资源服务。新后台任务在关闭开始后不得继续提交。
 
+### 3.1 V0.3.3 产品技术身份（设计已确认，待实现）
+
+V0.3.3 采用单一新身份，不保留旧运行入口：
+
+- Python 分发名与命令为 `gamesave-scout`，导入包和 `python -m` 入口为 `gamesave_scout`。
+- 前端桥接类型为 `GameSaveScoutBridge`，桥接返回的 `appName`、HTML 标题、窗口标题和用户提示统一为 `GameSave Scout`。
+- 源码 Vite 地址只读取 `GAMESAVE_SCOUT_DEV_SERVER_URL`；旧 `GAMESHELF_DEV_SERVER_URL` 不再接受。
+- logger 名称和持久日志改为 `gamesave_scout` 与 `data/logs/gamesave-scout.log`；旧 `gameshelf.log` 不迁移、不删除。
+- 数据库、配置、封面、规则、Ludusavi 活动快照、WebView 用户数据及其他 `data` 内路径不改，SQLite schema 保持 4。
+
+实施采用分层收口：后端包与运行时身份、前端身份、发布链、文档与历史原型依次修改，每层完成相应测试；最终对运行时代码、构建资源和当前文档执行旧入口审计。
+
 ## 4. 便携目录
 
 所有由 GameSave Scout 管理的持久数据都位于程序旁的 `data`：
@@ -379,3 +391,4 @@ V0.2 分组桥接增加查询、新建、重命名、删除、单游戏原子替
 | 2026-08-21 | 完成 V0.3.0 双规则资源装配与兼容边界：新增严格 `saves.yaml`、启动降级和冻结资源检查，批量 `builtin` 来源只进入 JSON 观察，持久来源与 schema 4 保持不变。 |
 | 2026-08-23 | 确认 V0.3.x 自定义规则编辑器基础架构：规则文件为唯一事实来源，一条用户规则一个 YAML；共享目录服务编译不可变快照，任务捕获快照，写入经完整候选校验后原子替换；采用新的 `resources/rules` 与 `data/rules` 目标结构，不新增数据库表、不迁移或自动删除旧 manifest 目录。 |
 | 2026-08-23 | 完成 V0.3.1 规则基础架构：用户规则仓储、完整候选编译、不可变任务快照、设置回退、管理/导入导出桥接和统一规则目录已落地；schema 保持 4，源码自动门禁通过。 |
+| 2026-08-25 | 确认 V0.3.3 产品技术身份设计：包、命令、桥接类型、环境变量、日志和发布入口全部改用 GameSave Scout 新标识，不保留旧入口；程序旁 `data` 与 schema 4 不变，旧日志不迁移或删除。 |
