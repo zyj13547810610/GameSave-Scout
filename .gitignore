@@ -16,3 +16,4 @@ data/
 build/
 dist/
 webview安装包/
+.idea/
