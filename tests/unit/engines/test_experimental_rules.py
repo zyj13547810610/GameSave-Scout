@@ -110,6 +110,26 @@ def test_format_header_without_required_structure_is_unknown(
     assert _registry().detect(tmp_path, None).best is None
 
 
+def test_v032_short_or_encrypted_headers_remain_experimental() -> None:
+    expected = {
+        "az_system",
+        "advdx_ads",
+        "dac",
+        "foster",
+        "liar_soft",
+        "mnp",
+        "yox",
+    }
+    rules = {
+        rule.engine_id: rule
+        for rule in load_engine_rules(Path("resources/rules/builtin/engines.yaml"))
+    }
+
+    assert len(expected) == 7
+    assert all(rules[engine_id].experimental for engine_id in expected)
+    assert all(rules[engine_id].threshold >= 0.8 for engine_id in expected)
+
+
 def _registry() -> DetectorRegistry:
     rules = load_engine_rules(Path("resources/rules/builtin/engines.yaml"))
     return DetectorRegistry(RuleDetector(rule) for rule in rules)

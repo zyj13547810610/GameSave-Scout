@@ -38,19 +38,29 @@ class RuleDetector:
             for evidence in self.rule.optional
             if (match := _evaluate(context, evidence)) is not None
         )
+        if self.rule.optional and not optional_matches:
+            return None
         negative_matches = tuple(
             match
             for evidence in self.rule.negative
             if (match := _evaluate(context, evidence)) is not None
         )
-        positive_total = sum(
-            max(0.0, evidence.weight)
-            for evidence in (*self.rule.required, *self.rule.optional)
+        required_total = sum(
+            max(0.0, evidence.weight) for evidence in self.rule.required
         )
-        matched_weight = sum(
-            max(0.0, evidence.weight)
-            for evidence in (*required_matches, *optional_matches)
+        optional_total = max(
+            (max(0.0, evidence.weight) for evidence in self.rule.optional),
+            default=0.0,
         )
+        positive_total = required_total + optional_total
+        matched_required = sum(
+            max(0.0, evidence.weight) for evidence in required_matches
+        )
+        matched_optional = max(
+            (max(0.0, evidence.weight) for evidence in optional_matches),
+            default=0.0,
+        )
+        matched_weight = matched_required + matched_optional
         confidence = matched_weight / positive_total if positive_total else 0.0
         confidence += sum(evidence.weight for evidence in negative_matches)
         confidence = min(1.0, max(0.0, confidence))

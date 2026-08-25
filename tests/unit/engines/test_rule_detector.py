@@ -37,6 +37,38 @@ def test_missing_required_evidence_never_matches(tmp_path: Path) -> None:
     assert RuleDetector(rule).inspect(DetectionContext(game, None)) is None
 
 
+def test_any_evidence_variants_share_one_confidence_slot(tmp_path: Path) -> None:
+    game = tmp_path / "game"
+    game.mkdir()
+    (game / "data.arc").write_bytes(b"SECOND")
+    rule = load_engine_rules(
+        _write_rules(
+            tmp_path,
+            """- id: alternatives
+  label: Alternative headers
+  status: experimental
+  references:
+    - https://example.com/alternatives
+  threshold: 0.80
+  any:
+    - op: magic_at
+      path: data.arc
+      value: FIRST
+      weight: 1.0
+    - op: magic_at
+      path: data.arc
+      value: SECOND
+      weight: 1.0
+""",
+        )
+    )[0]
+
+    match = RuleDetector(rule).inspect(DetectionContext(game, None))
+
+    assert match is not None
+    assert match.confidence == 1.0
+
+
 def test_rule_exposes_shared_metadata_without_changing_engine_id(tmp_path: Path) -> None:
     rule = load_engine_rules(_write_rules(tmp_path, valid_rule()))[0]
 
