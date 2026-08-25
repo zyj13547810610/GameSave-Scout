@@ -208,6 +208,7 @@ def test_bundled_catalog_contains_publicly_supported_generic_templates() -> None
     }
     assert all(rule.metadata.status == "formal" for rule in rules)
     assert all(rule.metadata.references for rule in rules)
+    assert {rule.metadata.version for rule in rules} == {"2026.08.25-1"}
 
     expected_locations = {
         "renpy_save_directory": (

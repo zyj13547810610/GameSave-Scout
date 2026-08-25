@@ -1,4 +1,4 @@
-version: 2026.08.21-2
+version: 2026.08.25-1
 rules:
   - id: renpy_save_directory
     label: Ren'Py 存档目录

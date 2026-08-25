@@ -145,6 +145,7 @@ def test_published_rule_schemas_describe_all_supported_safe_choices() -> None:
         "company_name",
         "product_name",
         "project_name",
+        "renpy_save_directory",
     }
     assert location_schema["x-gameshelf-registry-roots"] == [
         "HKEY_CURRENT_USER",

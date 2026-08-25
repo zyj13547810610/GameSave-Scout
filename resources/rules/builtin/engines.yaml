@@ -1,4 +1,4 @@
-version: "2026.08.21-3"
+version: "2026.08.25-1"
 rules:
   - { id: tyrano, type: engine, label: TyranoScript, variant: TyranoBuilder/TyranoScript, status: formal, priority: 0, enabled: true, references: ["https://tyranoscript.com/usage/tutorial/ready_v5"], threshold: 0.70, all: [{ op: path_exists, path: data/system/Config.tjs, weight: 0.45 }], any: [{ op: path_exists, path: tyrano/tyrano.js, weight: 0.45 }, { op: text_contains, path: data/system/Config.tjs, value: projectID, weight: 0.25 }], negative: [{ op: path_exists, path: Editor.exe, weight: -0.10 }] }
   - { id: kirikiri, type: engine, label: KiriKiri 2/Z, variant: null, status: formal, priority: 0, enabled: true, references: ["https://krkren.github.io/", "https://github.com/morkt/GARbro/blob/master/ArcFormats/KiriKiri/ArcXP3.cs"], threshold: 0.70, all: [{ op: magic_at, path: data.xp3, value: "hex:5850330d0a200a1a8b6701", weight: 0.55 }], any: [{ op: path_exists, path: startup.tjs, weight: 0.45 }, { op: glob_exists, path: "**/*.ks", weight: 0.35 }] }
