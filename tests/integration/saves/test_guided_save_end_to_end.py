@@ -7,24 +7,24 @@ from pathlib import Path
 
 import pytest
 
-from gameshelf.db.connection import ConnectionFactory
-from gameshelf.db.migrator import Migrator
-from gameshelf.db.writer import DbWriter
-from gameshelf.library.launcher import LaunchReceipt
-from gameshelf.library.repository import LibraryRepository
-from gameshelf.library.service import LibraryService
-from gameshelf.platform.windows.known_folders import KnownFolders
-from gameshelf.saves.guided_events import RawFileChange
-from gameshelf.saves.guided_models import GuidedSavePreview, GuidedScopeOption
-from gameshelf.saves.guided_registry import RegistrySnapshot
-from gameshelf.saves.guided_repository import GuidedSaveRepository
-from gameshelf.saves.guided_review import GuidedSaveReviewService
-from gameshelf.saves.guided_scanner import BoundedMetadataScanner
-from gameshelf.saves.guided_scoring import GuidedScoringContext
-from gameshelf.saves.guided_service import GuidedSaveSessionService
-from gameshelf.saves.repository import SaveLocationRepository
-from gameshelf.saves.service import SaveLocationService
-from gameshelf.saves.templates import PathTemplateResolver
+from gamesave_scout.db.connection import ConnectionFactory
+from gamesave_scout.db.migrator import Migrator
+from gamesave_scout.db.writer import DbWriter
+from gamesave_scout.library.launcher import LaunchReceipt
+from gamesave_scout.library.repository import LibraryRepository
+from gamesave_scout.library.service import LibraryService
+from gamesave_scout.platform.windows.known_folders import KnownFolders
+from gamesave_scout.saves.guided_events import RawFileChange
+from gamesave_scout.saves.guided_models import GuidedSavePreview, GuidedScopeOption
+from gamesave_scout.saves.guided_registry import RegistrySnapshot
+from gamesave_scout.saves.guided_repository import GuidedSaveRepository
+from gamesave_scout.saves.guided_review import GuidedSaveReviewService
+from gamesave_scout.saves.guided_scanner import BoundedMetadataScanner
+from gamesave_scout.saves.guided_scoring import GuidedScoringContext
+from gamesave_scout.saves.guided_service import GuidedSaveSessionService
+from gamesave_scout.saves.repository import SaveLocationRepository
+from gamesave_scout.saves.service import SaveLocationService
+from gamesave_scout.saves.templates import PathTemplateResolver
 
 
 class _UnusedShell:
@@ -134,7 +134,7 @@ def test_marked_save_is_reviewed_and_accepted_without_changing_file_bytes(
     session = harness.service.start("game-1", (preview.scopes[0].id,), ())
     save_file = harness.game_dir / "Saves" / "slot1.sav"
     save_file.parent.mkdir()
-    original_bytes = b"GameShelf guided save e2e\x00\xff"
+    original_bytes = b"GameSave Scout guided save e2e\x00\xff"
     save_file.write_bytes(original_bytes)
     harness.watcher.sink.on_change(
         RawFileChange(

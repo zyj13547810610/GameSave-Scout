@@ -2,21 +2,21 @@ from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
-from gameshelf.bootstrap.paths import AppPaths
-from gameshelf.bridge.api import BridgeApi
-from gameshelf.bridge.tasks import TaskRegistry
-from gameshelf.saves.ludusavi_provider import (
+from gamesave_scout.bootstrap.paths import AppPaths
+from gamesave_scout.bridge.api import BridgeApi
+from gamesave_scout.bridge.tasks import TaskRegistry
+from gamesave_scout.saves.ludusavi_provider import (
     LudusaviStatus,
     SnapshotMetadata,
     SnapshotUpdateError,
     UpdateResult,
 )
-from gameshelf.saves.models import (
+from gamesave_scout.saves.models import (
     SaveLocation,
     SaveLocationSuggestion,
     SuggestionEvidence,
 )
-from gameshelf.saves.service import InvalidSaveLocation, SaveLocationService
+from gamesave_scout.saves.service import InvalidSaveLocation, SaveLocationService
 
 
 class FakeSaveService:

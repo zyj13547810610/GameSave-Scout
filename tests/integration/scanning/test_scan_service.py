@@ -6,28 +6,28 @@ from threading import Event, Thread
 
 import pytest
 
-from gameshelf.bridge.tasks import TaskCancelled, TaskContext
-from gameshelf.db.connection import ConnectionFactory
-from gameshelf.db.migrator import Migrator
-from gameshelf.db.writer import DbWriter
-from gameshelf.engines.models import DetectionOutcome
-from gameshelf.engines.service import EngineDetectionService
-from gameshelf.library.models import Game, ScanRoot
-from gameshelf.library.repository import LibraryRepository
-from gameshelf.library.service import LibraryService
-from gameshelf.scanning.analysis import GameAnalyzer
-from gameshelf.scanning.analysis_cache import (
+from gamesave_scout.bridge.tasks import TaskCancelled, TaskContext
+from gamesave_scout.db.connection import ConnectionFactory
+from gamesave_scout.db.migrator import Migrator
+from gamesave_scout.db.writer import DbWriter
+from gamesave_scout.engines.models import DetectionOutcome
+from gamesave_scout.engines.service import EngineDetectionService
+from gamesave_scout.library.models import Game, ScanRoot
+from gamesave_scout.library.repository import LibraryRepository
+from gamesave_scout.library.service import LibraryService
+from gamesave_scout.scanning.analysis import GameAnalyzer
+from gamesave_scout.scanning.analysis_cache import (
     AnalysisCacheRepository,
     PendingAnalysisCache,
     upsert_analysis_cache,
 )
-from gameshelf.scanning.analysis_pool import ScanAnalysisPool
-from gameshelf.scanning.executable_ranker import (
+from gamesave_scout.scanning.analysis_pool import ScanAnalysisPool
+from gamesave_scout.scanning.executable_ranker import (
     RANKER_RULES_VERSION,
     ExecutableCandidate,
 )
-from gameshelf.scanning.pe_metadata import PeMetadata
-from gameshelf.scanning.service import GameReanalysisError, ScanService, ScanSummary
+from gamesave_scout.scanning.pe_metadata import PeMetadata
+from gamesave_scout.scanning.service import GameReanalysisError, ScanService, ScanSummary
 
 
 @pytest.fixture
@@ -261,7 +261,7 @@ def test_quick_unknown_game_path_keeps_status_and_reports_warning(
     root = scan_harness.add_root(mode="children")
     game_dir = scan_harness.mkdir("GameA")
     game = scan_harness.scan(root.id, "full").games[0]
-    from gameshelf.scanning import service as scanning_service
+    from gamesave_scout.scanning import service as scanning_service
 
     original_probe = scanning_service._probe_directory
 

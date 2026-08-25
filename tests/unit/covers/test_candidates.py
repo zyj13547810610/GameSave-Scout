@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from gameshelf.covers.candidates import (
+from gamesave_scout.covers.candidates import (
     CandidateFileRef,
     CoverCandidate,
     CoverCandidateSource,

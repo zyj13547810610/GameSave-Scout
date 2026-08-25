@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from gameshelf.bootstrap.resources import ResourcePaths
+from gamesave_scout.bootstrap.resources import ResourcePaths
 
 
 def test_source_runtime_resolves_repository_resources_without_using_cwd(

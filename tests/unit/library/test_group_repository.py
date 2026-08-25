@@ -1,9 +1,9 @@
 import sqlite3
 from pathlib import Path
 
-from gameshelf.db.connection import ConnectionFactory
-from gameshelf.db.migrator import Migrator
-from gameshelf.library.group_repository import GroupRepository
+from gamesave_scout.db.connection import ConnectionFactory
+from gamesave_scout.db.migrator import Migrator
+from gamesave_scout.library.group_repository import GroupRepository
 
 
 def test_list_groups_orders_stably_and_counts_memberships(tmp_path: Path) -> None:

@@ -3,14 +3,14 @@ from threading import Event
 
 import pytest
 
-from gameshelf.bridge.tasks import TaskCancelled, TaskContext
-from gameshelf.engines.models import DetectionOutcome, EngineEvidence, EngineMatch
-from gameshelf.library.models import Game
-from gameshelf.scanning.analysis import GameAnalyzer, choose_analysis_plan
-from gameshelf.scanning.analysis_cache import AnalysisCacheEntry
-from gameshelf.scanning.executable_ranker import ExecutableCandidate
-from gameshelf.scanning.models import DirectoryCandidate
-from gameshelf.scanning.pe_metadata import PeMetadata
+from gamesave_scout.bridge.tasks import TaskCancelled, TaskContext
+from gamesave_scout.engines.models import DetectionOutcome, EngineEvidence, EngineMatch
+from gamesave_scout.library.models import Game
+from gamesave_scout.scanning.analysis import GameAnalyzer, choose_analysis_plan
+from gamesave_scout.scanning.analysis_cache import AnalysisCacheEntry
+from gamesave_scout.scanning.executable_ranker import ExecutableCandidate
+from gamesave_scout.scanning.models import DirectoryCandidate
+from gamesave_scout.scanning.pe_metadata import PeMetadata
 
 
 def _game(

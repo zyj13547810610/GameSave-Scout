@@ -4,21 +4,21 @@ from threading import Event
 
 import pytest
 
-from gameshelf.bridge.tasks import TaskContext
-from gameshelf.db.connection import ConnectionFactory
-from gameshelf.db.migrator import Migrator
-from gameshelf.db.writer import DbWriter
-from gameshelf.engines.models import DetectionOutcome, EngineEvidence, EngineMatch
-from gameshelf.engines.registry import DetectorRegistry
-from gameshelf.engines.service import EngineDetectionService
-from gameshelf.library.models import Game
-from gameshelf.library.repository import LibraryRepository
-from gameshelf.library.service import LibraryService
-from gameshelf.scanning.analysis import GameAnalyzer
-from gameshelf.scanning.analysis_cache import AnalysisCacheRepository
-from gameshelf.scanning.executable_ranker import ExecutableCandidate
-from gameshelf.scanning.pe_metadata import PeMetadata
-from gameshelf.scanning.service import ScanService
+from gamesave_scout.bridge.tasks import TaskContext
+from gamesave_scout.db.connection import ConnectionFactory
+from gamesave_scout.db.migrator import Migrator
+from gamesave_scout.db.writer import DbWriter
+from gamesave_scout.engines.models import DetectionOutcome, EngineEvidence, EngineMatch
+from gamesave_scout.engines.registry import DetectorRegistry
+from gamesave_scout.engines.service import EngineDetectionService
+from gamesave_scout.library.models import Game
+from gamesave_scout.library.repository import LibraryRepository
+from gamesave_scout.library.service import LibraryService
+from gamesave_scout.scanning.analysis import GameAnalyzer
+from gamesave_scout.scanning.analysis_cache import AnalysisCacheRepository
+from gamesave_scout.scanning.executable_ranker import ExecutableCandidate
+from gamesave_scout.scanning.pe_metadata import PeMetadata
+from gamesave_scout.scanning.service import ScanService
 
 
 @pytest.fixture
@@ -124,7 +124,7 @@ def test_rescan_uses_valid_manual_executable_for_engine_detection(
     game_executable.write_bytes(b"MZ")
     game = engine_scan_harness.rescan()
     monkeypatch.setattr(
-        "gameshelf.library.service.read_pe_metadata",
+        "gamesave_scout.library.service.read_pe_metadata",
         lambda _: PeMetadata("", "", "", "x64"),
         raising=False,
     )

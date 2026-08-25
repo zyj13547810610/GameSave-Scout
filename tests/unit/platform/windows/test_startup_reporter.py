@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from gameshelf.platform.windows.startup_reporter import (
+from gamesave_scout.platform.windows.startup_reporter import (
     FrozenRuntimeInstallPrompt,
     FrozenStartupReporter,
 )
@@ -25,7 +25,7 @@ def test_reporter_writes_log_and_shows_one_native_error(tmp_path: Path) -> None:
     message, title, flags = calls[0]
     assert "runtime missing" in message
     assert str(log_file) in message
-    assert title == "GameShelf 启动失败"
+    assert title == "GameSave Scout 启动失败"
     assert flags != 0
 
 
@@ -56,10 +56,10 @@ def test_runtime_prompt_explains_manual_install_and_restart() -> None:
     message, title, flags = calls[0]
     assert "打开安装器所在文件夹" in message
     assert "双击 MicrosoftEdgeWebview2Setup.exe" in message
-    assert "安装完成后重新启动 GameShelf" in message
+    assert "安装完成后重新启动 GameSave Scout" in message
     assert "联网" in message
     assert "Microsoft WebView2 Runtime" in message
-    assert title == "GameShelf 需要 WebView2"
+    assert title == "GameSave Scout 需要 WebView2"
     assert flags & 0x00000004
     assert flags & 0x00000100
 

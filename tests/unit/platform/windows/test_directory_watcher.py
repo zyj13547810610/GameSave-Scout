@@ -7,13 +7,13 @@ from threading import Condition, Event, Lock
 
 import pytest
 
-from gameshelf.platform.windows.directory_watcher import (
+from gamesave_scout.platform.windows.directory_watcher import (
     DirectoryNotification,
     DirectoryWatchError,
     WindowsDirectoryWatcher,
     parse_notify_buffer,
 )
-from gameshelf.saves.guided_events import RawFileChange
+from gamesave_scout.saves.guided_events import RawFileChange
 
 
 def test_parse_notify_buffer_decodes_each_supported_action() -> None:

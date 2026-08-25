@@ -9,27 +9,27 @@ from pathlib import Path
 import pytest
 import yaml
 
-from gameshelf.db.connection import ConnectionFactory
-from gameshelf.db.migrator import Migrator
-from gameshelf.db.writer import DbWriter
-from gameshelf.engines.service import EngineDetectionService
-from gameshelf.library.models import Game
-from gameshelf.library.repository import LibraryRepository
-from gameshelf.library.service import LibraryService
-from gameshelf.platform.windows.known_folders import KnownFolders
-from gameshelf.saves.builtin_rules import SaveRuleProvider
-from gameshelf.saves.engine_hints import EngineSaveHintProvider, load_engine_metadata
-from gameshelf.saves.ludusavi_index import LudusaviIndex
-from gameshelf.saves.ludusavi_index_builder import build_ludusavi_index
-from gameshelf.saves.ludusavi_parser import parse_manifest
-from gameshelf.saves.ludusavi_provider import SnapshotUpdateError
-from gameshelf.saves.models import SaveLocationSuggestion, SuggestionEvidence
-from gameshelf.saves.repository import SaveLocationRepository
-from gameshelf.saves.rule_probe import BoundedRuleProbe
-from gameshelf.saves.rule_schema import load_save_rules, parse_save_rule_document
-from gameshelf.saves.service import SaveLocationService
-from gameshelf.saves.static_discovery import StaticSaveDiscovery
-from gameshelf.saves.templates import PathTemplateResolver
+from gamesave_scout.db.connection import ConnectionFactory
+from gamesave_scout.db.migrator import Migrator
+from gamesave_scout.db.writer import DbWriter
+from gamesave_scout.engines.service import EngineDetectionService
+from gamesave_scout.library.models import Game
+from gamesave_scout.library.repository import LibraryRepository
+from gamesave_scout.library.service import LibraryService
+from gamesave_scout.platform.windows.known_folders import KnownFolders
+from gamesave_scout.saves.builtin_rules import SaveRuleProvider
+from gamesave_scout.saves.engine_hints import EngineSaveHintProvider, load_engine_metadata
+from gamesave_scout.saves.ludusavi_index import LudusaviIndex
+from gamesave_scout.saves.ludusavi_index_builder import build_ludusavi_index
+from gamesave_scout.saves.ludusavi_parser import parse_manifest
+from gamesave_scout.saves.ludusavi_provider import SnapshotUpdateError
+from gamesave_scout.saves.models import SaveLocationSuggestion, SuggestionEvidence
+from gamesave_scout.saves.repository import SaveLocationRepository
+from gamesave_scout.saves.rule_probe import BoundedRuleProbe
+from gamesave_scout.saves.rule_schema import load_save_rules, parse_save_rule_document
+from gamesave_scout.saves.service import SaveLocationService
+from gamesave_scout.saves.static_discovery import StaticSaveDiscovery
+from gamesave_scout.saves.templates import PathTemplateResolver
 
 
 @dataclass

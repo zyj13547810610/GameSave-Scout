@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from gameshelf.library.title_parser import split_title_and_version
+from gamesave_scout.library.title_parser import split_title_and_version
 
 
 @pytest.mark.parametrize(

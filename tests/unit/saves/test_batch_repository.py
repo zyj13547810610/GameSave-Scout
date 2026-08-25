@@ -1,6 +1,6 @@
 import pytest
 
-from gameshelf.saves.batch_repository import BatchCandidateQuery
+from gamesave_scout.saves.batch_repository import BatchCandidateQuery
 
 
 @pytest.mark.parametrize(

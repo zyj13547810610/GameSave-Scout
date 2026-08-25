@@ -1,9 +1,9 @@
 from dataclasses import dataclass
 from pathlib import Path
 
-from gameshelf.engines.base import DetectionContext
-from gameshelf.engines.models import EngineEvidence, EngineMatch
-from gameshelf.engines.registry import DetectorRegistry
+from gamesave_scout.engines.base import DetectionContext
+from gamesave_scout.engines.models import EngineEvidence, EngineMatch
+from gamesave_scout.engines.registry import DetectorRegistry
 
 
 def test_registry_runs_inspection_only_after_cheap_probe(tmp_path: Path) -> None:

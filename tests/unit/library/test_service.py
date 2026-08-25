@@ -3,20 +3,20 @@ from pathlib import Path
 
 import pytest
 
-from gameshelf.library.models import GameRemovalRequest
-from gameshelf.library.service import (
+from gamesave_scout.library.models import GameRemovalRequest
+from gamesave_scout.library.service import (
     GameNotFoundError,
     InvalidGameConfiguration,
     InvalidGameRemoval,
     InvalidRootConfiguration,
     LibraryService,
 )
-from gameshelf.scanning.analysis_cache import (
+from gamesave_scout.scanning.analysis_cache import (
     AnalysisCacheRepository,
     PendingAnalysisCache,
     upsert_analysis_cache,
 )
-from gameshelf.scanning.pe_metadata import PeMetadata
+from gamesave_scout.scanning.pe_metadata import PeMetadata
 
 
 def _seed_cache(library_service: LibraryService, game_id: str) -> AnalysisCacheRepository:
@@ -372,7 +372,7 @@ def test_set_game_executable_stores_the_selected_pe_architecture(
     game = library_service.create_game_for_test(root.id, "Alice", "Alice")
     cache = _seed_cache(library_service, game.id)
     monkeypatch.setattr(
-        "gameshelf.library.service.read_pe_metadata",
+        "gamesave_scout.library.service.read_pe_metadata",
         lambda _: PeMetadata("", "", "", "x64"),
         raising=False,
     )

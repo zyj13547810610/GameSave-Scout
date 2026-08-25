@@ -2,8 +2,8 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
-from gameshelf.db.connection import ConnectionFactory
-from gameshelf.library.service import LibraryService
+from gamesave_scout.db.connection import ConnectionFactory
+from gamesave_scout.library.service import LibraryService
 
 
 def test_repository_round_trips_immutable_root_and_game(

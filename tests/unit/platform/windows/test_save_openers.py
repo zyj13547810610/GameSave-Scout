@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from gameshelf.platform.windows.registry import WindowsRegistry
-from gameshelf.platform.windows.shell import (
+from gamesave_scout.platform.windows.registry import WindowsRegistry
+from gamesave_scout.platform.windows.shell import (
     DirectoryOpenError,
     UrlOpenError,
     WindowsShell,

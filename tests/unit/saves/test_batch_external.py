@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from gameshelf.saves.batch_external import (
+from gamesave_scout.saves.batch_external import (
     BatchExternalLookup,
     BatchExternalLookupError,
 )

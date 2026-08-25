@@ -7,17 +7,17 @@ from urllib.request import urlopen
 
 import pytest
 
-import gameshelf.saves.ludusavi_provider as ludusavi_provider_module
-from gameshelf.bootstrap.application import build_application
-from gameshelf.bootstrap.paths import AppPaths
-from gameshelf.bootstrap.resources import ResourcePaths
-from gameshelf.bridge.tasks import TaskContext
-from gameshelf.engines.rule_schema import RuleSchemaError
-from gameshelf.rules.management import RuleListFilters
-from gameshelf.saves.batch_rules import BatchRuleCatalog
-from gameshelf.saves.builtin_rules import SaveRuleProvider
-from gameshelf.saves.ludusavi_provider import LudusaviProvider
-from gameshelf.saves.rule_schema import SaveRuleSchemaError
+import gamesave_scout.saves.ludusavi_provider as ludusavi_provider_module
+from gamesave_scout.bootstrap.application import build_application
+from gamesave_scout.bootstrap.paths import AppPaths
+from gamesave_scout.bootstrap.resources import ResourcePaths
+from gamesave_scout.bridge.tasks import TaskContext
+from gamesave_scout.engines.rule_schema import RuleSchemaError
+from gamesave_scout.rules.management import RuleListFilters
+from gamesave_scout.saves.batch_rules import BatchRuleCatalog
+from gamesave_scout.saves.builtin_rules import SaveRuleProvider
+from gamesave_scout.saves.ludusavi_provider import LudusaviProvider
+from gamesave_scout.saves.rule_schema import SaveRuleSchemaError
 
 
 def test_application_bootstrap_creates_only_portable_state(
@@ -64,7 +64,7 @@ def test_application_bootstrap_creates_only_portable_state(
     try:
         bootstrap = application.api.bootstrap()
         assert bootstrap["ok"] is True
-        assert bootstrap["data"]["appName"] == "GameShelf"
+        assert bootstrap["data"]["appName"] == "GameSave Scout"
         assert bootstrap["data"]["schemaVersion"] == 4
         assert application.schema_version == 4
         assert bootstrap["data"]["uiScale"] == 1.0
@@ -76,7 +76,7 @@ def test_application_bootstrap_creates_only_portable_state(
         assert paths.user_save_rules_dir.is_dir()
         assert not paths.rule_settings_file.exists()
         assert not paths.legacy_manifests_dir.exists()
-        assert paths.logs_dir.joinpath("gameshelf.log").exists()
+        assert paths.logs_dir.joinpath("gamesave-scout.log").exists()
         snapshot = application.rule_catalog.snapshot()
         assert snapshot.generation == 1
         assert snapshot.catalog_version
@@ -224,14 +224,14 @@ def test_application_close_releases_scan_analysis_threads(tmp_path: Path) -> Non
         2,
     )
     assert any(
-        thread.name.startswith("gameshelf-scan-analysis")
+        thread.name.startswith("gamesave-scout-scan-analysis")
         for thread in enumerate_threads()
     )
 
     application.close()
 
     assert not any(
-        thread.name.startswith("gameshelf-scan-analysis")
+        thread.name.startswith("gamesave-scout-scan-analysis")
         for thread in enumerate_threads()
     )
 
@@ -323,7 +323,7 @@ def test_application_degrades_to_builtin_detectors_for_invalid_rules(
         option_ids = {
             item["id"] for item in application.api.list_engine_options()["data"]
         }
-        log_text = paths.logs_dir.joinpath("gameshelf.log").read_text(
+        log_text = paths.logs_dir.joinpath("gamesave-scout.log").read_text(
             encoding="utf-8"
         )
 
@@ -391,7 +391,7 @@ def test_application_disables_only_invalid_builtin_save_rules(
 
     application = build_application(paths, resources=resources)
     try:
-        log_text = paths.logs_dir.joinpath("gameshelf.log").read_text(
+        log_text = paths.logs_dir.joinpath("gamesave-scout.log").read_text(
             encoding="utf-8"
         )
 

@@ -2,10 +2,10 @@ from pathlib import Path
 
 import pytest
 
-from gameshelf.library.models import Game
-from gameshelf.platform.windows.known_folders import KnownFolders
-from gameshelf.saves.engine_hints import EngineSaveHintProvider, load_engine_metadata
-from gameshelf.saves.templates import PathTemplateResolver
+from gamesave_scout.library.models import Game
+from gamesave_scout.platform.windows.known_folders import KnownFolders
+from gamesave_scout.saves.engine_hints import EngineSaveHintProvider, load_engine_metadata
+from gamesave_scout.saves.templates import PathTemplateResolver
 
 
 @pytest.fixture

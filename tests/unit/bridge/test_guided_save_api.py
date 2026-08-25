@@ -5,22 +5,22 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 
-from gameshelf.bootstrap.paths import AppPaths
-from gameshelf.bridge.api import BridgeApi
-from gameshelf.bridge.tasks import TaskRegistry
-from gameshelf.library.service import LibraryService
-from gameshelf.saves.guided_models import (
+from gamesave_scout.bootstrap.paths import AppPaths
+from gamesave_scout.bridge.api import BridgeApi
+from gamesave_scout.bridge.tasks import TaskRegistry
+from gamesave_scout.library.service import LibraryService
+from gamesave_scout.saves.guided_models import (
     GuidedRegistryTarget,
     GuidedSaveDiscovery,
     GuidedSavePreview,
     GuidedSaveSession,
     GuidedScopeOption,
 )
-from gameshelf.saves.guided_repository import GuidedSaveRepository
-from gameshelf.saves.guided_review import GuidedReviewError, GuidedSaveReviewService
-from gameshelf.saves.guided_scope import InvalidGuidedScope
-from gameshelf.saves.guided_service import GuidedSaveError, GuidedSaveSessionService
-from gameshelf.saves.models import SaveLocation
+from gamesave_scout.saves.guided_repository import GuidedSaveRepository
+from gamesave_scout.saves.guided_review import GuidedReviewError, GuidedSaveReviewService
+from gamesave_scout.saves.guided_scope import InvalidGuidedScope
+from gamesave_scout.saves.guided_service import GuidedSaveError, GuidedSaveSessionService
+from gamesave_scout.saves.models import SaveLocation
 
 
 class FakeLibrary:

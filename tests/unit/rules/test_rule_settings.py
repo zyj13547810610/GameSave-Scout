@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from gameshelf.rules.settings import RuleSettings, RuleSettingsStore
+from gamesave_scout.rules.settings import RuleSettings, RuleSettingsStore
 
 KNOWN_IDS = frozenset({"builtin:unity", "builtin:unreal_save_games"})
 

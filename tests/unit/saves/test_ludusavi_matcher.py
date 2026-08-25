@@ -1,10 +1,10 @@
 from pathlib import Path
 
-from gameshelf.library.models import Game
-from gameshelf.platform.windows.known_folders import KnownFolders
-from gameshelf.saves.ludusavi_matcher import LudusaviMatcher, normalize_ludusavi_name
-from gameshelf.saves.ludusavi_parser import parse_manifest
-from gameshelf.saves.templates import PathTemplateResolver
+from gamesave_scout.library.models import Game
+from gamesave_scout.platform.windows.known_folders import KnownFolders
+from gamesave_scout.saves.ludusavi_matcher import LudusaviMatcher, normalize_ludusavi_name
+from gamesave_scout.saves.ludusavi_parser import parse_manifest
+from gamesave_scout.saves.templates import PathTemplateResolver
 
 FIXTURE = Path(__file__).parents[2] / "fixtures" / "ludusavi" / "manifest.yaml"
 

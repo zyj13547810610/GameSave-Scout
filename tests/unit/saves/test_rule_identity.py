@@ -1,8 +1,8 @@
 from pathlib import Path
 
-from gameshelf.library.models import Game
-from gameshelf.saves.models import SaveLocation
-from gameshelf.saves.rule_identity import collect_rule_identity
+from gamesave_scout.library.models import Game
+from gamesave_scout.saves.models import SaveLocation
+from gamesave_scout.saves.rule_identity import collect_rule_identity
 
 
 def test_identity_uses_exact_titles_and_normalizes_supported_product_ids() -> None:

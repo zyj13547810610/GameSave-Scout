@@ -4,19 +4,19 @@ from threading import Event
 
 from PIL import Image
 
-from gameshelf.bootstrap.paths import AppPaths
-from gameshelf.bridge.api import BridgeApi
-from gameshelf.bridge.tasks import TaskRegistry
-from gameshelf.covers.service import CoverService
-from gameshelf.db.connection import ConnectionFactory
-from gameshelf.db.migrator import Migrator
-from gameshelf.db.writer import DbWriter
-from gameshelf.library.launcher import GameLauncher
-from gameshelf.library.repository import LibraryRepository
-from gameshelf.library.service import LibraryService
-from gameshelf.platform.windows.processes import WindowsProcessLauncher
-from gameshelf.platform.windows.shell import WindowsShell
-from gameshelf.scanning.service import ScanService
+from gamesave_scout.bootstrap.paths import AppPaths
+from gamesave_scout.bridge.api import BridgeApi
+from gamesave_scout.bridge.tasks import TaskRegistry
+from gamesave_scout.covers.service import CoverService
+from gamesave_scout.db.connection import ConnectionFactory
+from gamesave_scout.db.migrator import Migrator
+from gamesave_scout.db.writer import DbWriter
+from gamesave_scout.library.launcher import GameLauncher
+from gamesave_scout.library.repository import LibraryRepository
+from gamesave_scout.library.service import LibraryService
+from gamesave_scout.platform.windows.processes import WindowsProcessLauncher
+from gamesave_scout.platform.windows.shell import WindowsShell
+from gamesave_scout.scanning.service import ScanService
 
 
 def test_start_scan_returns_task_id(tmp_path: Path) -> None:

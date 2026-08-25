@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from gameshelf.saves.guided_events import GuidedChangeAggregator, RawFileChange
+from gamesave_scout.saves.guided_events import GuidedChangeAggregator, RawFileChange
 
 
 def test_aggregator_merges_atomic_replace_into_final_path() -> None:

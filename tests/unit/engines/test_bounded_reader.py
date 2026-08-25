@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from gameshelf.engines.bounded_reader import (
+from gamesave_scout.engines.bounded_reader import (
     BoundedReadError,
     contains_in_edges,
     read_prefix,

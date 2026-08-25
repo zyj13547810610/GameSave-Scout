@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from gameshelf.db.connection import ConnectionFactory
-from gameshelf.db.migrator import Migrator
-from gameshelf.saves.repository import SaveLocationRepository
+from gamesave_scout.db.connection import ConnectionFactory
+from gamesave_scout.db.migrator import Migrator
+from gamesave_scout.saves.repository import SaveLocationRepository
 
 
 def test_repository_round_trips_immutable_save_location(tmp_path: Path) -> None:

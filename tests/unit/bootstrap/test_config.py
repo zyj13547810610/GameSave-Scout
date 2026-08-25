@@ -4,7 +4,7 @@ from threading import Event, Thread
 
 import pytest
 
-from gameshelf.bootstrap.config import (
+from gamesave_scout.bootstrap.config import (
     AppConfig,
     BatchSaveCustomRoot,
     ConfigService,

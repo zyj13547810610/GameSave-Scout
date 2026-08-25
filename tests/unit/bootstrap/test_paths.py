@@ -2,11 +2,11 @@ from pathlib import Path
 
 import pytest
 
-from gameshelf.bootstrap.paths import AppPaths, DataDirectoryError, runtime_root
+from gamesave_scout.bootstrap.paths import AppPaths, DataDirectoryError, runtime_root
 
 
 def test_from_root_places_every_persistent_path_under_data(tmp_path: Path) -> None:
-    paths = AppPaths.from_root(tmp_path / "GameShelf")
+    paths = AppPaths.from_root(tmp_path / "GameSave-Scout")
     paths.ensure_writable()
 
     assert paths.database_file == paths.data_dir / "library.db"
@@ -27,7 +27,7 @@ def test_from_root_places_every_persistent_path_under_data(tmp_path: Path) -> No
 
 
 def test_legacy_manifests_path_is_probe_only_and_is_not_owned(tmp_path: Path) -> None:
-    paths = AppPaths.from_root(tmp_path / "GameShelf")
+    paths = AppPaths.from_root(tmp_path / "GameSave-Scout")
 
     assert paths.legacy_manifests_dir == paths.data_dir / "manifests"
     assert paths.legacy_manifests_dir not in paths.required_directories()
@@ -35,7 +35,7 @@ def test_legacy_manifests_path_is_probe_only_and_is_not_owned(tmp_path: Path) ->
 
 
 def test_runtime_root_uses_executable_parent_when_frozen(tmp_path: Path) -> None:
-    executable = tmp_path / "便携版" / "GameShelf.exe"
+    executable = tmp_path / "便携版" / "GameSaveScout.exe"
 
     assert runtime_root(frozen=True, executable=executable) == executable.parent
 

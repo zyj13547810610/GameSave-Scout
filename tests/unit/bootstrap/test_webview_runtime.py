@@ -8,9 +8,9 @@ from typing import cast
 
 import pytest
 
-from gameshelf.bootstrap.release_runtime import ReleaseRuntimeConfig, RuntimeMode
-from gameshelf.bootstrap.webview_bootstrapper import EvergreenRuntimeGuide
-from gameshelf.bootstrap.webview_runtime import WebViewRuntime, WebViewRuntimeError
+from gamesave_scout.bootstrap.release_runtime import ReleaseRuntimeConfig, RuntimeMode
+from gamesave_scout.bootstrap.webview_bootstrapper import EvergreenRuntimeGuide
+from gamesave_scout.bootstrap.webview_runtime import WebViewRuntime, WebViewRuntimeError
 
 
 def test_source_runtime_does_not_require_bundled_webview(tmp_path: Path) -> None:
@@ -27,7 +27,7 @@ def test_source_runtime_does_not_require_bundled_webview(tmp_path: Path) -> None
 
 
 def test_frozen_runtime_uses_executable_adjacent_directory(tmp_path: Path) -> None:
-    app_root = tmp_path / "GameShelf"
+    app_root = tmp_path / "GameSave-Scout"
     runtime_executable = app_root / "runtime" / "msedgewebview2.exe"
     runtime_executable.parent.mkdir(parents=True)
     runtime_executable.write_bytes(b"webview2")
@@ -63,14 +63,14 @@ def test_frozen_runtime_rejects_missing_browser_executable(tmp_path: Path) -> No
 
 def test_frozen_runtime_rejects_unc_and_non_fixed_drives(tmp_path: Path) -> None:
     unc_runtime = WebViewRuntime.for_runtime(
-        Path(r"\\server\share\GameShelf"),
+        Path(r"\\server\share\GameSave-Scout"),
         frozen=True,
         release_config=ReleaseRuntimeConfig(RuntimeMode.FIXED),
         drive_type=lambda _path: 3,
         windows_build=22631,
         system_directory=tmp_path / "Windows" / "System32",
     )
-    local_runtime = tmp_path / "GameShelf" / "runtime"
+    local_runtime = tmp_path / "GameSave-Scout" / "runtime"
     local_runtime.mkdir(parents=True)
     (local_runtime / "msedgewebview2.exe").write_bytes(b"webview2")
     removable_runtime = WebViewRuntime.for_runtime(
@@ -89,7 +89,7 @@ def test_frozen_runtime_rejects_unc_and_non_fixed_drives(tmp_path: Path) -> None
 
 
 def test_windows_10_grants_runtime_permissions_once(tmp_path: Path) -> None:
-    runtime_dir = tmp_path / "GameShelf" / "runtime"
+    runtime_dir = tmp_path / "GameSave-Scout" / "runtime"
     runtime_dir.mkdir(parents=True)
     (runtime_dir / "msedgewebview2.exe").write_bytes(b"webview2")
     system_directory = tmp_path / "Windows" / "System32"
@@ -134,7 +134,7 @@ def test_windows_10_grants_runtime_permissions_once(tmp_path: Path) -> None:
 
 
 def test_windows_11_does_not_change_runtime_permissions(tmp_path: Path) -> None:
-    runtime_dir = tmp_path / "GameShelf" / "runtime"
+    runtime_dir = tmp_path / "GameSave-Scout" / "runtime"
     runtime_dir.mkdir(parents=True)
     (runtime_dir / "msedgewebview2.exe").write_bytes(b"webview2")
 
@@ -155,7 +155,7 @@ def test_windows_11_does_not_change_runtime_permissions(tmp_path: Path) -> None:
 
 
 def test_windows_10_permission_failure_preserves_stderr(tmp_path: Path) -> None:
-    runtime_dir = tmp_path / "GameShelf" / "runtime"
+    runtime_dir = tmp_path / "GameSave-Scout" / "runtime"
     runtime_dir.mkdir(parents=True)
     (runtime_dir / "msedgewebview2.exe").write_bytes(b"webview2")
     system_directory = tmp_path / "Windows" / "System32"
@@ -180,7 +180,7 @@ def test_windows_10_permission_failure_preserves_stderr(tmp_path: Path) -> None:
 
 
 def test_configure_sets_fixed_runtime_before_webview_creation(tmp_path: Path) -> None:
-    runtime_dir = tmp_path / "GameShelf" / "runtime"
+    runtime_dir = tmp_path / "GameSave-Scout" / "runtime"
     runtime_dir.mkdir(parents=True)
     (runtime_dir / "msedgewebview2.exe").write_bytes(b"webview2")
     webview = SimpleNamespace(settings={"WEBVIEW2_RUNTIME_PATH": None})
@@ -201,7 +201,7 @@ def test_configure_sets_fixed_runtime_before_webview_creation(tmp_path: Path) ->
 def test_fixed_runtime_ensure_available_validates_bundled_path(
     tmp_path: Path,
 ) -> None:
-    runtime_dir = tmp_path / "GameShelf" / "runtime"
+    runtime_dir = tmp_path / "GameSave-Scout" / "runtime"
     runtime_dir.mkdir(parents=True)
     (runtime_dir / "msedgewebview2.exe").write_bytes(b"webview2")
     runtime = WebViewRuntime.for_runtime(

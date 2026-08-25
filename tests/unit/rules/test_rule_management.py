@@ -5,20 +5,20 @@ from pathlib import Path
 
 import pytest
 
-from gameshelf.library.models import Game
-from gameshelf.platform.windows.known_folders import KnownFolders
-from gameshelf.rules.catalog import RuleCatalogService
-from gameshelf.rules.management import (
+from gamesave_scout.library.models import Game
+from gamesave_scout.platform.windows.known_folders import KnownFolders
+from gamesave_scout.rules.catalog import RuleCatalogService
+from gamesave_scout.rules.management import (
     RuleCapabilities,
     RuleListFilters,
     RuleManagementError,
     RuleManagementService,
 )
-from gameshelf.rules.repository import UserRuleRepository
-from gameshelf.rules.settings import RuleSettingsStore
-from gameshelf.saves.models import SaveLocation
-from gameshelf.saves.templates import PathTemplateResolver
-from gameshelf.scanning.path_keys import windows_path_key
+from gamesave_scout.rules.repository import UserRuleRepository
+from gamesave_scout.rules.settings import RuleSettingsStore
+from gamesave_scout.saves.models import SaveLocation
+from gamesave_scout.saves.templates import PathTemplateResolver
+from gamesave_scout.scanning.path_keys import windows_path_key
 
 
 @dataclass

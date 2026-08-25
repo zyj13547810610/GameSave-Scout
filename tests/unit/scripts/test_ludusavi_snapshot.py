@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from gameshelf.saves.ludusavi_index import LudusaviIndex
+from gamesave_scout.saves.ludusavi_index import LudusaviIndex
 from scripts.update_ludusavi_snapshot import rebuild_index_from_snapshot
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]

@@ -3,8 +3,8 @@ requires = ["setuptools>=80,<81"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "gameshelf"
-version = "0.3.2"
+name = "gamesave-scout"
+version = "0.3.3"
 description = "Portable Windows game library and save-location manager"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -27,7 +27,7 @@ dev = [
 ]
 
 [project.scripts]
-gameshelf = "gameshelf.app:main"
+gamesave-scout = "gamesave_scout.app:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -43,5 +43,5 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
-packages = ["gameshelf"]
+packages = ["gamesave_scout"]
 mypy_path = "$MYPY_CONFIG_FILE_DIR/src"

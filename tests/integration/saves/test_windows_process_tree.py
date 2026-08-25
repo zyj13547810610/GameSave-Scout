@@ -7,7 +7,7 @@ from threading import Event
 
 import pytest
 
-from gameshelf.platform.windows.process_tree import WindowsProcessTreeTracker
+from gamesave_scout.platform.windows.process_tree import WindowsProcessTreeTracker
 
 pytestmark = pytest.mark.skipif(os.name != "nt", reason="Windows process tree integration")
 

@@ -4,11 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from gameshelf.db.connection import ConnectionFactory
-from gameshelf.db.migrator import Migrator
-from gameshelf.db.writer import DbWriter
-from gameshelf.library.group_repository import GroupRepository
-from gameshelf.library.group_service import (
+from gamesave_scout.db.connection import ConnectionFactory
+from gamesave_scout.db.migrator import Migrator
+from gamesave_scout.db.writer import DbWriter
+from gamesave_scout.library.group_repository import GroupRepository
+from gamesave_scout.library.group_service import (
     DuplicateGroupName,
     GroupLimitReached,
     GroupNotFoundError,
@@ -16,7 +16,7 @@ from gameshelf.library.group_service import (
     InvalidGroupMembership,
     InvalidGroupName,
 )
-from gameshelf.library.service import GameNotFoundError
+from gamesave_scout.library.service import GameNotFoundError
 
 
 @dataclass(frozen=True)

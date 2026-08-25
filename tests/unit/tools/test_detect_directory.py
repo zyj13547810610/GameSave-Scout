@@ -1,10 +1,10 @@
 import json
 from pathlib import Path
 
-from gameshelf.bootstrap.resources import ResourcePaths
-from gameshelf.scanning.pe_metadata import PeMetadata
-from gameshelf.tools import detect_directory
-from gameshelf.tools.detect_directory import main
+from gamesave_scout.bootstrap.resources import ResourcePaths
+from gamesave_scout.scanning.pe_metadata import PeMetadata
+from gamesave_scout.tools import detect_directory
+from gamesave_scout.tools.detect_directory import main
 
 
 def test_detect_directory_outputs_json_without_creating_data(

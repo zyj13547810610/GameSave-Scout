@@ -9,22 +9,22 @@ from threading import Event, Thread
 import pytest
 from PIL import Image
 
-from gameshelf.bootstrap.paths import AppPaths
-from gameshelf.bridge.tasks import TaskCancelled
-from gameshelf.covers.candidates import CandidateFileRef, CoverCandidate
-from gameshelf.covers.local_discovery import LocalDiscoverySummary
-from gameshelf.covers.service import CoverService
-from gameshelf.covers.wizard_service import (
+from gamesave_scout.bootstrap.paths import AppPaths
+from gamesave_scout.bridge.tasks import TaskCancelled
+from gamesave_scout.covers.candidates import CandidateFileRef, CoverCandidate
+from gamesave_scout.covers.local_discovery import LocalDiscoverySummary
+from gamesave_scout.covers.service import CoverService
+from gamesave_scout.covers.wizard_service import (
     ActiveCoverWizardError,
     CandidateSourceChangedError,
     CoverWizardBusyError,
     CoverWizardService,
 )
-from gameshelf.db.connection import ConnectionFactory
-from gameshelf.db.migrator import Migrator
-from gameshelf.db.writer import DbWriter
-from gameshelf.library.repository import LibraryRepository
-from gameshelf.library.service import LibraryService
+from gamesave_scout.db.connection import ConnectionFactory
+from gamesave_scout.db.migrator import Migrator
+from gamesave_scout.db.writer import DbWriter
+from gamesave_scout.library.repository import LibraryRepository
+from gamesave_scout.library.service import LibraryService
 
 
 class _Progress:
@@ -410,7 +410,7 @@ def test_busy_close_and_stale_cleanup_are_bounded(
     fake_reparse.mkdir()
     keep.mkdir()
     monkeypatch.setattr(
-        "gameshelf.covers.wizard_service._is_reparse_path",
+        "gamesave_scout.covers.wizard_service._is_reparse_path",
         lambda path: path.name == "fake-reparse",
     )
     service = harness.service()

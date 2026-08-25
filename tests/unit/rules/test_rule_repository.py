@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from gameshelf.rules.repository import (
+from gamesave_scout.rules.repository import (
     MAX_RULE_FILE_BYTES,
     MAX_RULE_FILE_COUNT,
     MAX_RULE_TOTAL_BYTES,
@@ -63,7 +63,7 @@ def test_read_all_rejects_windows_reparse_points(tmp_path: Path, monkeypatch) ->
     candidate = repository.engine_dir / "junction.yaml"
     candidate.write_bytes(b"content")
     monkeypatch.setattr(
-        "gameshelf.rules.repository._is_link_or_reparse",
+        "gamesave_scout.rules.repository._is_link_or_reparse",
         lambda path: path == candidate,
     )
 
@@ -95,7 +95,7 @@ def test_read_all_enforces_per_file_limit(tmp_path: Path) -> None:
 def test_read_all_enforces_total_size_limit(tmp_path: Path, monkeypatch) -> None:
     repository = _repository(tmp_path)
     repository.engine_dir.mkdir(parents=True)
-    monkeypatch.setattr("gameshelf.rules.repository.MAX_RULE_TOTAL_BYTES", 5)
+    monkeypatch.setattr("gamesave_scout.rules.repository.MAX_RULE_TOTAL_BYTES", 5)
     (repository.engine_dir / "a.yaml").write_bytes(b"aaa")
     (repository.engine_dir / "b.yaml").write_bytes(b"bbb")
 
@@ -156,7 +156,7 @@ def test_apply_batch_rolls_back_existing_and_new_files_when_replace_fails(
                 raise OSError("injected replace failure")
         real_replace(source, destination)
 
-    monkeypatch.setattr("gameshelf.rules.repository.os.replace", fail_second_staged_replace)
+    monkeypatch.setattr("gamesave_scout.rules.repository.os.replace", fail_second_staged_replace)
 
     with pytest.raises(OSError, match="injected"):
         repository.apply_batch({existing: b"new", created: b"created"})
@@ -174,7 +174,7 @@ def test_apply_batch_enforces_resulting_catalog_total_size(
     repository.save_dir.mkdir(parents=True)
     existing = repository.engine_dir / "existing.yaml"
     existing.write_bytes(b"aaa")
-    monkeypatch.setattr("gameshelf.rules.repository.MAX_RULE_TOTAL_BYTES", 5)
+    monkeypatch.setattr("gamesave_scout.rules.repository.MAX_RULE_TOTAL_BYTES", 5)
 
     with pytest.raises(RuleFileError, match="8 MiB"):
         repository.write_one(repository.save_dir / "created.yaml", b"bbb")
@@ -188,7 +188,7 @@ def test_apply_batch_enforces_resulting_catalog_file_count(
     repository.engine_dir.mkdir(parents=True)
     repository.save_dir.mkdir(parents=True)
     (repository.engine_dir / "existing.yaml").write_bytes(b"a")
-    monkeypatch.setattr("gameshelf.rules.repository.MAX_RULE_FILE_COUNT", 1)
+    monkeypatch.setattr("gamesave_scout.rules.repository.MAX_RULE_FILE_COUNT", 1)
 
     with pytest.raises(RuleFileError, match="最多"):
         repository.write_one(repository.save_dir / "created.yaml", b"b")

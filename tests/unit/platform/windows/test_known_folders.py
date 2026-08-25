@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from gameshelf.platform.windows.known_folders import (
+from gamesave_scout.platform.windows.known_folders import (
     KnownFolderError,
     WindowsKnownFolderProvider,
 )

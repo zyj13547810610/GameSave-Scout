@@ -1,8 +1,8 @@
 from pathlib import Path
 
-from gameshelf.platform.windows.known_folders import KnownFolders
-from gameshelf.saves.rule_probe import BoundedRuleProbe
-from gameshelf.saves.templates import PathTemplateResolver
+from gamesave_scout.platform.windows.known_folders import KnownFolders
+from gamesave_scout.saves.rule_probe import BoundedRuleProbe
+from gamesave_scout.saves.templates import PathTemplateResolver
 
 
 class _Registry:

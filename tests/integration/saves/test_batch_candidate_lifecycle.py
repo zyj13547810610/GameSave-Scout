@@ -4,16 +4,16 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from gameshelf.db.connection import ConnectionFactory
-from gameshelf.db.migrator import Migrator
-from gameshelf.db.writer import DbWriter
-from gameshelf.saves.batch_models import MatchedBatchCandidate, RepresentativeFile
-from gameshelf.saves.batch_repository import (
+from gamesave_scout.db.connection import ConnectionFactory
+from gamesave_scout.db.migrator import Migrator
+from gamesave_scout.db.writer import DbWriter
+from gamesave_scout.saves.batch_models import MatchedBatchCandidate, RepresentativeFile
+from gamesave_scout.saves.batch_repository import (
     BatchCandidateQuery,
     BatchSaveRepository,
 )
-from gameshelf.saves.batch_scanner import BatchScopeResult
-from gameshelf.scanning.path_keys import windows_path_key
+from gamesave_scout.saves.batch_scanner import BatchScopeResult
+from gamesave_scout.scanning.path_keys import windows_path_key
 
 
 @dataclass(frozen=True)

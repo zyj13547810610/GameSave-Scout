@@ -1,8 +1,8 @@
 from pathlib import Path
 
-from gameshelf.db.connection import ConnectionFactory
-from gameshelf.db.migrator import Migrator
-from gameshelf.scanning.analysis_cache import (
+from gamesave_scout.db.connection import ConnectionFactory
+from gamesave_scout.db.migrator import Migrator
+from gamesave_scout.scanning.analysis_cache import (
     AnalysisCacheEntry,
     AnalysisCacheRepository,
     PendingAnalysisCache,

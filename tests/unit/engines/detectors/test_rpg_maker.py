@@ -1,7 +1,7 @@
 import pytest
 
-from gameshelf.engines.base import DetectionContext
-from gameshelf.engines.detectors.rpg_maker import RpgMakerDetector
+from gamesave_scout.engines.base import DetectionContext
+from gamesave_scout.engines.detectors.rpg_maker import RpgMakerDetector
 
 
 @pytest.mark.parametrize(

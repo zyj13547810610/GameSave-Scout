@@ -1,9 +1,9 @@
 from pathlib import Path
 
-from gameshelf.bootstrap.config import ConfigService, JsonConfigStore
-from gameshelf.bootstrap.paths import AppPaths
-from gameshelf.bridge.api import BridgeApi
-from gameshelf.bridge.tasks import TaskRegistry
+from gamesave_scout.bootstrap.config import ConfigService, JsonConfigStore
+from gamesave_scout.bootstrap.paths import AppPaths
+from gamesave_scout.bridge.api import BridgeApi
+from gamesave_scout.bridge.tasks import TaskRegistry
 
 
 def test_bootstrap_returns_json_safe_success(tmp_path: Path) -> None:
@@ -12,7 +12,7 @@ def test_bootstrap_returns_json_safe_success(tmp_path: Path) -> None:
         assert api.bootstrap() == {
             "ok": True,
             "data": {
-                "appName": "GameShelf",
+                "appName": "GameSave Scout",
                 "schemaVersion": 1,
                 "portable": True,
                 "uiScale": 1.0,

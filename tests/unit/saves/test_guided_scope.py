@@ -7,16 +7,16 @@ from pathlib import Path
 
 import pytest
 
-from gameshelf.db.connection import ConnectionFactory
-from gameshelf.db.migrator import Migrator
-from gameshelf.db.writer import DbWriter
-from gameshelf.library.repository import LibraryRepository
-from gameshelf.library.service import LibraryService
-from gameshelf.platform.windows.known_folders import KnownFolders
-from gameshelf.saves.guided_scope import GuidedSaveScopeBuilder, InvalidGuidedScope
-from gameshelf.saves.repository import SaveLocationRepository
-from gameshelf.saves.templates import PathTemplateResolver
-from gameshelf.scanning.path_keys import windows_path_key
+from gamesave_scout.db.connection import ConnectionFactory
+from gamesave_scout.db.migrator import Migrator
+from gamesave_scout.db.writer import DbWriter
+from gamesave_scout.library.repository import LibraryRepository
+from gamesave_scout.library.service import LibraryService
+from gamesave_scout.platform.windows.known_folders import KnownFolders
+from gamesave_scout.saves.guided_scope import GuidedSaveScopeBuilder, InvalidGuidedScope
+from gamesave_scout.saves.repository import SaveLocationRepository
+from gamesave_scout.saves.templates import PathTemplateResolver
+from gamesave_scout.scanning.path_keys import windows_path_key
 
 
 @dataclass

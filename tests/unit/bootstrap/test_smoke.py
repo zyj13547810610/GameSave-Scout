@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from gameshelf.bootstrap.smoke import SmokeReport, write_smoke_report
+from gamesave_scout.bootstrap.smoke import SmokeReport, write_smoke_report
 
 
 def _successful_report() -> SmokeReport:
@@ -15,10 +15,10 @@ def _successful_report() -> SmokeReport:
         ok=True,
         app_version="0.1.0",
         frozen=True,
-        executable=Path(r"C:\GameShelf\GameShelf.exe"),
+        executable=Path(r"C:\GameSave-Scout\GameSaveScout.exe"),
         runtime_mode="fixed",
-        resource_root=Path(r"C:\GameShelf\_internal\resources"),
-        webview_runtime=Path(r"C:\GameShelf\runtime"),
+        resource_root=Path(r"C:\GameSave-Scout\_internal\resources"),
+        webview_runtime=Path(r"C:\GameSave-Scout\runtime"),
         checks={"resources": True, "webviewRuntime": True},
         error=None,
     )
@@ -32,10 +32,10 @@ def test_smoke_report_exposes_stable_json_contract() -> None:
         "ok": True,
         "appVersion": "0.1.0",
         "frozen": True,
-        "executable": r"C:\GameShelf\GameShelf.exe",
+        "executable": r"C:\GameSave-Scout\GameSaveScout.exe",
         "runtimeMode": "fixed",
-        "resourceRoot": r"C:\GameShelf\_internal\resources",
-        "webviewRuntime": r"C:\GameShelf\runtime",
+        "resourceRoot": r"C:\GameSave-Scout\_internal\resources",
+        "webviewRuntime": r"C:\GameSave-Scout\runtime",
         "checks": {"resources": True, "webviewRuntime": True},
         "error": None,
     }
@@ -47,9 +47,9 @@ def test_smoke_report_exposes_evergreen_mode_without_fixed_runtime() -> None:
         ok=True,
         app_version="0.1.0",
         frozen=True,
-        executable=Path(r"C:\GameShelf\GameShelf.exe"),
+        executable=Path(r"C:\GameSave-Scout\GameSaveScout.exe"),
         runtime_mode="evergreen",
-        resource_root=Path(r"C:\GameShelf\_internal\resources"),
+        resource_root=Path(r"C:\GameSave-Scout\_internal\resources"),
         webview_runtime=None,
         checks={"webviewRuntime": True},
         error=None,

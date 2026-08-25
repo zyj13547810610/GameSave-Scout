@@ -5,13 +5,13 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from gameshelf.bootstrap.paths import AppPaths
-from gameshelf.covers.service import CoverService
-from gameshelf.db.connection import ConnectionFactory
-from gameshelf.db.migrator import Migrator
-from gameshelf.db.writer import DbWriter
-from gameshelf.library.repository import LibraryRepository
-from gameshelf.library.service import LibraryService
+from gamesave_scout.bootstrap.paths import AppPaths
+from gamesave_scout.covers.service import CoverService
+from gamesave_scout.db.connection import ConnectionFactory
+from gamesave_scout.db.migrator import Migrator
+from gamesave_scout.db.writer import DbWriter
+from gamesave_scout.library.repository import LibraryRepository
+from gamesave_scout.library.service import LibraryService
 
 
 @pytest.fixture

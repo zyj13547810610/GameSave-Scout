@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from gameshelf.engines.rule_schema import load_engine_rules
+from gamesave_scout.engines.rule_schema import load_engine_rules
 
 
 def test_every_formal_builtin_engine_rule_has_public_references() -> None:

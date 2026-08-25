@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-import gameshelf.bootstrap.webview_bootstrapper as bootstrapper_module
-from gameshelf.bootstrap.release_runtime import ReleaseRuntimeConfig, RuntimeMode
-from gameshelf.bootstrap.webview_bootstrapper import (
+import gamesave_scout.bootstrap.webview_bootstrapper as bootstrapper_module
+from gamesave_scout.bootstrap.release_runtime import ReleaseRuntimeConfig, RuntimeMode
+from gamesave_scout.bootstrap.webview_bootstrapper import (
     EvergreenRuntimeGuide,
     WebViewBootstrapperError,
     WebViewInstallCancelled,
@@ -145,7 +145,7 @@ def test_location_opener_selects_bootstrapper_with_system_explorer(
     explorer.write_bytes(b"explorer")
     bootstrapper = (
         tmp_path
-        / "GameShelf"
+        / "GameSave-Scout"
         / "prerequisites"
         / "MicrosoftEdgeWebview2Setup.exe"
     )

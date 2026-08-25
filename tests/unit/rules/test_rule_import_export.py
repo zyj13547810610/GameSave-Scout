@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from gameshelf.rules.import_export import (
+from gamesave_scout.rules.import_export import (
     RuleImportDecision,
     RuleImportExportError,
     RuleImportExportService,

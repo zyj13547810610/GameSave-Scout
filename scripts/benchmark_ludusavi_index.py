@@ -14,11 +14,11 @@ from typing import Any, cast
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPOSITORY_ROOT / "src"))
 
-from gameshelf.library.models import Game  # noqa: E402
-from gameshelf.platform.windows.known_folders import KnownFolders  # noqa: E402
-from gameshelf.saves.ludusavi_index import LudusaviIndex  # noqa: E402
-from gameshelf.saves.ludusavi_index_matcher import IndexedLudusaviMatcher  # noqa: E402
-from gameshelf.saves.templates import PathTemplateResolver  # noqa: E402
+from gamesave_scout.library.models import Game  # noqa: E402
+from gamesave_scout.platform.windows.known_folders import KnownFolders  # noqa: E402
+from gamesave_scout.saves.ludusavi_index import LudusaviIndex  # noqa: E402
+from gamesave_scout.saves.ludusavi_index_matcher import IndexedLudusaviMatcher  # noqa: E402
+from gamesave_scout.saves.templates import PathTemplateResolver  # noqa: E402
 
 
 @dataclass(frozen=True, slots=True)

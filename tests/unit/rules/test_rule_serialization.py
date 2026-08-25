@@ -5,15 +5,15 @@ from dataclasses import replace
 import pytest
 import yaml
 
-from gameshelf.engines.rule_schema import (
+from gamesave_scout.engines.rule_schema import (
     RuleSchemaError,
     parse_engine_rule_document,
 )
-from gameshelf.rules.serialization import (
+from gamesave_scout.rules.serialization import (
     serialize_rule_document,
     verification_fingerprint,
 )
-from gameshelf.saves.rule_schema import (
+from gamesave_scout.saves.rule_schema import (
     SaveRuleSchemaError,
     parse_save_rule_document,
 )

@@ -2,11 +2,11 @@ from pathlib import Path
 
 import pytest
 
-from gameshelf.saves.batch_candidates import (
+from gamesave_scout.saves.batch_candidates import (
     BatchCandidateAccumulator,
     candidate_path_key,
 )
-from gameshelf.saves.batch_models import (
+from gamesave_scout.saves.batch_models import (
     BatchScanScope,
     BatchScanSummary,
     RawBatchCandidate,

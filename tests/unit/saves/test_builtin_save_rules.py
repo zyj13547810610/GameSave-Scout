@@ -3,11 +3,11 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from gameshelf.library.models import Game
-from gameshelf.platform.windows.known_folders import KnownFolders
-from gameshelf.saves.builtin_rules import SaveRuleProvider
-from gameshelf.saves.rule_schema import load_save_rules, parse_save_rule_document
-from gameshelf.saves.templates import PathTemplateResolver
+from gamesave_scout.library.models import Game
+from gamesave_scout.platform.windows.known_folders import KnownFolders
+from gamesave_scout.saves.builtin_rules import SaveRuleProvider
+from gamesave_scout.saves.rule_schema import load_save_rules, parse_save_rule_document
+from gamesave_scout.saves.templates import PathTemplateResolver
 
 
 def test_game_specific_rule_uses_version_free_exact_title_and_not_fuzzy(

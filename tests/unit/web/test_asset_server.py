@@ -4,14 +4,14 @@ from urllib.request import Request, urlopen
 
 import pytest
 
-from gameshelf.web.asset_server import AssetServer
+from gamesave_scout.web.asset_server import AssetServer
 
 
 @pytest.fixture
 def asset_server(tmp_path: Path):
     ui = tmp_path / "ui"
     ui.mkdir()
-    (ui / "index.html").write_text("<h1>GameShelf</h1>", encoding="utf-8")
+    (ui / "index.html").write_text("<h1>GameSave Scout</h1>", encoding="utf-8")
     covers = tmp_path / "covers"
     covers.mkdir()
     thumb = covers / "game-1.webp"
@@ -55,7 +55,7 @@ def test_server_serves_ui_and_head_without_directory_listing(
 ) -> None:
     address = asset_server.start()
     with urlopen(address.ui_url, timeout=2) as response:
-        assert response.read() == b"<h1>GameShelf</h1>"
+        assert response.read() == b"<h1>GameSave Scout</h1>"
         assert "default-src 'self'" in response.headers["Content-Security-Policy"]
     request = Request(address.ui_url, method="HEAD")
     with urlopen(request, timeout=2) as response:

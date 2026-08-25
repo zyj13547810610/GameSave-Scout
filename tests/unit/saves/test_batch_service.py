@@ -5,15 +5,15 @@ from types import MappingProxyType
 
 import pytest
 
-from gameshelf.bridge.tasks import TaskCancelled
-from gameshelf.saves.batch_models import RawBatchCandidate
-from gameshelf.saves.batch_rules import BatchRuleCatalog
-from gameshelf.saves.batch_scanner import (
+from gamesave_scout.bridge.tasks import TaskCancelled
+from gamesave_scout.saves.batch_models import RawBatchCandidate
+from gamesave_scout.saves.batch_rules import BatchRuleCatalog
+from gamesave_scout.saves.batch_scanner import (
     BatchScanCancelled,
     BatchScanOutput,
     BatchScopeResult,
 )
-from gameshelf.saves.batch_service import (
+from gamesave_scout.saves.batch_service import (
     BatchSaveDiscoveryService,
     BatchScanRequest,
 )

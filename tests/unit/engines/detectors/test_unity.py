@@ -1,5 +1,5 @@
-from gameshelf.engines.base import DetectionContext
-from gameshelf.engines.detectors.unity import UnityDetector
+from gamesave_scout.engines.base import DetectionContext
+from gamesave_scout.engines.detectors.unity import UnityDetector
 
 
 def test_unity_requires_player_named_data_and_manager(file_tree) -> None:

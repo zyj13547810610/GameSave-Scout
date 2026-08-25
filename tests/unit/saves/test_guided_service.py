@@ -8,22 +8,22 @@ from threading import Thread
 
 import pytest
 
-from gameshelf.db.connection import ConnectionFactory
-from gameshelf.db.migrator import Migrator
-from gameshelf.db.writer import DbWriter
-from gameshelf.library.launcher import LaunchReceipt
-from gameshelf.platform.windows.known_folders import KnownFolders
-from gameshelf.saves.guided_events import RawFileChange
-from gameshelf.saves.guided_models import (
+from gamesave_scout.db.connection import ConnectionFactory
+from gamesave_scout.db.migrator import Migrator
+from gamesave_scout.db.writer import DbWriter
+from gamesave_scout.library.launcher import LaunchReceipt
+from gamesave_scout.platform.windows.known_folders import KnownFolders
+from gamesave_scout.saves.guided_events import RawFileChange
+from gamesave_scout.saves.guided_models import (
     GuidedSavePreview,
     GuidedScopeOption,
 )
-from gameshelf.saves.guided_registry import RegistrySnapshot
-from gameshelf.saves.guided_repository import GuidedSaveRepository
-from gameshelf.saves.guided_scanner import MetadataScanResult
-from gameshelf.saves.guided_scoring import GuidedScoringContext
-from gameshelf.saves.guided_service import GuidedSaveError, GuidedSaveSessionService
-from gameshelf.saves.templates import PathTemplateResolver
+from gamesave_scout.saves.guided_registry import RegistrySnapshot
+from gamesave_scout.saves.guided_repository import GuidedSaveRepository
+from gamesave_scout.saves.guided_scanner import MetadataScanResult
+from gamesave_scout.saves.guided_scoring import GuidedScoringContext
+from gamesave_scout.saves.guided_service import GuidedSaveError, GuidedSaveSessionService
+from gamesave_scout.saves.templates import PathTemplateResolver
 
 
 @dataclass

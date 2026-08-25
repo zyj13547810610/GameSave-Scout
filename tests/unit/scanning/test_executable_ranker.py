@@ -1,10 +1,10 @@
 from pathlib import Path
 
-from gameshelf.scanning.executable_ranker import (
+from gamesave_scout.scanning.executable_ranker import (
     is_potential_game_executable_name,
     rank_executables,
 )
-from gameshelf.scanning.pe_metadata import PeMetadata, read_pe_metadata
+from gamesave_scout.scanning.pe_metadata import PeMetadata, read_pe_metadata
 
 
 def test_ranker_rejects_installers_and_prefers_title_match(
@@ -15,7 +15,7 @@ def test_ranker_rejects_installers_and_prefers_title_match(
     for name in ["Alice.exe", "setup.exe", "unins000.exe", "crashreporter.exe"]:
         (game / name).write_bytes(b"MZ")
     monkeypatch.setattr(
-        "gameshelf.scanning.executable_ranker.read_pe_metadata",
+        "gamesave_scout.scanning.executable_ranker.read_pe_metadata",
         lambda path: PeMetadata(
             product_name="Alice" if path.name == "Alice.exe" else "",
             file_description="",
@@ -69,7 +69,7 @@ def test_ranker_skips_the_entire_mods_subtree(tmp_path: Path, monkeypatch) -> No
     mod_tool.write_bytes(b"MZ")
     (game / "RimWorldWin64.exe").write_bytes(b"MZ")
     monkeypatch.setattr(
-        "gameshelf.scanning.executable_ranker.read_pe_metadata",
+        "gamesave_scout.scanning.executable_ranker.read_pe_metadata",
         lambda _: PeMetadata("", "", "", "unknown"),
     )
 
@@ -87,7 +87,7 @@ def test_ranker_penalizes_nested_developer_tools_and_ignores_self_metadata(
     (game / "RimWorldWin64.exe").write_bytes(b"MZ")
     (tool / "ModAssetCompiler.exe").write_bytes(b"MZ")
     monkeypatch.setattr(
-        "gameshelf.scanning.executable_ranker.read_pe_metadata",
+        "gamesave_scout.scanning.executable_ranker.read_pe_metadata",
         lambda path: PeMetadata(
             product_name=path.stem if path.name == "ModAssetCompiler.exe" else "",
             file_description=path.stem if path.name == "ModAssetCompiler.exe" else "",
@@ -116,7 +116,7 @@ def test_ranker_prefers_a_title_segment_over_a_larger_generic_engine(
     (game / "SiglusEngine.exe").write_bytes(b"MZ" + b"\0" * 1024 * 1024)
     (game / "SummerPockets（枫笛汉化组）.exe").write_bytes(b"MZ")
     monkeypatch.setattr(
-        "gameshelf.scanning.executable_ranker.read_pe_metadata",
+        "gamesave_scout.scanning.executable_ranker.read_pe_metadata",
         lambda _: PeMetadata("", "", "", "x86"),
     )
 
@@ -139,7 +139,7 @@ def test_ranker_prefers_a_nested_unity_player_layout(
     (data / "globalgamemanagers").write_bytes(b"unity")
     (build / "UnityCrashHandler64.exe").write_bytes(b"MZ")
     monkeypatch.setattr(
-        "gameshelf.scanning.executable_ranker.read_pe_metadata",
+        "gamesave_scout.scanning.executable_ranker.read_pe_metadata",
         lambda _: PeMetadata("", "", "", "x64"),
     )
 
@@ -162,7 +162,7 @@ def test_ranker_prefers_an_unreal_bootstrap_executable(
     (engine_bin / "UnrealCEFSubProcess.exe").write_bytes(b"MZ")
     (project_bin / "Paralogue-Win64-Shipping.exe").write_bytes(b"MZ")
     monkeypatch.setattr(
-        "gameshelf.scanning.executable_ranker.read_pe_metadata",
+        "gamesave_scout.scanning.executable_ranker.read_pe_metadata",
         lambda path: PeMetadata(
             "BootstrapPackagedGame" if path.name == "FallenDoll.exe" else "",
             "",
@@ -189,7 +189,7 @@ def test_ranker_uses_unreal_shipping_executable_as_fallback(
     shipping = project_bin / "ProjectName-Win64-Shipping.exe"
     shipping.write_bytes(b"MZ")
     monkeypatch.setattr(
-        "gameshelf.scanning.executable_ranker.read_pe_metadata",
+        "gamesave_scout.scanning.executable_ranker.read_pe_metadata",
         lambda _: PeMetadata("", "", "", "x64"),
     )
 
@@ -207,7 +207,7 @@ def test_ranker_excludes_known_auxiliary_executables(
     for name in ["HENPRI.exe", "delfile.exe", "UnityCrashHandler32.exe"]:
         (tmp_path / name).write_bytes(b"MZ")
     monkeypatch.setattr(
-        "gameshelf.scanning.executable_ranker.read_pe_metadata",
+        "gamesave_scout.scanning.executable_ranker.read_pe_metadata",
         lambda path: PeMetadata(
             product_name=path.stem,
             file_description=path.stem,
@@ -229,7 +229,7 @@ def test_ranker_excludes_support_directories_and_auxiliary_executables(
     (tmp_path / "Game.exe").write_bytes(b"MZ")
     (tmp_path / "config.exe").write_bytes(b"MZ")
     monkeypatch.setattr(
-        "gameshelf.scanning.executable_ranker.read_pe_metadata",
+        "gamesave_scout.scanning.executable_ranker.read_pe_metadata",
         lambda _: PeMetadata("", "", "", "x86"),
     )
 
@@ -242,7 +242,7 @@ def test_ranking_is_deterministic_for_equal_candidates(tmp_path: Path, monkeypat
     for name in ["z.exe", "A.exe"]:
         (tmp_path / name).write_bytes(b"MZ")
     monkeypatch.setattr(
-        "gameshelf.scanning.executable_ranker.read_pe_metadata",
+        "gamesave_scout.scanning.executable_ranker.read_pe_metadata",
         lambda _: PeMetadata("", "", "", "unknown"),
     )
 

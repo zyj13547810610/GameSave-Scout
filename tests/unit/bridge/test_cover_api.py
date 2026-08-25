@@ -5,15 +5,15 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from gameshelf.bootstrap.paths import AppPaths
-from gameshelf.bridge.api import BridgeApi
-from gameshelf.bridge.tasks import TaskRegistry
-from gameshelf.covers.service import CoverService
-from gameshelf.db.connection import ConnectionFactory
-from gameshelf.db.migrator import Migrator
-from gameshelf.db.writer import DbWriter
-from gameshelf.library.repository import LibraryRepository
-from gameshelf.library.service import LibraryService
+from gamesave_scout.bootstrap.paths import AppPaths
+from gamesave_scout.bridge.api import BridgeApi
+from gamesave_scout.bridge.tasks import TaskRegistry
+from gamesave_scout.covers.service import CoverService
+from gamesave_scout.db.connection import ConnectionFactory
+from gamesave_scout.db.migrator import Migrator
+from gamesave_scout.db.writer import DbWriter
+from gamesave_scout.library.repository import LibraryRepository
+from gamesave_scout.library.service import LibraryService
 
 
 def test_clipboard_api_rejects_non_png_and_oversize_payload(cover_api) -> None:

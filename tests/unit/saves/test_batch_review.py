@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from gameshelf.db.connection import ConnectionFactory
-from gameshelf.saves.batch_review import (
+from gamesave_scout.db.connection import ConnectionFactory
+from gamesave_scout.saves.batch_review import (
     BatchReviewError,
     BatchSaveReviewService,
     SaveOnlyDraft,

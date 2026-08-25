@@ -4,23 +4,23 @@ import base64
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from gameshelf.bootstrap.config import ConfigService, JsonConfigStore
-from gameshelf.bootstrap.paths import AppPaths
-from gameshelf.bridge.api import BridgeApi
-from gameshelf.bridge.tasks import TaskRegistry
-from gameshelf.covers.candidates import (
+from gamesave_scout.bootstrap.config import ConfigService, JsonConfigStore
+from gamesave_scout.bootstrap.paths import AppPaths
+from gamesave_scout.bridge.api import BridgeApi
+from gamesave_scout.bridge.tasks import TaskRegistry
+from gamesave_scout.covers.candidates import (
     CandidateFileRef,
     CoverCandidate,
     CoverWizardQueueItem,
     CoverWizardSnapshot,
 )
-from gameshelf.covers.local_discovery import LocalDiscoverySummary
-from gameshelf.covers.wizard_service import (
+from gamesave_scout.covers.local_discovery import LocalDiscoverySummary
+from gamesave_scout.covers.wizard_service import (
     ActiveCoverWizardError,
     CandidateSourceChangedError,
     CoverWizardBusyError,
 )
-from gameshelf.library.models import Game
+from gamesave_scout.library.models import Game
 
 
 class _Library:

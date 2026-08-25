@@ -2,9 +2,9 @@ from pathlib import Path
 
 import pytest
 
-from gameshelf.bootstrap.config import AppConfig, BatchSaveCustomRoot
-from gameshelf.platform.windows.known_folders import KnownFolders
-from gameshelf.saves.batch_scope import BatchScopeBuilder
+from gamesave_scout.bootstrap.config import AppConfig, BatchSaveCustomRoot
+from gamesave_scout.platform.windows.known_folders import KnownFolders
+from gamesave_scout.saves.batch_scope import BatchScopeBuilder
 
 
 def test_scope_builder_selects_enabled_roots_and_keeps_nested_scope(

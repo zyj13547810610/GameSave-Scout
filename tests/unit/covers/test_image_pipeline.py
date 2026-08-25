@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from gameshelf.covers.image_pipeline import InvalidCoverImage, normalize_cover
+from gamesave_scout.covers.image_pipeline import InvalidCoverImage, normalize_cover
 
 
 def test_pipeline_keeps_full_image_and_creates_centered_two_by_three_thumb(
@@ -46,7 +46,7 @@ def test_pipeline_rejects_images_over_pixel_limit(tmp_path: Path, monkeypatch) -
     source = BytesIO()
     Image.new("RGB", (100, 100), "black").save(source, format="PNG")
     source.seek(0)
-    monkeypatch.setattr("gameshelf.covers.image_pipeline.MAX_PIXELS", 9_999)
+    monkeypatch.setattr("gamesave_scout.covers.image_pipeline.MAX_PIXELS", 9_999)
 
     with pytest.raises(InvalidCoverImage, match="pixel"):
         normalize_cover(source, "image/png", tmp_path / "too-large")

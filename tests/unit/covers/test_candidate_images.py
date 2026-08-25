@@ -7,13 +7,13 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from gameshelf.covers import candidate_images
-from gameshelf.covers.candidate_images import (
+from gamesave_scout.covers import candidate_images
+from gamesave_scout.covers.candidate_images import (
     PREVIEW_MAX_SIZE,
     stage_candidate_bytes,
     stage_candidate_file,
 )
-from gameshelf.covers.image_pipeline import InvalidCoverImage
+from gamesave_scout.covers.image_pipeline import InvalidCoverImage
 
 
 def _image_bytes(image_format: str, size: tuple[int, int] = (120, 180)) -> bytes:

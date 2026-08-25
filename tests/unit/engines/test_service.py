@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from gameshelf.engines.rule_schema import parse_engine_rule_document
-from gameshelf.engines.service import BUILTIN_ENGINE_IDS, EngineDetectionService
+from gamesave_scout.engines.rule_schema import parse_engine_rule_document
+from gamesave_scout.engines.service import BUILTIN_ENGINE_IDS, EngineDetectionService
 
 
 def _rules(path: Path, version: str) -> None:

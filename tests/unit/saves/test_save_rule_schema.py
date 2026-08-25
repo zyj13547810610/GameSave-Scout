@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from gameshelf.saves.rule_schema import (
+from gamesave_scout.saves.rule_schema import (
     SaveRuleSchemaError,
     load_save_rules,
     parse_save_rule_document,

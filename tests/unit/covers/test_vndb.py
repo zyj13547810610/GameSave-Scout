@@ -11,8 +11,8 @@ from urllib.request import Request
 import pytest
 from PIL import Image
 
-from gameshelf.covers import vndb
-from gameshelf.covers.vndb import VndbClient, VndbError
+from gamesave_scout.covers import vndb
+from gamesave_scout.covers.vndb import VndbClient, VndbError
 
 
 class _Response:
@@ -134,7 +134,7 @@ def test_search_sends_exact_post_contract_and_builds_candidate(tmp_path: Path) -
     }
     assert request.get_header("Content-type") == "application/json"
     assert request.get_header("Accept") == "application/json"
-    assert request.get_header("User-agent") == "GameShelf/0.3.2"
+    assert request.get_header("User-agent") == "GameSaveScout/0.3.3"
     assert len(candidates) == 1
     assert candidates[0].source == "vndb"
     assert candidates[0].vndb_id == "v17"

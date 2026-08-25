@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from gameshelf.saves.guided_scanner import BoundedMetadataScanner
+from gamesave_scout.saves.guided_scanner import BoundedMetadataScanner
 
 
 def test_scanner_returns_only_files_changed_inside_the_session_window(

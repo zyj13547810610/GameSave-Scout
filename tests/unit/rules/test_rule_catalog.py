@@ -2,11 +2,11 @@ from pathlib import Path
 
 import pytest
 
-from gameshelf.platform.windows.known_folders import KnownFolders
-from gameshelf.rules.catalog import RuleCatalogError, RuleCatalogService
-from gameshelf.rules.repository import UserRuleRepository
-from gameshelf.rules.settings import RuleSettings, RuleSettingsStore
-from gameshelf.saves.templates import PathTemplateResolver
+from gamesave_scout.platform.windows.known_folders import KnownFolders
+from gamesave_scout.rules.catalog import RuleCatalogError, RuleCatalogService
+from gamesave_scout.rules.repository import UserRuleRepository
+from gamesave_scout.rules.settings import RuleSettings, RuleSettingsStore
+from gamesave_scout.saves.templates import PathTemplateResolver
 
 ENGINE_DOCUMENT = b"""\
 version: test

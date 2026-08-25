@@ -1,5 +1,5 @@
-from gameshelf.engines.base import DetectionContext
-from gameshelf.engines.detectors.wolf import WolfRpgDetector
+from gamesave_scout.engines.base import DetectionContext
+from gamesave_scout.engines.detectors.wolf import WolfRpgDetector
 
 
 def test_wolf_plain_and_encrypted_layouts(file_tree) -> None:

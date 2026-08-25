@@ -1,13 +1,13 @@
 from pathlib import Path
 from threading import Event
 
-from gameshelf.bridge.tasks import TaskContext
-from gameshelf.db.connection import ConnectionFactory
-from gameshelf.db.migrator import Migrator
-from gameshelf.db.writer import DbWriter
-from gameshelf.library.repository import LibraryRepository
-from gameshelf.library.service import LibraryService
-from gameshelf.scanning.service import ScanService
+from gamesave_scout.bridge.tasks import TaskContext
+from gamesave_scout.db.connection import ConnectionFactory
+from gamesave_scout.db.migrator import Migrator
+from gamesave_scout.db.writer import DbWriter
+from gamesave_scout.library.repository import LibraryRepository
+from gamesave_scout.library.service import LibraryService
+from gamesave_scout.scanning.service import ScanService
 
 
 def test_quick_checks_only_known_games_for_children_and_recursive_roots(

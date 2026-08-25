@@ -1,5 +1,5 @@
-from gameshelf.engines.base import DetectionContext
-from gameshelf.engines.detectors.renpy import RenPyDetector
+from gamesave_scout.engines.base import DetectionContext
+from gamesave_scout.engines.detectors.renpy import RenPyDetector
 
 
 def test_renpy_requires_scripts_and_runtime(file_tree) -> None:

@@ -7,11 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from gameshelf.db.connection import ConnectionFactory
-from gameshelf.db.migrator import Migrator
-from gameshelf.db.writer import DbWriter
-from gameshelf.saves.guided_models import GuidedDiscoveryDraft, GuidedScopeOption
-from gameshelf.saves.guided_repository import (
+from gamesave_scout.db.connection import ConnectionFactory
+from gamesave_scout.db.migrator import Migrator
+from gamesave_scout.db.writer import DbWriter
+from gamesave_scout.saves.guided_models import GuidedDiscoveryDraft, GuidedScopeOption
+from gamesave_scout.saves.guided_repository import (
     ActiveGuidedSessionError,
     GuidedSaveRepository,
     InvalidGuidedSessionState,

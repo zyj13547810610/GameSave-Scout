@@ -3,7 +3,7 @@ from threading import Event
 
 import pytest
 
-from gameshelf.bridge.tasks import (
+from gamesave_scout.bridge.tasks import (
     ActiveTaskConflict,
     TaskCancelled,
     TaskRegistry,
@@ -64,7 +64,7 @@ def test_task_failure_isolated_as_user_safe_snapshot() -> None:
     assert snapshot.status == "failed"
     assert snapshot.error == {
         "code": "task_failed",
-        "message": "任务执行失败，请查看 data/logs/gameshelf.log。",
+        "message": "任务执行失败，请查看 data/logs/gamesave-scout.log。",
     }
     assert "secret" not in str(snapshot)
     registry.close()

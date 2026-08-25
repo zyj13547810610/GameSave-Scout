@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from gameshelf.db.connection import ConnectionFactory
-from gameshelf.db.writer import DbWriter, WriterClosedError
+from gamesave_scout.db.connection import ConnectionFactory
+from gamesave_scout.db.writer import DbWriter, WriterClosedError
 
 
 def test_writer_commits_operations_in_submission_order(tmp_path: Path) -> None:

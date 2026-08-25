@@ -5,8 +5,8 @@ import json
 from io import StringIO
 from pathlib import Path
 
-from gameshelf.saves.ludusavi_index_builder import build_ludusavi_index
-from gameshelf.saves.ludusavi_parser import parse_manifest
+from gamesave_scout.saves.ludusavi_index_builder import build_ludusavi_index
+from gamesave_scout.saves.ludusavi_parser import parse_manifest
 from scripts.benchmark_ludusavi_index import benchmark_directory
 
 

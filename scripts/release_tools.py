@@ -28,7 +28,7 @@ from uuid import uuid4
 
 import yaml
 
-from gameshelf.saves.ludusavi_index import InvalidLudusaviIndex, LudusaviIndex
+from gamesave_scout.saves.ludusavi_index import InvalidLudusaviIndex, LudusaviIndex
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 _VERSION_PATTERN = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?")

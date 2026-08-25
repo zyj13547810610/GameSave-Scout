@@ -3,7 +3,7 @@ from __future__ import annotations
 from threading import Event
 from threading import enumerate as enumerate_threads
 
-from gameshelf.platform.windows.process_tree import (
+from gamesave_scout.platform.windows.process_tree import (
     ProcessRecord,
     WindowsProcessTreeTracker,
 )

@@ -2,9 +2,9 @@ from pathlib import Path
 
 import pytest
 
-from gameshelf.engines.base import DetectionContext
-from gameshelf.engines.rule_detector import RuleDetector
-from gameshelf.engines.rule_schema import (
+from gamesave_scout.engines.base import DetectionContext
+from gamesave_scout.engines.rule_detector import RuleDetector
+from gamesave_scout.engines.rule_schema import (
     RuleSchemaError,
     load_engine_rules,
     parse_engine_rule_document,

@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from gameshelf.scanning.path_keys import (
+from gamesave_scout.scanning.path_keys import (
     PathTraversalError,
     expand_relative,
     is_same_or_child,

@@ -2,10 +2,10 @@ from pathlib import Path
 
 import pytest
 
-from gameshelf.engines.registry import DetectorRegistry
-from gameshelf.engines.rule_detector import RuleDetector
-from gameshelf.engines.rule_schema import load_engine_rules
-from gameshelf.engines.service import EngineDetectionService
+from gamesave_scout.engines.registry import DetectorRegistry
+from gamesave_scout.engines.rule_detector import RuleDetector
+from gamesave_scout.engines.rule_schema import load_engine_rules
+from gamesave_scout.engines.service import EngineDetectionService
 
 RULES_FILE = Path("resources/rules/builtin/engines.yaml")
 

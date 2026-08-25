@@ -5,12 +5,12 @@ from typing import cast
 
 import webview
 
-from gameshelf.bootstrap.paths import AppPaths
-from gameshelf.bridge.api import BridgeApi
-from gameshelf.bridge.rule_controller import RuleBridgeController
-from gameshelf.bridge.tasks import TaskRegistry
-from gameshelf.rules.import_export import RuleImportExportService
-from gameshelf.saves.ludusavi_provider import (
+from gamesave_scout.bootstrap.paths import AppPaths
+from gamesave_scout.bridge.api import BridgeApi
+from gamesave_scout.bridge.rule_controller import RuleBridgeController
+from gamesave_scout.bridge.tasks import TaskRegistry
+from gamesave_scout.rules.import_export import RuleImportExportService
+from gamesave_scout.saves.ludusavi_provider import (
     LudusaviProvider,
     LudusaviStatus,
     SnapshotMetadata,
@@ -219,7 +219,7 @@ def test_rule_api_uses_multi_open_save_dialog_and_restricted_directories(
     }
     assert window.calls[0][1] == {
         "allow_multiple": True,
-        "file_types": ("GameShelf 规则 (*.yaml;*.yml)",),
+        "file_types": ("GameSave Scout 规则 (*.yaml;*.yml)",),
     }
     assert window.calls[1][1]["allow_multiple"] is False
     assert window.calls[1][0] is webview.SAVE_DIALOG

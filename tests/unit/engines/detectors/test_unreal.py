@@ -2,9 +2,9 @@ from pathlib import Path
 
 import pytest
 
-from gameshelf.engines.base import DetectionContext
-from gameshelf.engines.detectors.unreal import UnrealDetector
-from gameshelf.scanning.pe_metadata import PeMetadata
+from gamesave_scout.engines.base import DetectionContext
+from gamesave_scout.engines.detectors.unreal import UnrealDetector
+from gamesave_scout.scanning.pe_metadata import PeMetadata
 
 
 def test_detects_unreal_bootstrap_with_runtime_layout(
@@ -13,7 +13,7 @@ def test_detects_unreal_bootstrap_with_runtime_layout(
     executable = _unreal_layout(tmp_path) / "Sample.exe"
     executable.write_bytes(b"MZ")
     monkeypatch.setattr(
-        "gameshelf.engines.detectors.unreal.read_pe_metadata",
+        "gamesave_scout.engines.detectors.unreal.read_pe_metadata",
         lambda _: PeMetadata("BootstrapPackagedGame", "", "Epic Games", "x64"),
     )
 

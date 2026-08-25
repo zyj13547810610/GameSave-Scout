@@ -4,8 +4,8 @@ from time import sleep
 
 import pytest
 
-from gameshelf.bridge.tasks import TaskCancelled, TaskContext
-from gameshelf.scanning.analysis_pool import ScanAnalysisPool
+from gamesave_scout.bridge.tasks import TaskCancelled, TaskContext
+from gamesave_scout.scanning.analysis_pool import ScanAnalysisPool
 
 
 def _context(cancelled: Event | None = None) -> TaskContext:

@@ -2,20 +2,20 @@ from __future__ import annotations
 
 from types import MappingProxyType
 
-from gameshelf.library.models import Game
-from gameshelf.saves.batch_candidates import candidate_path_key
-from gameshelf.saves.batch_matching import (
+from gamesave_scout.library.models import Game
+from gamesave_scout.saves.batch_candidates import candidate_path_key
+from gamesave_scout.saves.batch_matching import (
     BatchCandidateMatcher,
     group_matched_candidates,
 )
-from gameshelf.saves.batch_models import RawBatchCandidate, RepresentativeFile
-from gameshelf.saves.batch_rules import (
+from gamesave_scout.saves.batch_models import RawBatchCandidate, RepresentativeFile
+from gamesave_scout.saves.batch_rules import (
     BatchPathRule,
     BatchRuleCatalog,
     RuleIdentity,
 )
-from gameshelf.saves.models import SaveLocation
-from gameshelf.scanning.path_keys import windows_path_key
+from gamesave_scout.saves.models import SaveLocation
+from gamesave_scout.scanning.path_keys import windows_path_key
 
 
 def test_exact_recorded_path_wins_and_may_target_a_save_only_card() -> None:

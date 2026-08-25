@@ -9,14 +9,15 @@ from types import ModuleType, SimpleNamespace
 
 import pytest
 
-import gameshelf.app as app_module
-from gameshelf.app import main
-from gameshelf.bootstrap.webview_bootstrapper import (
+import gamesave_scout.app as app_module
+from gamesave_scout.app import main
+from gamesave_scout.bootstrap.resources import ResourcePaths
+from gamesave_scout.bootstrap.webview_bootstrapper import (
     WebViewBootstrapperError,
     WebViewInstallCancelled,
     WebViewManualInstallRequired,
 )
-from gameshelf.bootstrap.webview_runtime import WebViewRuntime
+from gamesave_scout.bootstrap.webview_runtime import WebViewRuntime
 
 
 class RecordingReporter:
@@ -32,7 +33,7 @@ def test_json_smoke_writes_success_without_creating_desktop_window(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     output = tmp_path / "reports" / "smoke.json"
-    app_root = tmp_path / "GameShelf"
+    app_root = tmp_path / "GameSave-Scout"
     reporter = RecordingReporter()
 
     def unexpected_window(*_args: object, **_kwargs: object) -> object:
@@ -86,7 +87,9 @@ def test_json_smoke_writes_success_without_creating_desktop_window(
     assert payload["ok"] is True
     assert payload["frozen"] is False
     assert payload["runtimeMode"] == "source"
-    assert payload["resourceRoot"].endswith("GameShelf\\resources")
+    assert Path(payload["resourceRoot"]).resolve() == ResourcePaths.for_runtime(
+        frozen=False
+    ).root.resolve()
     assert payload["webviewRuntime"] is None
     assert payload["checks"] == {
         "resources": True,
@@ -149,7 +152,7 @@ def test_json_smoke_reports_desktop_dependency_import_failure(
             "--json-output",
             str(output),
             "--app-root",
-            str(tmp_path / "GameShelf"),
+            str(tmp_path / "GameSave-Scout"),
         ]
     )
 
@@ -166,7 +169,7 @@ def test_json_smoke_writes_failure_without_showing_frozen_dialog(
     bundle_root = tmp_path / "_internal"
     bundle_root.mkdir()
     output = tmp_path / "smoke.json"
-    app_root = tmp_path / "GameShelf"
+    app_root = tmp_path / "GameSave-Scout"
     reporter = RecordingReporter()
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(sys, "_MEIPASS", str(bundle_root), raising=False)
@@ -206,7 +209,7 @@ def test_normal_frozen_startup_failure_uses_reporter_once(
 ) -> None:
     bundle_root = tmp_path / "_internal"
     bundle_root.mkdir()
-    app_root = tmp_path / "GameShelf"
+    app_root = tmp_path / "GameSave-Scout"
     reporter = RecordingReporter()
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(sys, "_MEIPASS", str(bundle_root), raising=False)
@@ -228,7 +231,7 @@ def test_user_cancelled_webview_install_exits_without_error_log(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     bundle_root = tmp_path / "_internal"
-    app_root = tmp_path / "GameShelf"
+    app_root = tmp_path / "GameSave-Scout"
     _create_required_resources(bundle_root / "resources")
     _write_release_manifest(app_root, mode="evergreen")
     reporter = RecordingReporter()
@@ -255,7 +258,7 @@ def test_manual_install_location_opened_exits_without_building_application(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     bundle_root = tmp_path / "_internal"
-    app_root = tmp_path / "GameShelf"
+    app_root = tmp_path / "GameSave-Scout"
     _create_required_resources(bundle_root / "resources")
     _write_release_manifest(app_root, mode="evergreen")
     reporter = RecordingReporter()
@@ -287,7 +290,7 @@ def test_evergreen_install_failure_uses_existing_reporter_once(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     bundle_root = tmp_path / "_internal"
-    app_root = tmp_path / "GameShelf"
+    app_root = tmp_path / "GameSave-Scout"
     _create_required_resources(bundle_root / "resources")
     _write_release_manifest(app_root, mode="evergreen")
     reporter = RecordingReporter()
@@ -314,7 +317,7 @@ def test_evergreen_smoke_records_detection_and_bootstrapper_checks(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     bundle_root = tmp_path / "_internal"
-    app_root = tmp_path / "GameShelf"
+    app_root = tmp_path / "GameSave-Scout"
     output = tmp_path / "smoke.json"
     _create_required_resources(bundle_root / "resources")
     _write_release_manifest(app_root, mode="evergreen")
@@ -373,20 +376,20 @@ def test_normal_source_startup_failure_is_raised(
     monkeypatch.setattr(app_module, "build_application", fail_build)
 
     with pytest.raises(RuntimeError, match="source startup failed"):
-        main(["--app-root", str(tmp_path / "GameShelf")], reporter=reporter)
+        main(["--app-root", str(tmp_path / "GameSave-Scout")], reporter=reporter)
 
     assert reporter.calls == []
 
 
 def test_python_module_entrypoint_runs_smoke_test(tmp_path: Path) -> None:
     output = tmp_path / "smoke.json"
-    app_root = tmp_path / "GameShelf"
+    app_root = tmp_path / "GameSave-Scout"
 
     result = subprocess.run(
         [
             sys.executable,
             "-m",
-            "gameshelf.app",
+            "gamesave_scout.app",
             "--smoke-test",
             "--json-output",
             str(output),

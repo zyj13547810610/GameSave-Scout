@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from gameshelf.saves.guided_events import GuidedChangeAggregator, RawFileChange
-from gameshelf.saves.guided_scanner import BoundedMetadataScanner
+from gamesave_scout.saves.guided_events import GuidedChangeAggregator, RawFileChange
+from gamesave_scout.saves.guided_scanner import BoundedMetadataScanner
 
 
 def test_event_and_unique_path_limits_never_grow_unbounded(tmp_path: Path) -> None:

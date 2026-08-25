@@ -4,38 +4,38 @@ from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
 
-from gameshelf.bootstrap.config import AppConfig, ConfigService, JsonConfigStore
-from gameshelf.bootstrap.paths import AppPaths
-from gameshelf.bridge.api import BridgeApi
-from gameshelf.bridge.tasks import TaskRegistry
-from gameshelf.db.connection import ConnectionFactory
-from gameshelf.db.migrator import Migrator
-from gameshelf.db.writer import DbWriter
-from gameshelf.library.group_repository import GroupRepository
-from gameshelf.library.group_service import GroupService
-from gameshelf.library.repository import LibraryRepository
-from gameshelf.library.service import LibraryService
-from gameshelf.platform.windows.known_folders import KnownFolders
-from gameshelf.saves.batch_candidates import candidate_path_key
-from gameshelf.saves.batch_models import (
+from gamesave_scout.bootstrap.config import AppConfig, ConfigService, JsonConfigStore
+from gamesave_scout.bootstrap.paths import AppPaths
+from gamesave_scout.bridge.api import BridgeApi
+from gamesave_scout.bridge.tasks import TaskRegistry
+from gamesave_scout.db.connection import ConnectionFactory
+from gamesave_scout.db.migrator import Migrator
+from gamesave_scout.db.writer import DbWriter
+from gamesave_scout.library.group_repository import GroupRepository
+from gamesave_scout.library.group_service import GroupService
+from gamesave_scout.library.repository import LibraryRepository
+from gamesave_scout.library.service import LibraryService
+from gamesave_scout.platform.windows.known_folders import KnownFolders
+from gamesave_scout.saves.batch_candidates import candidate_path_key
+from gamesave_scout.saves.batch_models import (
     BatchCandidateSource,
     RawBatchCandidate,
     RepresentativeFile,
 )
-from gameshelf.saves.batch_repository import BatchSaveRepository
-from gameshelf.saves.batch_review import BatchSaveReviewService
-from gameshelf.saves.batch_rules import (
+from gamesave_scout.saves.batch_repository import BatchSaveRepository
+from gamesave_scout.saves.batch_review import BatchSaveReviewService
+from gamesave_scout.saves.batch_rules import (
     BatchRuleCatalog,
     BatchRuleContext,
     RuleIdentity,
 )
-from gameshelf.saves.batch_scanner import BatchFilesystemScanner
-from gameshelf.saves.batch_scope import BatchScopeBuilder
-from gameshelf.saves.batch_service import BatchSaveDiscoveryService
-from gameshelf.saves.repository import SaveLocationRepository
-from gameshelf.saves.service import SaveLocationService
-from gameshelf.saves.templates import PathTemplateResolver
-from gameshelf.scanning.path_keys import windows_path_key
+from gamesave_scout.saves.batch_scanner import BatchFilesystemScanner
+from gamesave_scout.saves.batch_scope import BatchScopeBuilder
+from gamesave_scout.saves.batch_service import BatchSaveDiscoveryService
+from gamesave_scout.saves.repository import SaveLocationRepository
+from gamesave_scout.saves.service import SaveLocationService
+from gamesave_scout.saves.templates import PathTemplateResolver
+from gamesave_scout.scanning.path_keys import windows_path_key
 
 
 @dataclass(frozen=True)

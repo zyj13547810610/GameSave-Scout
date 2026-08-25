@@ -2,12 +2,12 @@ from pathlib import Path
 
 import pytest
 
-from gameshelf.engines.base import DetectionContext
-from gameshelf.engines.detectors.creator_engines import CreatorEngineDetector
-from gameshelf.engines.registry import DetectorRegistry
-from gameshelf.engines.rule_detector import RuleDetector
-from gameshelf.engines.rule_schema import load_engine_rules
-from gameshelf.scanning.pe_metadata import PeMetadata
+from gamesave_scout.engines.base import DetectionContext
+from gamesave_scout.engines.detectors.creator_engines import CreatorEngineDetector
+from gamesave_scout.engines.registry import DetectorRegistry
+from gamesave_scout.engines.rule_detector import RuleDetector
+from gamesave_scout.engines.rule_schema import load_engine_rules
+from gamesave_scout.scanning.pe_metadata import PeMetadata
 
 
 @pytest.mark.parametrize(
@@ -57,7 +57,7 @@ def test_creator_requires_product_and_companion(
 ) -> None:
     root = file_tree({"Player.exe": b"MZ", companion: b"data"})
     monkeypatch.setattr(
-        "gameshelf.engines.detectors.creator_engines.read_pe_metadata",
+        "gamesave_scout.engines.detectors.creator_engines.read_pe_metadata",
         lambda _: PeMetadata(product, product, "", "x64"),
     )
     match = CreatorEngineDetector().inspect(
@@ -71,7 +71,7 @@ def test_generic_unity_metadata_without_creator_companion_is_unknown(
 ) -> None:
     root = file_tree({"Player.exe": b"MZ", "UnityPlayer.dll": b"MZ"})
     monkeypatch.setattr(
-        "gameshelf.engines.detectors.creator_engines.read_pe_metadata",
+        "gamesave_scout.engines.detectors.creator_engines.read_pe_metadata",
         lambda _: PeMetadata("SMILE GAME BUILDER", "", "SmileBoom", "x64"),
     )
     assert CreatorEngineDetector().inspect(

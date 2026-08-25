@@ -8,11 +8,11 @@ from typing import Any
 
 import pytest
 
-from gameshelf.platform.windows.registry import (
+from gamesave_scout.platform.windows.registry import (
     UnsupportedRegistryKey,
     WindowsRegistry,
 )
-from gameshelf.saves.guided_registry import (
+from gamesave_scout.saves.guided_registry import (
     RegistryMetadataReader,
     diff_registry_snapshots,
 )

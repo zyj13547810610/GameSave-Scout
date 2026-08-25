@@ -7,9 +7,9 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from gameshelf.covers import local_discovery
-from gameshelf.covers.local_discovery import LocalCoverDiscovery
-from gameshelf.library.models import Game
+from gamesave_scout.covers import local_discovery
+from gamesave_scout.covers.local_discovery import LocalCoverDiscovery
+from gamesave_scout.library.models import Game
 
 
 @dataclass

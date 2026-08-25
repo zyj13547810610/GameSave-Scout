@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from gameshelf.rules.validation import (
+from gamesave_scout.rules.validation import (
     RuleMetadataError,
     build_rule_metadata,
     parse_rule_references,

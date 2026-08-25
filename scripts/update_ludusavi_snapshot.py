@@ -17,9 +17,9 @@ from uuid import uuid4
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPOSITORY_ROOT / "src"))
 
-from gameshelf.saves.ludusavi_index import LudusaviIndex  # noqa: E402
-from gameshelf.saves.ludusavi_index_builder import build_ludusavi_index  # noqa: E402
-from gameshelf.saves.ludusavi_parser import parse_manifest  # noqa: E402
+from gamesave_scout.saves.ludusavi_index import LudusaviIndex  # noqa: E402
+from gamesave_scout.saves.ludusavi_index_builder import build_ludusavi_index  # noqa: E402
+from gamesave_scout.saves.ludusavi_parser import parse_manifest  # noqa: E402
 
 MANIFEST_URL = (
     "https://raw.githubusercontent.com/mtkennerly/"
@@ -34,11 +34,11 @@ COMMITS_URL = (
 )
 MAX_BYTES = 64 * 1024 * 1024
 TIMEOUT_SECONDS = 30.0
-USER_AGENT = "GameShelf snapshot maintainer/0.1"
+USER_AGENT = "GameSaveScout snapshot maintainer/0.3.3"
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = ArgumentParser(description="维护 GameShelf 内置 Ludusavi 快照。")
+    parser = ArgumentParser(description="维护 GameSave Scout 内置 Ludusavi 快照。")
     parser.add_argument(
         "--rebuild-index-only",
         action="store_true",

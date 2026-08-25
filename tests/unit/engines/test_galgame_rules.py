@@ -3,10 +3,10 @@ from pathlib import Path
 
 import pytest
 
-from gameshelf.engines.registry import DetectorRegistry
-from gameshelf.engines.rule_detector import RuleDetector
-from gameshelf.engines.rule_schema import load_engine_rules
-from gameshelf.scanning.pe_metadata import PeMetadata
+from gamesave_scout.engines.registry import DetectorRegistry
+from gamesave_scout.engines.rule_detector import RuleDetector
+from gamesave_scout.engines.rule_schema import load_engine_rules
+from gamesave_scout.scanning.pe_metadata import PeMetadata
 
 GARBRO_COMMIT = "b09ee4570ccb1daf6ac56710ee8934dc0b8baeb0"
 
@@ -444,7 +444,7 @@ def test_siglus_accepts_exact_scene_file_variants(
     (tmp_path / "SiglusEngine.exe").write_bytes(b"MZ")
     (tmp_path / scene_name).write_bytes(b"scene")
     monkeypatch.setattr(
-        "gameshelf.engines.rule_detector.read_pe_metadata",
+        "gamesave_scout.engines.rule_detector.read_pe_metadata",
         lambda _: PeMetadata(
             product_name="Siglus",
             file_description="Siglus（VisualArt's 游戏执行引擎）",
@@ -472,7 +472,7 @@ def test_siglus_scene_without_pe_product_evidence_remains_unknown(
     (tmp_path / "SiglusEngine.exe").write_bytes(b"MZ")
     (tmp_path / "Scene.chs").write_bytes(b"scene")
     monkeypatch.setattr(
-        "gameshelf.engines.rule_detector.read_pe_metadata",
+        "gamesave_scout.engines.rule_detector.read_pe_metadata",
         lambda _: PeMetadata("", "", "", "unknown"),
     )
 
@@ -488,7 +488,7 @@ def test_siglus_pe_product_with_unrelated_scene_file_remains_unknown(
     (tmp_path / "SiglusEngine.exe").write_bytes(b"MZ")
     (tmp_path / "Scene.txt").write_bytes(b"scene")
     monkeypatch.setattr(
-        "gameshelf.engines.rule_detector.read_pe_metadata",
+        "gamesave_scout.engines.rule_detector.read_pe_metadata",
         lambda _: PeMetadata("Siglus", "", "VisualArt's", "x86"),
     )
 

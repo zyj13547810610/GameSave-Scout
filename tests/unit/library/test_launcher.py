@@ -3,14 +3,14 @@ from pathlib import Path
 
 import pytest
 
-from gameshelf.db.connection import ConnectionFactory
-from gameshelf.db.migrator import Migrator
-from gameshelf.db.writer import DbWriter
-from gameshelf.library.launcher import GameLauncher, InvalidLaunchConfiguration
-from gameshelf.library.models import Game
-from gameshelf.library.repository import LibraryRepository
-from gameshelf.library.service import LibraryService
-from gameshelf.platform.windows.processes import LaunchedProcess
+from gamesave_scout.db.connection import ConnectionFactory
+from gamesave_scout.db.migrator import Migrator
+from gamesave_scout.db.writer import DbWriter
+from gamesave_scout.library.launcher import GameLauncher, InvalidLaunchConfiguration
+from gamesave_scout.library.models import Game
+from gamesave_scout.library.repository import LibraryRepository
+from gamesave_scout.library.service import LibraryService
+from gamesave_scout.platform.windows.processes import LaunchedProcess
 
 
 def test_launch_uses_array_cwd_and_shell_false(

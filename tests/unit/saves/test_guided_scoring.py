@@ -4,16 +4,16 @@ from pathlib import Path
 
 import pytest
 
-from gameshelf.platform.windows.known_folders import KnownFolders
-from gameshelf.saves.guided_events import AggregatedFileChange
-from gameshelf.saves.guided_scanner import ScannedFileMetadata
-from gameshelf.saves.guided_scoring import (
+from gamesave_scout.platform.windows.known_folders import KnownFolders
+from gamesave_scout.saves.guided_events import AggregatedFileChange
+from gamesave_scout.saves.guided_scanner import ScannedFileMetadata
+from gamesave_scout.saves.guided_scoring import (
     GuidedScoringContext,
     score_guided_changes,
     score_guided_changes_with_summary,
 )
-from gameshelf.saves.templates import PathTemplateResolver
-from gameshelf.scanning.path_keys import windows_path_key
+from gamesave_scout.saves.templates import PathTemplateResolver
+from gamesave_scout.scanning.path_keys import windows_path_key
 
 MARK_NS = 10_000_000_000
 

@@ -9,18 +9,18 @@ from pathlib import Path
 import pytest
 import yaml
 
-from gameshelf.library.models import Game
-from gameshelf.platform.windows.known_folders import KnownFolders
-from gameshelf.saves.batch_rules import BatchRuleContext, BatchRuleProvider
-from gameshelf.saves.builtin_rules import SaveRuleProvider
-from gameshelf.saves.engine_hints import EngineSaveHintProvider
-from gameshelf.saves.ludusavi_index import LudusaviIndex
-from gameshelf.saves.ludusavi_index_builder import build_ludusavi_index
-from gameshelf.saves.ludusavi_parser import parse_manifest
-from gameshelf.saves.models import SaveLocation
-from gameshelf.saves.rule_schema import load_save_rules, parse_save_rule_document
-from gameshelf.saves.templates import PathTemplateResolver
-from gameshelf.scanning.path_keys import windows_path_key
+from gamesave_scout.library.models import Game
+from gamesave_scout.platform.windows.known_folders import KnownFolders
+from gamesave_scout.saves.batch_rules import BatchRuleContext, BatchRuleProvider
+from gamesave_scout.saves.builtin_rules import SaveRuleProvider
+from gamesave_scout.saves.engine_hints import EngineSaveHintProvider
+from gamesave_scout.saves.ludusavi_index import LudusaviIndex
+from gamesave_scout.saves.ludusavi_index_builder import build_ludusavi_index
+from gamesave_scout.saves.ludusavi_parser import parse_manifest
+from gamesave_scout.saves.models import SaveLocation
+from gamesave_scout.saves.rule_schema import load_save_rules, parse_save_rule_document
+from gamesave_scout.saves.templates import PathTemplateResolver
+from gamesave_scout.scanning.path_keys import windows_path_key
 
 
 @dataclass

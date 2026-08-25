@@ -8,8 +8,8 @@ from threading import enumerate as enumerate_threads
 
 import pytest
 
-from gameshelf.platform.windows.directory_watcher import WindowsDirectoryWatcher
-from gameshelf.saves.guided_events import RawFileChange
+from gamesave_scout.platform.windows.directory_watcher import WindowsDirectoryWatcher
+from gamesave_scout.saves.guided_events import RawFileChange
 
 pytestmark = pytest.mark.skipif(os.name != "nt", reason="Windows watcher integration")
 

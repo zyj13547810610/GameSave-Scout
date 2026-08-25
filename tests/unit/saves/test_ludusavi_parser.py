@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from gameshelf.saves.ludusavi_parser import InvalidLudusaviManifest, parse_manifest
+from gamesave_scout.saves.ludusavi_parser import InvalidLudusaviManifest, parse_manifest
 
 FIXTURE = Path(__file__).parents[2] / "fixtures" / "ludusavi" / "manifest.yaml"
 

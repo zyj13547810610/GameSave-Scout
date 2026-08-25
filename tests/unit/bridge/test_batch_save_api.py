@@ -2,23 +2,23 @@ from dataclasses import replace
 from pathlib import Path
 from threading import Event
 
-from gameshelf.bootstrap.config import ConfigService, JsonConfigStore
-from gameshelf.bootstrap.paths import AppPaths
-from gameshelf.bridge.api import BridgeApi
-from gameshelf.bridge.tasks import TaskRegistry
-from gameshelf.saves.batch_external import BatchExternalLookupError
-from gameshelf.saves.batch_models import (
+from gamesave_scout.bootstrap.config import ConfigService, JsonConfigStore
+from gamesave_scout.bootstrap.paths import AppPaths
+from gamesave_scout.bridge.api import BridgeApi
+from gamesave_scout.bridge.tasks import TaskRegistry
+from gamesave_scout.saves.batch_external import BatchExternalLookupError
+from gamesave_scout.saves.batch_models import (
     BatchScanSummary,
     CandidateAlternative,
     RepresentativeFile,
 )
-from gameshelf.saves.batch_repository import (
+from gamesave_scout.saves.batch_repository import (
     BatchCandidatePage,
     BatchCandidateQuery,
     PersistedBatchCandidate,
 )
-from gameshelf.saves.batch_review import BatchAcceptResult
-from gameshelf.saves.batch_service import BatchScanRequest
+from gamesave_scout.saves.batch_review import BatchAcceptResult
+from gamesave_scout.saves.batch_service import BatchScanRequest
 
 
 class FakeBatchRepository:

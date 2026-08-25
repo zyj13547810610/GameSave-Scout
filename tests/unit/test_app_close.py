@@ -4,10 +4,10 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 
-from gameshelf.app import _allow_window_close, _run_desktop
-from gameshelf.bootstrap.application import Application
-from gameshelf.bootstrap.release_runtime import ReleaseRuntimeConfig, RuntimeMode
-from gameshelf.bootstrap.webview_runtime import WebViewRuntime
+from gamesave_scout.app import _allow_window_close, _run_desktop
+from gamesave_scout.bootstrap.application import Application
+from gamesave_scout.bootstrap.release_runtime import ReleaseRuntimeConfig, RuntimeMode
+from gamesave_scout.bootstrap.webview_runtime import WebViewRuntime
 
 
 class FakeGuidedSaves:
@@ -74,7 +74,7 @@ class FakeWebview:
 def test_desktop_configures_fixed_runtime_and_forces_edgechromium(
     tmp_path: Path,
 ) -> None:
-    runtime_dir = tmp_path / "GameShelf" / "runtime"
+    runtime_dir = tmp_path / "GameSave-Scout" / "runtime"
     runtime_dir.mkdir(parents=True)
     (runtime_dir / "msedgewebview2.exe").write_bytes(b"webview2")
     runtime = WebViewRuntime.for_runtime(

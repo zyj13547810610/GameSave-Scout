@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from gameshelf.db.connection import ConnectionFactory
-from gameshelf.db.migrator import MigrationError, Migrator
+from gamesave_scout.db.connection import ConnectionFactory
+from gamesave_scout.db.migrator import MigrationError, Migrator
 
 V1_TABLES = {
     "scan_roots",

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from gameshelf.bootstrap.release_runtime import (
+from gamesave_scout.bootstrap.release_runtime import (
     ReleaseRuntimeConfig,
     ReleaseRuntimeError,
     RuntimeMode,

@@ -4,10 +4,10 @@ from threading import Event
 
 import pytest
 
-from gameshelf.bridge.tasks import TaskCancelled, TaskContext
-from gameshelf.library.models import ScanRoot
-from gameshelf.scanning.discovery import RootUnavailableError, enumerate_candidates
-from gameshelf.scanning.path_keys import windows_path_key
+from gamesave_scout.bridge.tasks import TaskCancelled, TaskContext
+from gamesave_scout.library.models import ScanRoot
+from gamesave_scout.scanning.discovery import RootUnavailableError, enumerate_candidates
+from gamesave_scout.scanning.path_keys import windows_path_key
 
 
 @pytest.fixture
@@ -133,9 +133,9 @@ def test_unavailable_child_warns_and_scan_continues(
             raise PermissionError("blocked for test")
         return original_scandir(path)
 
-    monkeypatch.setattr("gameshelf.scanning.discovery.os.scandir", fake_scandir)
+    monkeypatch.setattr("gamesave_scout.scanning.discovery.os.scandir", fake_scandir)
     monkeypatch.setattr(
-        "gameshelf.scanning.discovery.logger.warning",
+        "gamesave_scout.scanning.discovery.logger.warning",
         lambda message, path, _error: warnings.append(message % (path, _error)),
     )
     root = make_root(root_path, mode="children", depth=1)
@@ -154,7 +154,7 @@ def test_link_or_reparse_directory_is_skipped(
     skipped.mkdir(parents=True)
     (root_path / "Normal").mkdir()
     monkeypatch.setattr(
-        "gameshelf.scanning.discovery._is_link_or_reparse",
+        "gamesave_scout.scanning.discovery._is_link_or_reparse",
         lambda entry: entry.name == "Linked",
     )
     root = make_root(root_path, mode="children", depth=1)
