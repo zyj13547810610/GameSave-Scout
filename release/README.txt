@@ -1,4 +1,4 @@
-GameShelf 0.2.1 Windows x64 完整离线便携版
+GameShelf 0.3.2 Windows x64 完整离线便携版
 ========================================
 
 运行方式
@@ -43,7 +43,7 @@ Windows 10 使用内置 Fixed Version WebView2 Runtime 前，需要给同级 run
 签名与许可证
 ------------
 
-GameShelf 0.2.1 未进行 Authenticode 代码签名，Windows Defender SmartScreen 可能显示
+GameShelf 0.3.2 未进行 Authenticode 代码签名，Windows Defender SmartScreen 可能显示
 “Windows 已保护你的电脑”或“未知发布者”。请只使用从可信来源取得且 SHA-256 与发布
 记录一致的 ZIP，不要关闭或绕过系统安全功能。
 

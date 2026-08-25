@@ -44,6 +44,29 @@ def test_repository_versions_are_consistent() -> None:
     assert versions.version == "0.3.2"
 
 
+@pytest.mark.parametrize("template_name", ("README.txt", "README-lite.txt"))
+def test_repository_release_readme_templates_build_for_current_version(
+    template_name: str,
+    tmp_path: Path,
+) -> None:
+    versions = ReleaseVersions.load(REPOSITORY_ROOT)
+    release_root = _minimal_release_tree(tmp_path)
+    current_release_root = tmp_path / versions.release_name
+    release_root.rename(current_release_root)
+    (current_release_root / "README.txt").write_text(
+        (REPOSITORY_ROOT / "release" / template_name).read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+
+    manifest = build_release_manifest(
+        current_release_root,
+        replace(_release_metadata(), app_version=versions.version),
+        ReleaseMode.FIXED,
+    )
+
+    assert manifest["appVersion"] == versions.version
+
+
 def test_release_versions_reject_mismatched_project_files(tmp_path: Path) -> None:
     _write_versions(tmp_path, project="1.2.3", package="1.2.4", frontend="1.2.3")
 
