@@ -90,6 +90,7 @@ from gamesave_scout.saves.batch_review import (
     BatchReviewError,
     BatchSaveReviewService,
     SaveOnlyDraft,
+    SaveOnlyRollbackResult,
 )
 from gamesave_scout.saves.batch_service import BatchSaveDiscoveryService, BatchScanRequest
 from gamesave_scout.saves.guided_models import (
@@ -508,6 +509,55 @@ class BridgeApi:
             return failure("invalid_request", str(error))
         except BatchReviewError as error:
             return failure(error.code, str(error))
+
+    def rollback_batch_save_only_game(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(payload, {"candidateId"})
+            result = self._require_batch_review().rollback_save_only(
+                _string(payload, "candidateId")
+            )
+            return self._save_only_rollback_result(result)
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except BatchReviewError as error:
+            return failure(error.code, str(error))
+
+    def delete_save_only_game(self, request: object) -> ApiResult:
+        try:
+            payload = _payload(request)
+            _only_keys(payload, {"gameId"})
+            result = self._require_batch_review().delete_save_only_game(
+                _string(payload, "gameId")
+            )
+            return self._save_only_rollback_result(result)
+        except InvalidRequest as error:
+            return failure("invalid_request", str(error))
+        except BatchReviewError as error:
+            return failure(error.code, str(error))
+
+    def _save_only_rollback_result(
+        self,
+        result: SaveOnlyRollbackResult,
+    ) -> ApiResult:
+        cleanup_warning_count = (
+            self._covers.cleanup_managed_files(result.managed_cover_relpaths)
+            if self._covers is not None
+            else 0
+        )
+        cleanup_warnings: list[JSONValue] = []
+        if cleanup_warning_count:
+            cleanup_warnings.append(
+                f"有 {cleanup_warning_count} 个受管封面文件未能清理，可稍后查看日志。"
+            )
+        return success(
+            {
+                "removed": result.game_id is not None,
+                "restoredCandidateCount": result.restored_candidate_count,
+                "removedLocationCount": result.removed_location_count,
+                "cleanupWarnings": cleanup_warnings,
+            }
+        )
 
     def open_batch_save_candidate(self, request: object) -> ApiResult:
         try:

@@ -17,7 +17,7 @@ from gamesave_scout.saves.batch_repository import (
     BatchCandidateQuery,
     PersistedBatchCandidate,
 )
-from gamesave_scout.saves.batch_review import BatchAcceptResult
+from gamesave_scout.saves.batch_review import BatchAcceptResult, SaveOnlyRollbackResult
 from gamesave_scout.saves.batch_service import BatchScanRequest
 
 
@@ -84,6 +84,14 @@ class FakeBatchReview:
     def clear_unavailable(self, ids) -> int:
         self.calls.append(("clear", tuple(ids)))
         return len(ids)
+
+    def rollback_save_only(self, candidate_id: str) -> SaveOnlyRollbackResult:
+        self.calls.append(("rollback_save_only", candidate_id))
+        return SaveOnlyRollbackResult("save-only-1", 2, 2, ())
+
+    def delete_save_only_game(self, game_id: str) -> SaveOnlyRollbackResult:
+        self.calls.append(("delete_save_only_game", game_id))
+        return SaveOnlyRollbackResult(game_id, 2, 2, ())
 
 
 class FakeExternalLookup:
@@ -291,6 +299,34 @@ def test_batch_review_and_open_commands_forward_only_validated_ids(tmp_path: Pat
         ("restore", ("candidate-1",)),
     ]
     assert external.calls == [("candidate-1", "vndb")]
+
+
+def test_save_only_rollback_commands_share_the_same_safe_result_contract(
+    tmp_path: Path,
+) -> None:
+    api, tasks, _, _, _, review, _ = _api(tmp_path)
+    try:
+        from_candidate = api.rollback_batch_save_only_game(
+            {"candidateId": "candidate-1"}
+        )
+        from_library = api.delete_save_only_game({"gameId": "save-only-1"})
+    finally:
+        tasks.close()
+
+    assert from_candidate == {
+        "ok": True,
+        "data": {
+            "removed": True,
+            "restoredCandidateCount": 2,
+            "removedLocationCount": 2,
+            "cleanupWarnings": [],
+        },
+    }
+    assert from_library == from_candidate
+    assert review.calls == [
+        ("rollback_save_only", "candidate-1"),
+        ("delete_save_only_game", "save-only-1"),
+    ]
 
 
 def _api(tmp_path: Path):

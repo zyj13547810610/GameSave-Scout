@@ -51,6 +51,14 @@ class SaveOnlyDraft:
     confirm_registry: bool
 
 
+@dataclass(frozen=True, slots=True)
+class SaveOnlyRollbackResult:
+    game_id: str | None
+    restored_candidate_count: int
+    removed_location_count: int
+    managed_cover_relpaths: tuple[str, ...]
+
+
 class BatchSaveReviewService:
     def __init__(
         self,
@@ -214,6 +222,113 @@ class BatchSaveReviewService:
             return game_from_row_with_groups(connection, row)
 
         return self._writer.submit(operation).result()
+
+    def rollback_save_only(self, candidate_id: str) -> SaveOnlyRollbackResult:
+        _identifier(candidate_id, "批量存档候选")
+
+        def operation(connection: sqlite3.Connection) -> SaveOnlyRollbackResult:
+            candidate = connection.execute(
+                """
+                SELECT review_status, review_game_id
+                FROM save_scan_candidates
+                WHERE id = ?
+                """,
+                (candidate_id,),
+            ).fetchone()
+            if candidate is None:
+                raise BatchReviewError(
+                    "batch_candidate_not_found",
+                    "批量存档候选不存在。",
+                )
+            if candidate["review_status"] != "save_only":
+                raise BatchReviewError(
+                    "batch_candidate_not_save_only",
+                    "该候选没有创建仅存档卡片，不能撤销。",
+                )
+
+            game_id = cast(str | None, candidate["review_game_id"])
+            now = self._utc_now()
+            if game_id is None:
+                connection.execute(
+                    """
+                    UPDATE save_scan_candidates
+                    SET review_status = 'pending', review_game_id = NULL,
+                        save_location_id = NULL, updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (now, candidate_id),
+                )
+                return SaveOnlyRollbackResult(None, 1, 0, ())
+
+            return self._delete_save_only_game(connection, game_id, now)
+
+        return self._writer.submit(operation).result()
+
+    def delete_save_only_game(self, game_id: str) -> SaveOnlyRollbackResult:
+        _identifier(game_id, "仅存档卡片")
+
+        def operation(connection: sqlite3.Connection) -> SaveOnlyRollbackResult:
+            return self._delete_save_only_game(connection, game_id, self._utc_now())
+
+        return self._writer.submit(operation).result()
+
+    @staticmethod
+    def _delete_save_only_game(
+        connection: sqlite3.Connection,
+        game_id: str,
+        now: str,
+    ) -> SaveOnlyRollbackResult:
+        game = connection.execute(
+            """
+            SELECT status, cover_original_relpath, cover_thumb_relpath
+            FROM games
+            WHERE id = ?
+            """,
+            (game_id,),
+        ).fetchone()
+        if game is None:
+            raise BatchReviewError(
+                "save_only_game_not_found",
+                "仅存档卡片不存在。",
+            )
+        if game["status"] != "save_only":
+            raise BatchReviewError(
+                "save_only_game_invalid",
+                "该游戏不是仅存档卡片，不能通过此入口删除。",
+            )
+
+        removed_location_count = int(
+            connection.execute(
+                "SELECT COUNT(*) FROM save_locations WHERE game_id = ?",
+                (game_id,),
+            ).fetchone()[0]
+        )
+        restored_candidate_count = connection.execute(
+            """
+            UPDATE save_scan_candidates
+            SET review_status = 'pending', review_game_id = NULL,
+                save_location_id = NULL, updated_at = ?
+            WHERE review_status = 'save_only' AND review_game_id = ?
+            """,
+            (now, game_id),
+        ).rowcount
+        managed_cover_relpaths = tuple(
+            dict.fromkeys(
+                str(value)
+                for value in (
+                    game["cover_original_relpath"],
+                    game["cover_thumb_relpath"],
+                )
+                if value is not None
+            )
+        )
+        connection.execute("DELETE FROM games WHERE id = ?", (game_id,))
+        return SaveOnlyRollbackResult(
+            game_id,
+            restored_candidate_count,
+            removed_location_count,
+            managed_cover_relpaths,
+        )
 
     def reassociate_many(
         self,

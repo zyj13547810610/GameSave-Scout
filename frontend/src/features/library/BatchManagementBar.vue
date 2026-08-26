@@ -15,6 +15,8 @@ defineEmits<{
   remove: []
   group: [event: MouseEvent]
 }>()
+
+const saveOnlyDeleteHint = '仅存档卡片不能批量删除；请打开详情删除，或前往批量存档撤销创建'
 </script>
 
 <template>
@@ -25,7 +27,7 @@ defineEmits<{
       <span>失效 {{ missingCount }}</span>
       <span>仅存档 {{ saveOnlyCount }}</span>
     </p>
-    <p v-if="saveOnlyCount" class="batch-delete-hint">仅存档记录不能通过批量移除删除</p>
+    <p v-if="saveOnlyCount" class="batch-delete-hint">{{ saveOnlyDeleteHint }}</p>
     <div class="batch-actions">
       <button data-test="select-visible-games" type="button" :disabled="busy || !canSelectVisible" @click="$emit('selectVisible')">全选当前结果</button>
       <button type="button" :disabled="busy || selectedCount === 0" @click="$emit('clear')">清空选择</button>
@@ -35,7 +37,7 @@ defineEmits<{
         class="danger"
         type="button"
         :disabled="busy || !canRemove"
-        :title="saveOnlyCount ? '仅存档记录不能通过批量移除删除' : undefined"
+        :title="saveOnlyCount ? saveOnlyDeleteHint : undefined"
         @click="$emit('remove')"
       >{{ busy ? '处理中…' : '删除所选' }}</button>
     </div>

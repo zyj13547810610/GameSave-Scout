@@ -17,6 +17,7 @@ const emit = defineEmits<{
   saveOnly: [candidate: BatchSaveCandidate]
   ignore: [candidate: BatchSaveCandidate]
   restore: [candidate: BatchSaveCandidate]
+  rollbackSaveOnly: [candidate: BatchSaveCandidate]
 }>()
 const actionError = ref('')
 const grouped = computed(() => {
@@ -116,6 +117,13 @@ const reviewLabel = (candidate: BatchSaveCandidate) => ({
             <button v-if="candidate.reviewStatus === 'pending' && candidate.availability === 'available'" type="button" class="secondary" @click="emit('saveOnly', candidate)">创建仅存档卡片</button>
             <button v-if="candidate.reviewStatus === 'pending'" type="button" class="secondary" @click="emit('ignore', candidate)">忽略</button>
             <button v-if="candidate.reviewStatus === 'ignored'" type="button" class="secondary" @click="emit('restore', candidate)">恢复</button>
+            <button
+              v-if="candidate.reviewStatus === 'save_only'"
+              :data-test="`rollback-save-only-${candidate.id}`"
+              type="button"
+              class="danger"
+              @click="emit('rollbackSaveOnly', candidate)"
+            >撤销创建</button>
             <button v-if="candidate.kind !== 'registry' && candidate.availability === 'available'" type="button" class="secondary" @click="openCandidate(candidate)">打开位置</button>
             <button type="button" class="secondary" @click="copyPath(candidate)">复制路径</button>
             <template v-if="candidate.lookupQuery">

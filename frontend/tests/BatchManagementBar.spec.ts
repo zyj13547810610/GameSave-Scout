@@ -22,9 +22,9 @@ describe('BatchManagementBar', () => {
     expect(wrapper.get('[data-test="batch-counts"]').text()).toContain('仅存档 1')
     expect(wrapper.get('[data-test="batch-delete"]').attributes('disabled')).toBeDefined()
     expect(wrapper.get('[data-test="batch-delete"]').attributes('title')).toBe(
-      '仅存档记录不能通过批量移除删除',
+      '仅存档卡片不能批量删除；请打开详情删除，或前往批量存档撤销创建',
     )
-    expect(wrapper.text()).toContain('仅存档记录不能通过批量移除删除')
+    expect(wrapper.text()).toContain('请打开详情删除，或前往批量存档撤销创建')
     expect(wrapper.get('[data-test="batch-group"]').attributes('disabled')).toBeUndefined()
 
     await wrapper.get('[data-test="batch-group"]').trigger('click')

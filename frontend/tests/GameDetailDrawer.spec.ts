@@ -243,4 +243,25 @@ describe('GameDetailDrawer', () => {
     expect(remove).toHaveBeenCalledWith({ gameId: game.id })
     expect(wrapper.emitted('removed')).toEqual([[game.id]])
   })
+
+  it('deletes a save-only card through rollback without claiming to delete real saves', async () => {
+    const remove = vi.fn(async () => ok({
+      removed: true, restoredCandidateCount: 2,
+      removedLocationCount: 1, cleanupWarnings: [],
+    }))
+    const bridge = createMockBridge({ delete_save_only_game: remove })
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const game = fixtureGame({ status: 'save_only', scanRootId: null })
+    const wrapper = mount(GameDetailDrawer, {
+      props: { game, bridge },
+      attachTo: document.body,
+    })
+
+    await wrapper.get('[data-test="delete-save-only-game"]').trigger('click')
+
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('候选恢复为待处理'))
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('不会删除实际存档文件'))
+    expect(remove).toHaveBeenCalledWith({ gameId: game.id })
+    expect(wrapper.emitted('removed')).toEqual([[game.id]])
+  })
 })

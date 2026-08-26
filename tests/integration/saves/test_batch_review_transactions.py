@@ -200,6 +200,93 @@ def test_create_save_only_creates_game_locations_and_groups_atomically(
         harness.close()
 
 
+def test_rollback_save_only_candidate_deletes_whole_card_and_restores_all_candidates(
+    tmp_path: Path,
+) -> None:
+    harness = _harness(tmp_path)
+    protected_file = tmp_path / "real-save.sav"
+    protected_file.write_bytes(b"keep")
+    try:
+        candidate_ids = _record_candidates(
+            harness.repository,
+            (_candidate("ArchiveOne"), _candidate("ArchiveTwo", kind="file")),
+        )
+        game = harness.review.create_save_only(
+            SaveOnlyDraft(
+                title="Archived Game",
+                version=None,
+                engine_id=None,
+                group_ids=("group-1",),
+                candidate_ids=candidate_ids,
+                confirm_registry=False,
+            )
+        )
+        with harness.factory.connect() as connection:
+            first_location_id = connection.execute(
+                "SELECT save_location_id FROM save_scan_candidates WHERE id = ?",
+                (candidate_ids[0],),
+            ).fetchone()[0]
+            connection.execute(
+                "DELETE FROM save_locations WHERE id = ?",
+                (first_location_id,),
+            )
+            connection.commit()
+
+        result = harness.review.rollback_save_only(candidate_ids[0])
+
+        assert result.game_id == game.id
+        assert result.restored_candidate_count == 2
+        assert result.removed_location_count == 1
+        assert _table_count(harness.factory, "games") == 1
+        assert _table_count(harness.factory, "save_locations") == 0
+        rows = _candidate_rows(harness.factory, candidate_ids)
+        assert {row["review_status"] for row in rows} == {"pending"}
+        assert {row["review_game_id"] for row in rows} == {None}
+        assert {row["save_location_id"] for row in rows} == {None}
+        assert protected_file.read_bytes() == b"keep"
+    finally:
+        harness.close()
+
+
+def test_delete_save_only_game_restores_candidates_and_reports_managed_covers(
+    tmp_path: Path,
+) -> None:
+    harness = _harness(tmp_path)
+    try:
+        candidate_id = _record_candidates(
+            harness.repository,
+            (_candidate("Archive"),),
+        )[0]
+        game = harness.review.create_save_only(
+            SaveOnlyDraft("Archived Game", None, None, (), (candidate_id,), False)
+        )
+        with harness.factory.connect() as connection:
+            connection.execute(
+                """
+                UPDATE games
+                SET cover_original_relpath = 'covers/original/archive.jpg',
+                    cover_thumb_relpath = 'covers/thumb/archive.webp'
+                WHERE id = ?
+                """,
+                (game.id,),
+            )
+            connection.commit()
+
+        result = harness.review.delete_save_only_game(game.id)
+
+        assert result.game_id == game.id
+        assert result.restored_candidate_count == 1
+        assert result.removed_location_count == 1
+        assert result.managed_cover_relpaths == (
+            "covers/original/archive.jpg",
+            "covers/thumb/archive.webp",
+        )
+        assert _table_count(harness.factory, "games") == 1
+        assert _candidate_statuses(harness.factory, (candidate_id,)) == ("pending",)
+    finally:
+        harness.close()
+
+
 def test_clear_unavailable_does_not_delete_disk_or_confirmed_locations(
     tmp_path: Path,
 ) -> None:

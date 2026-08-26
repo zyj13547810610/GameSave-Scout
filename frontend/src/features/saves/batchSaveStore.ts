@@ -207,6 +207,22 @@ export const useBatchSaveStore = defineStore('batch-save', {
         '已清除不可用候选历史；磁盘文件和正式存档位置未改动。',
       )
     },
+    async rollbackSaveOnly(bridge: GameSaveScoutBridge, candidateId: string) {
+      this.actionBusy = true
+      this.actionError = ''
+      const result = await bridge.rollback_batch_save_only_game({ candidateId })
+      this.actionBusy = false
+      if (!result.ok) {
+        this.actionError = result.error.message
+        return false
+      }
+      this.notice = `仅存档卡片已删除，已恢复 ${result.data.restoredCandidateCount} 个候选；实际存档未改动。`
+      if (result.data.cleanupWarnings.length) {
+        this.notice += ` ${result.data.cleanupWarnings.join(' ')}`
+      }
+      await this.finishCandidateAction(bridge, [])
+      return true
+    },
     async updateCandidateStatus(
       bridge: GameSaveScoutBridge,
       candidateIds: string[],

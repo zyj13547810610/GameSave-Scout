@@ -96,6 +96,19 @@ async function restore(candidates: BatchSaveCandidate[]) {
   await store.restoreCandidates(props.bridge, targets.map((item) => item.id))
 }
 
+async function rollbackSaveOnly(candidate: BatchSaveCandidate) {
+  if (candidate.reviewStatus !== 'save_only' || actionBusy.value) return
+  const confirmed = window.confirm(
+    '撤销这次仅存档卡片创建吗？\n\n'
+    + '这会删除整张仅存档卡片，并把由它处理的所有候选恢复为待处理。'
+    + '卡片中的标题、封面、分组和存档位置记录会一并移除，'
+    + '但不会删除任何实际存档文件。',
+  )
+  if (!confirmed) return
+  const success = await store.rollbackSaveOnly(props.bridge, candidate.id)
+  if (success) emit('libraryChanged')
+}
+
 async function clearUnavailable() {
   const targets = selected.value.filter((item) => item.availability === 'unavailable')
   if (!targets.length || !window.confirm(
@@ -160,6 +173,7 @@ async function saveOnlyCreated() {
           @save-only="openSaveOnly([$event])"
           @ignore="ignore([$event])"
           @restore="restore([$event])"
+          @rollback-save-only="rollbackSaveOnly($event)"
         />
         <BatchSaveEvidence v-if="inspected" class="batch-wide-evidence" :candidate="inspected" />
       </div>

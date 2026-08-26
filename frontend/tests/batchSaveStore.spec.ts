@@ -111,6 +111,30 @@ describe('batchSaveStore', () => {
     expect(store.filters.keyword).toBe('Alice')
     expect(store.actionError).toBe('候选已变化')
   })
+
+  it('rolls back a whole save-only card and reloads its restored candidates', async () => {
+    const restored = fixtureCandidate()
+    const rollback = vi.fn(async () => ok({
+      removed: true,
+      restoredCandidateCount: 2,
+      removedLocationCount: 1,
+      cleanupWarnings: [],
+    }))
+    const list = vi.fn(async () => ok({ items: [restored], total: 1 }))
+    const bridge = createMockBridge({
+      rollback_batch_save_only_game: rollback,
+      list_batch_save_candidates: list,
+    })
+    const store = useBatchSaveStore()
+    store.page = [fixtureCandidate()]
+
+    const success = await store.rollbackSaveOnly(bridge, 'candidate-1')
+
+    expect(success).toBe(true)
+    expect(rollback).toHaveBeenCalledWith({ candidateId: 'candidate-1' })
+    expect(store.notice).toContain('已恢复 2 个候选')
+    expect(store.page[0].reviewStatus).toBe('pending')
+  })
 })
 
 function fixtureTask(overrides: Partial<TaskSnapshot> = {}): TaskSnapshot {

@@ -187,6 +187,18 @@ export function createMockBridge(overrides: Partial<GameSaveScoutBridge> = {}): 
         groupIds: input.groupIds,
       }))
     },
+    async rollback_batch_save_only_game() {
+      return ok({
+        removed: true, restoredCandidateCount: 1,
+        removedLocationCount: 1, cleanupWarnings: [],
+      })
+    },
+    async delete_save_only_game() {
+      return ok({
+        removed: true, restoredCandidateCount: 1,
+        removedLocationCount: 1, cleanupWarnings: [],
+      })
+    },
     async open_batch_save_candidate() { return ok({ opened: true }) },
     async open_batch_save_lookup(input) {
       return ok({ opened: true, url: `https://${input.provider}.example` })

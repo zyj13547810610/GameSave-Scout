@@ -232,6 +232,13 @@ export type BatchGameRemovalResult = {
   cleanupWarnings: string[]
 }
 
+export type SaveOnlyRollbackResult = {
+  removed: boolean
+  restoredCandidateCount: number
+  removedLocationCount: number
+  cleanupWarnings: string[]
+}
+
 export type SaveLocationKind = 'directory' | 'file' | 'glob' | 'registry'
 export type SaveLocationSource = 'manual' | 'dynamic' | 'ludusavi' | 'engine' | 'legacy_scan'
 
@@ -645,6 +652,8 @@ export interface GameSaveScoutBridge {
     candidateIds: string[]
     confirmRegistry: boolean
   }): Promise<ApiResult<Game>>
+  rollback_batch_save_only_game(input: { candidateId: string }): Promise<ApiResult<SaveOnlyRollbackResult>>
+  delete_save_only_game(input: { gameId: string }): Promise<ApiResult<SaveOnlyRollbackResult>>
   open_batch_save_candidate(input: { candidateId: string }): Promise<ApiResult<{ opened: boolean }>>
   open_batch_save_lookup(input: {
     candidateId: string

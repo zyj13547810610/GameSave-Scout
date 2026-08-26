@@ -90,15 +90,20 @@ async function openInstallDirectory() {
 
 async function removeGameRecord() {
   const installed = props.game.status === 'installed'
+  const saveOnly = props.game.status === 'save_only'
   const prompt = installed
     ? '从游戏库移除并忽略这个目录？不会删除游戏文件；以后扫描该根目录时会跳过它。'
-    : '删除这条失效游戏记录？不会删除游戏本体或外部存档，但会移除 GameSave Scout 管理的封面和存档位置记录。'
+    : saveOnly
+      ? '删除这张仅存档卡片吗？相关候选恢复为待处理；卡片中的标题、封面、分组和存档位置记录会一并移除，但不会删除实际存档文件。'
+      : '删除这条失效游戏记录？不会删除游戏本体或外部存档，但会移除 GameSave Scout 管理的封面和存档位置记录。'
   if (!window.confirm(prompt)) return
   removalBusy.value = true
   removalError.value = ''
   const result = installed
     ? await props.bridge.remove_game_and_exclude({ gameId: props.game.id })
-    : await props.bridge.delete_missing_game({ gameId: props.game.id })
+    : saveOnly
+      ? await props.bridge.delete_save_only_game({ gameId: props.game.id })
+      : await props.bridge.delete_missing_game({ gameId: props.game.id })
   removalBusy.value = false
   if (!result.ok) {
     removalError.value = result.error.message
@@ -171,13 +176,14 @@ onBeforeUnmount(() => {
         @manage-groups="$emit('manageGroups', $event)"
       />
       <EngineSection :game="game" :bridge="bridge" @updated="$emit('updated', $event)" />
-      <details v-if="game.status !== 'save_only'" data-test="record-section" class="detail-section record-danger-zone">
+      <details data-test="record-section" class="detail-section record-danger-zone">
         <summary class="detail-section-summary danger-summary">
           <span>游戏记录</span>
-          <small>{{ game.status === 'installed' ? '移除并忽略' : '删除失效记录' }}</small>
+          <small>{{ game.status === 'installed' ? '移除并忽略' : game.status === 'save_only' ? '删除仅存档卡片' : '删除失效记录' }}</small>
         </summary>
         <div class="detail-section-body">
           <p v-if="game.status === 'installed'">从库中移除后会自动加入当前根目录排除项，不会删除游戏文件。</p>
+          <p v-else-if="game.status === 'save_only'">删除卡片后，相关候选会回到批量存档的待处理列表；不会删除任何实际存档文件。</p>
           <p v-else>只删除 GameSave Scout 中的失效记录，不会删除磁盘上的游戏或外部存档。</p>
           <button
             v-if="game.status === 'installed'"
@@ -188,13 +194,21 @@ onBeforeUnmount(() => {
             @click="removeGameRecord"
           >{{ removalBusy ? '正在移除…' : '从库中移除并忽略' }}</button>
           <button
-            v-else
+            v-else-if="game.status === 'missing'"
             data-test="delete-missing-game"
             type="button"
             class="danger"
             :disabled="removalBusy"
             @click="removeGameRecord"
           >{{ removalBusy ? '正在删除…' : '删除失效记录' }}</button>
+          <button
+            v-else
+            data-test="delete-save-only-game"
+            type="button"
+            class="danger"
+            :disabled="removalBusy"
+            @click="removeGameRecord"
+          >{{ removalBusy ? '正在删除…' : '删除仅存档卡片' }}</button>
           <p v-if="removalError" class="inline-error" role="alert">{{ removalError }}</p>
         </div>
       </details>

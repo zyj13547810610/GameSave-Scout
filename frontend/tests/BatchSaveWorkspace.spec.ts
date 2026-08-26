@@ -1,9 +1,10 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { createMockBridge } from '../src/api/mockBridge'
+import { createMockBridge, ok } from '../src/api/mockBridge'
 import BatchSaveWorkspace from '../src/features/saves/BatchSaveWorkspace.vue'
 import { useBatchSaveStore } from '../src/features/saves/batchSaveStore'
+import { fixtureBatchCandidate } from './batchSaveTestFixtures'
 import '../src/features/saves/batch-save.css'
 
 beforeEach(() => setActivePinia(createPinia()))
@@ -49,5 +50,30 @@ describe('BatchSaveWorkspace', () => {
     expect(containerRules).toContain('max-width: 60rem')
     expect(containerRules).toContain('max-width: 44rem')
     wrapper.unmount()
+  })
+
+  it('confirms that candidate rollback removes the whole card but not real saves', async () => {
+    const rollback = vi.fn(async () => ok({
+      removed: true, restoredCandidateCount: 2,
+      removedLocationCount: 2, cleanupWarnings: [],
+    }))
+    const bridge = createMockBridge({ rollback_batch_save_only_game: rollback })
+    const store = useBatchSaveStore()
+    vi.spyOn(store, 'open').mockResolvedValue(undefined)
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    store.page = [fixtureBatchCandidate({
+      reviewStatus: 'save_only', reviewGameId: 'save-only-1',
+    })]
+    store.total = 1
+    const wrapper = mount(BatchSaveWorkspace, { props: { bridge } })
+    await flushPromises()
+
+    await wrapper.get('[data-test="rollback-save-only-candidate-1"]').trigger('click')
+    await flushPromises()
+
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('删除整张仅存档卡片'))
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('不会删除任何实际存档'))
+    expect(rollback).toHaveBeenCalledWith({ candidateId: 'candidate-1' })
+    expect(wrapper.emitted('libraryChanged')).toHaveLength(1)
   })
 })

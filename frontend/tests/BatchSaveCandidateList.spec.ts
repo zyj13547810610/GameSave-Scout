@@ -40,4 +40,24 @@ describe('BatchSaveCandidateList', () => {
     expect((wrapper.get('[data-test="select-candidate-1"]').element as HTMLInputElement).checked).toBe(false)
     expect(wrapper.text()).toContain('建议目标')
   })
+
+  it('offers card-level rollback for a candidate that created a save-only card', async () => {
+    const candidate = fixtureBatchCandidate({
+      reviewStatus: 'save_only',
+      reviewGameId: 'save-only-1',
+      saveLocationId: 'location-1',
+    })
+    const wrapper = mount(BatchSaveCandidateList, {
+      props: {
+        bridge: createMockBridge(), candidates: [candidate],
+        games: [fixtureGame({ id: 'save-only-1', status: 'save_only' })],
+        selectedIds: new Set<string>(),
+      },
+    })
+
+    await wrapper.get('[data-test="rollback-save-only-candidate-1"]').trigger('click')
+
+    expect(wrapper.emitted('rollbackSaveOnly')).toEqual([[candidate]])
+    expect(wrapper.text()).toContain('撤销创建')
+  })
 })
