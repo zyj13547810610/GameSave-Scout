@@ -52,7 +52,7 @@ watch(
       @change="$emit('select', ($event.target as HTMLSelectElement).value)"
     >
       <option v-for="item in items" :key="item.gameId" :value="item.gameId">
-        {{ item.title }}<template v-if="item.version"> · {{ item.version }}</template> · {{ statusLabels[item.status] }}
+        {{ item.title }}<template v-if="item.version"> · {{ item.version }}</template><template v-if="item.initialHasCover"> · 已有封面</template> · {{ statusLabels[item.status] }}
       </option>
     </select>
     <div
@@ -74,6 +74,7 @@ watch(
       >
         <span class="cover-queue-item-title">{{ item.title }}</span>
         <small v-if="item.version" class="cover-queue-version">{{ item.version }}</small>
+        <small v-if="item.initialHasCover" class="cover-queue-existing-badge">已有封面</small>
         <small :class="`status-${item.status}`">
           {{ statusLabels[item.status] }}<template v-if="item.candidateCount"> · {{ item.candidateCount }}</template>
         </small>

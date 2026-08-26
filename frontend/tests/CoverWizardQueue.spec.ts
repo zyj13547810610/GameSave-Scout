@@ -5,6 +5,30 @@ import CoverWizardQueue from '../src/features/covers/CoverWizardQueue.vue'
 import '../src/features/library/library.css'
 
 describe('CoverWizardQueue', () => {
+  it('labels games that already had a cover in both queue layouts', () => {
+    const wrapper = mount(CoverWizardQueue, {
+      props: {
+        items: [
+          {
+            gameId: 'game-1',
+            title: 'Alice',
+            version: null,
+            initialHasCover: true,
+            status: 'pending',
+            candidateCount: 0,
+            error: null,
+          },
+        ],
+        selectedGameId: 'game-1',
+        includeExisting: true,
+      },
+    })
+
+    expect(wrapper.get('.cover-queue-existing-badge').text()).toBe('已有封面')
+    expect(wrapper.get('.cover-queue-select option').text()).toContain('已有封面')
+    wrapper.unmount()
+  })
+
   it('sizes every queue row to its wrapped content', () => {
     const wrapper = mount(CoverWizardQueue, {
       props: {
