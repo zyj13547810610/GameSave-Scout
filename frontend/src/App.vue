@@ -334,7 +334,6 @@ async function restoreGuidedSave(gameId: string) {
     <header class="app-global-header">
       <div class="app-brand">
         <div class="app-brand-full"><h1>GameSave Scout</h1><p>便携游戏库与存档管理器</p></div>
-        <strong class="app-brand-compact" aria-label="GameSave Scout">GSS</strong>
       </div>
       <nav class="primary-navigation" aria-label="主要功能">
         <button data-test="nav-library" type="button" :aria-current="activeView === 'library' ? 'page' : undefined" @click="changeView('library')">游戏库</button>

@@ -35,7 +35,6 @@ describe('App', () => {
     expect(header.element.parentElement).toBe(shell.element)
     expect(getComputedStyle(shell.element).display).toBe('grid')
     expect(getComputedStyle(shell.element).gridTemplateRows).toBe('auto minmax(0, 1fr)')
-    expect(getComputedStyle(navigation.element).gridTemplateColumns).toBe('repeat(4, minmax(0, 1fr))')
     expect(getComputedStyle(libraryLayout.element).display).toBe('grid')
     wrapper.unmount()
   })
@@ -386,16 +385,39 @@ describe('App', () => {
     expect(stackRule.cssText).toContain('grid-column: span 2')
   })
 
-  it('compresses secondary header labels without collapsing the four navigation entries', async () => {
+  it('keeps the full brand aligned with a fixed-width library sidebar', async () => {
     const wrapper = mount(App, {
       global: { plugins: [createPinia()], provide: { [bridgeKey as symbol]: createMockBridge() } },
     })
     await flushPromises()
 
     expect(wrapper.get('.app-brand-full').text()).toContain('GameSave Scout')
-    expect(wrapper.get('.app-brand-compact').text()).toBe('GSS')
+    expect(wrapper.find('.app-brand-compact').exists()).toBe(false)
+
+    const headerStyle = getComputedStyle(wrapper.get('.app-global-header').element)
+    const libraryStyle = getComputedStyle(wrapper.get('.library-layout').element)
+    expect(headerStyle.gridTemplateColumns).toBe('15.625rem minmax(0, 1fr) auto')
+    expect(libraryStyle.gridTemplateColumns).toBe('15.625rem minmax(0, 1fr)')
+
+    const compactRule = Array.from(document.styleSheets)
+      .flatMap((sheet) => Array.from(sheet.cssRules))
+      .find((rule) => rule.cssText.startsWith('@media (max-width: 68rem)'))
+    expect(compactRule).toBeDefined()
+    expect(compactRule?.cssText).not.toContain('.app-brand-full')
+    expect(compactRule?.cssText).not.toContain('grid-template-columns: 11rem')
+    wrapper.unmount()
+  })
+
+  it('keeps all navigation entries as compact content-width tabs', async () => {
+    const wrapper = mount(App, {
+      global: { plugins: [createPinia()], provide: { [bridgeKey as symbol]: createMockBridge() } },
+    })
+    await flushPromises()
+
     expect(wrapper.findAll('.primary-navigation button')).toHaveLength(4)
     expect(wrapper.find('.primary-navigation select').exists()).toBe(false)
+    expect(getComputedStyle(wrapper.get('.primary-navigation').element).display).toBe('flex')
+    expect(getComputedStyle(wrapper.get('.primary-navigation button').element).flexGrow).toBe('0')
     expect(wrapper.get('.ui-scale-label').text()).toBe('界面缩放')
     expect(wrapper.get('.add-root-full').text()).toContain('添加游戏目录')
     expect(wrapper.get('.add-root-compact').text()).toContain('目录')
@@ -404,7 +426,6 @@ describe('App', () => {
       .flatMap((sheet) => Array.from(sheet.cssRules))
       .find((rule) => rule.cssText.startsWith('@media (max-width: 68rem)'))
     expect(compactRule).toBeDefined()
-    expect(compactRule?.cssText).toContain('.app-brand-full')
     expect(compactRule?.cssText).toContain('.ui-scale-label')
     expect(compactRule?.cssText).toContain('.add-root-full')
     wrapper.unmount()
