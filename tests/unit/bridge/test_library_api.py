@@ -128,6 +128,47 @@ def test_start_scan_rejects_when_batch_disk_scan_group_is_active(
         writer.close()
 
 
+def test_start_scan_allows_another_library_scan_in_shared_disk_group(
+    tmp_path: Path,
+) -> None:
+    api, tasks, writer, _ = _library_api(tmp_path)
+    game_root = tmp_path / "games"
+    game_root.mkdir()
+    entered = Event()
+    release = Event()
+
+    def library_scan(_context: object) -> None:
+        entered.set()
+        release.wait(2)
+
+    try:
+        root = api.add_root(
+            {
+                "displayPath": str(game_root),
+                "scanMode": "children",
+                "maxDepth": 1,
+                "exclusions": [],
+            }
+        )["data"]
+        first_task = tasks.submit(
+            "library_scan",
+            library_scan,
+            shared_group="disk_scan",
+        )
+        assert entered.wait(1)
+
+        result = api.start_scan({"rootId": root["id"], "kind": "quick"})
+
+        assert result["ok"] is True
+        release.set()
+        assert tasks.wait(first_task, timeout=2).status == "completed"
+        assert tasks.wait(result["data"]["taskId"], timeout=3).status == "completed"
+    finally:
+        release.set()
+        tasks.close()
+        writer.close()
+
+
 def test_start_game_reanalysis_returns_task_id_and_updated_game(tmp_path: Path) -> None:
     api, tasks, writer, library = _library_api(tmp_path)
     game_root = tmp_path / "games"

@@ -41,11 +41,11 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 def test_repository_versions_are_consistent() -> None:
     versions = ReleaseVersions.load(REPOSITORY_ROOT)
 
-    assert versions.version == "0.3.3"
-    assert versions.name_for(ReleaseMode.FIXED) == "GameSave-Scout-0.3.3-win-x64"
+    assert versions.version == "0.3.4"
+    assert versions.name_for(ReleaseMode.FIXED) == "GameSave-Scout-0.3.4-win-x64"
     assert (
         versions.name_for(ReleaseMode.EVERGREEN)
-        == "GameSave-Scout-0.3.3-win-x64-lite"
+        == "GameSave-Scout-0.3.4-win-x64-lite"
     )
 
 

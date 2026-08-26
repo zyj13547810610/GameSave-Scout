@@ -114,6 +114,52 @@ def test_exclusive_groups_block_only_active_tasks_in_the_same_group() -> None:
     registry.close()
 
 
+def test_shared_group_tasks_can_coexist_but_block_an_exclusive_owner() -> None:
+    entered = (Event(), Event())
+    release = Event()
+
+    def blocked(index: int):
+        def operation(_context: object) -> None:
+            entered[index].set()
+            release.wait(2)
+
+        return operation
+
+    registry = TaskRegistry(max_workers=2)
+    first = registry.submit(
+        "library-1",
+        blocked(0),
+        shared_group="disk_scan",
+    )
+    second = registry.submit(
+        "library-2",
+        blocked(1),
+        shared_group="disk_scan",
+    )
+    try:
+        assert entered[0].wait(1)
+        assert entered[1].wait(1)
+        with pytest.raises(ActiveTaskConflict) as captured:
+            registry.submit(
+                "batch",
+                lambda _context: None,
+                exclusive_group="disk_scan",
+            )
+        assert captured.value.group == "disk_scan"
+    finally:
+        release.set()
+        assert registry.wait(first, timeout=2).status == "completed"
+        assert registry.wait(second, timeout=2).status == "completed"
+
+    replacement = registry.submit(
+        "batch",
+        lambda _context: 2,
+        exclusive_group="disk_scan",
+    )
+    assert registry.wait(replacement, timeout=2).result == 2
+    registry.close()
+
+
 def test_cancellation_reason_distinguishes_user_and_shutdown() -> None:
     entered = Event()
     release = Event()

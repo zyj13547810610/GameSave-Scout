@@ -239,7 +239,7 @@ def test_batch_scan_uses_shared_disk_scan_exclusion(tmp_path: Path) -> None:
         release.wait(2)
 
     try:
-        existing = tasks.submit("library_scan", active_scan, exclusive_group="disk_scan")
+        existing = tasks.submit("library_scan", active_scan, shared_group="disk_scan")
         assert entered.wait(1)
         result = api.start_batch_save_scan(
             {"standardScopeIds": ["documents"], "customRootIds": []}

@@ -26,7 +26,7 @@ class TaskCancelled(RuntimeError):
 
 
 class ActiveTaskConflict(RuntimeError):
-    """Raised when an active task already owns an exclusive resource group."""
+    """Raised when an active task owns an incompatible resource group."""
 
     def __init__(self, group: str) -> None:
         super().__init__(f"互斥任务组正在使用中：{group}")
@@ -90,6 +90,8 @@ class TaskRegistry:
         self._workers: dict[str, Future[None]] = {}
         self._active_exclusive_groups: dict[str, str] = {}
         self._task_exclusive_groups: dict[str, str] = {}
+        self._active_shared_groups: dict[str, set[str]] = {}
+        self._task_shared_groups: dict[str, str] = {}
         self._closed = False
         self._logger = logger or logging.getLogger(__name__)
 
@@ -98,21 +100,27 @@ class TaskRegistry:
         kind: str,
         operation: TaskOperation,
         exclusive_group: str | None = None,
+        shared_group: str | None = None,
     ) -> str:
-        if exclusive_group is not None and (
-            not isinstance(exclusive_group, str)
-            or not exclusive_group.strip()
-            or "\x00" in exclusive_group
-        ):
-            raise ValueError("互斥任务组必须是非空字符串。")
-        normalized_group = None if exclusive_group is None else exclusive_group.strip()
+        normalized_exclusive_group = _normalize_group(exclusive_group, "互斥")
+        normalized_shared_group = _normalize_group(shared_group, "共享")
+        if normalized_exclusive_group is not None and normalized_shared_group is not None:
+            raise ValueError("后台任务不能同时声明互斥任务组和共享任务组。")
         task_id = str(uuid4())
         cancel_event = Event()
         with self._lock:
             if self._closed:
                 raise RuntimeError("后台任务注册表已经关闭。")
-            if normalized_group is not None and normalized_group in self._active_exclusive_groups:
-                raise ActiveTaskConflict(normalized_group)
+            if normalized_exclusive_group is not None and (
+                normalized_exclusive_group in self._active_exclusive_groups
+                or normalized_exclusive_group in self._active_shared_groups
+            ):
+                raise ActiveTaskConflict(normalized_exclusive_group)
+            if (
+                normalized_shared_group is not None
+                and normalized_shared_group in self._active_exclusive_groups
+            ):
+                raise ActiveTaskConflict(normalized_shared_group)
             self._snapshots[task_id] = TaskSnapshot(
                 id=task_id,
                 kind=kind,
@@ -121,9 +129,14 @@ class TaskRegistry:
                 message="",
             )
             self._cancel_events[task_id] = cancel_event
-            if normalized_group is not None:
-                self._active_exclusive_groups[normalized_group] = task_id
-                self._task_exclusive_groups[task_id] = normalized_group
+            if normalized_exclusive_group is not None:
+                self._active_exclusive_groups[normalized_exclusive_group] = task_id
+                self._task_exclusive_groups[task_id] = normalized_exclusive_group
+            if normalized_shared_group is not None:
+                self._active_shared_groups.setdefault(normalized_shared_group, set()).add(
+                    task_id
+                )
+                self._task_shared_groups[task_id] = normalized_shared_group
             try:
                 worker = self._executor.submit(
                     self._run,
@@ -134,9 +147,7 @@ class TaskRegistry:
             except Exception:
                 self._snapshots.pop(task_id, None)
                 self._cancel_events.pop(task_id, None)
-                if normalized_group is not None:
-                    self._active_exclusive_groups.pop(normalized_group, None)
-                    self._task_exclusive_groups.pop(task_id, None)
+                self._release_resource_group(task_id)
                 raise
             self._workers[task_id] = worker
         return task_id
@@ -225,7 +236,7 @@ class TaskRegistry:
         else:
             self._update(task_id, status="completed", result=result)
         finally:
-            self._release_exclusive_group(task_id)
+            self._release_resource_group(task_id)
 
     def _report(
         self,
@@ -250,11 +261,29 @@ class TaskRegistry:
         with self._lock:
             return self._cancel_reasons.get(task_id)
 
-    def _release_exclusive_group(self, task_id: str) -> None:
+    def _release_resource_group(self, task_id: str) -> None:
         with self._lock:
-            group = self._task_exclusive_groups.pop(task_id, None)
-            if group is not None and self._active_exclusive_groups.get(group) == task_id:
-                self._active_exclusive_groups.pop(group, None)
+            exclusive_group = self._task_exclusive_groups.pop(task_id, None)
+            if (
+                exclusive_group is not None
+                and self._active_exclusive_groups.get(exclusive_group) == task_id
+            ):
+                self._active_exclusive_groups.pop(exclusive_group, None)
+            shared_group = self._task_shared_groups.pop(task_id, None)
+            if shared_group is not None:
+                owners = self._active_shared_groups.get(shared_group)
+                if owners is not None:
+                    owners.discard(task_id)
+                    if not owners:
+                        self._active_shared_groups.pop(shared_group, None)
+
+
+def _normalize_group(group: str | None, label: str) -> str | None:
+    if group is None:
+        return None
+    if not isinstance(group, str) or not group.strip() or "\x00" in group:
+        raise ValueError(f"{label}任务组必须是非空字符串。")
+    return group.strip()
 
 
 def _copy_snapshot(snapshot: TaskSnapshot) -> TaskSnapshot:

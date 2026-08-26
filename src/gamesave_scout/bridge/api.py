@@ -1034,7 +1034,7 @@ class BridgeApi:
                 lambda context: _scan_summary_dto(
                     scanner.scan_root(root_id, cast(Any, kind), context)
                 ),
-                exclusive_group="disk_scan",
+                shared_group="disk_scan",
             )
             return success({"taskId": task_id})
         except InvalidRequest as error:

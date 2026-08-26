@@ -6,20 +6,24 @@ import { bridgeKey } from '../src/api/bridge'
 import { createMockBridge, fixtureGame, fixtureRoot, ok } from '../src/api/mockBridge'
 
 describe('startup quick scan', () => {
-  it('renders cached games before requesting quick scans', async () => {
+  it('renders cached games before requesting quick scans for every enabled root', async () => {
     const order: string[] = []
     let wrapper!: VueWrapper
     let renderedWhenScanStarted = false
     const bridge = createMockBridge({
-      list_roots: async () => ok([fixtureRoot()]),
+      list_roots: async () => ok([
+        fixtureRoot(),
+        fixtureRoot({ id: 'root-2', displayPath: 'E:\\Games', pathKey: 'e:\\games' }),
+        fixtureRoot({ id: 'root-disabled', enabled: false }),
+      ]),
       list_games: async () => {
         order.push('games')
         return ok([fixtureGame({ title: 'Alice' })])
       },
-      start_scan: async () => {
+      start_scan: async ({ rootId }) => {
         renderedWhenScanStarted = wrapper.text().includes('Alice')
-        order.push('scan')
-        return ok({ taskId: 'task-1' })
+        order.push(`scan:${rootId}`)
+        return ok({ taskId: `task-${rootId}` })
       },
     })
     wrapper = mount(App, {
@@ -32,7 +36,7 @@ describe('startup quick scan', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('Alice')
-    expect(order).toEqual(['games', 'scan'])
+    expect(order).toEqual(['games', 'scan:root-1', 'scan:root-2'])
     expect(renderedWhenScanStarted).toBe(true)
   })
 })

@@ -34,7 +34,7 @@ COMMITS_URL = (
 )
 MAX_BYTES = 64 * 1024 * 1024
 TIMEOUT_SECONDS = 30.0
-USER_AGENT = "GameSaveScout snapshot maintainer/0.3.3"
+USER_AGENT = "GameSaveScout snapshot maintainer/0.3.4"
 
 
 def main(argv: Sequence[str] | None = None) -> int:
