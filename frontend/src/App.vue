@@ -378,7 +378,7 @@ async function restoreGuidedSave(gameId: string) {
           <div class="library-fixed-controls" data-test="library-fixed-controls">
             <div class="content-heading">
               <h2>我的游戏 <span>{{ games.length }}</span></h2>
-              <div class="compact-actions">
+              <div class="game-management-actions" role="group" aria-label="游戏管理">
                 <button
                   v-if="games.length"
                   data-test="enter-batch-mode"
@@ -387,7 +387,8 @@ async function restoreGuidedSave(gameId: string) {
                   :aria-pressed="batchMode"
                   :disabled="batchBusy"
                   @click="batchMode ? exitBatchMode() : enterBatchMode()"
-                >{{ batchMode ? '退出批量管理' : '批量管理' }}</button>
+                >{{ batchMode ? '退出批量选择' : '批量选择' }}</button>
+                <button data-test="manage-groups" class="secondary" type="button" @click="openGroupManager">管理分组</button>
               </div>
             </div>
             <div v-if="batchNotice" data-test="batch-result" class="batch-result" role="status">{{ batchNotice }}</div>
@@ -414,7 +415,6 @@ async function restoreGuidedSave(gameId: string) {
               v-model:group="store.groupFilter"
               :engines="engines"
               :groups="groups"
-              @manage-groups="openGroupManager"
             />
           </div>
           <div ref="gameContentScroll" class="library-scroll-region" data-test="library-scroll-region" tabindex="0" aria-label="游戏列表">

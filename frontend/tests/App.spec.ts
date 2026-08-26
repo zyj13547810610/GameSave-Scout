@@ -334,7 +334,7 @@ describe('App', () => {
     expect(startScan).not.toHaveBeenCalled()
   })
 
-  it('keeps batch covers out of the library heading after moving it to global navigation', async () => {
+  it('keeps batch selection and group management as independent actions in one visual group', async () => {
     const bridge = createMockBridge({
       async list_games() { return ok([fixtureGame()]) },
     })
@@ -346,8 +346,14 @@ describe('App', () => {
     })
     await flushPromises()
 
-    expect(wrapper.findAll('.compact-actions button').map((item) => item.text())).toEqual(['批量管理'])
+    const actions = wrapper.get('[aria-label="游戏管理"]')
+    expect(actions.findAll('button').map((item) => item.text())).toEqual(['批量选择', '管理分组'])
     expect(wrapper.get('[data-test="nav-covers"]').text()).toBe('批量封面')
+    expect(wrapper.find('[data-test="enter-cover-wizard"]').exists()).toBe(false)
+    expect(wrapper.get('.library-toolbar').find('[data-test="manage-groups"]').exists()).toBe(false)
+
+    await actions.get('[data-test="enter-batch-mode"]').trigger('click')
+    expect(actions.get('[data-test="enter-batch-mode"]').text()).toBe('退出批量选择')
   })
 
   it('keeps the batch entry heading separated from the filters below', async () => {
@@ -704,19 +710,19 @@ describe('App', () => {
     await flushPromises()
 
     const toggle = wrapper.get('[data-test="enter-batch-mode"]')
-    expect(toggle.text()).toBe('批量管理')
+    expect(toggle.text()).toBe('批量选择')
     expect(toggle.attributes('aria-pressed')).toBe('false')
 
     await toggle.trigger('click')
 
     const exitToggle = wrapper.get('[data-test="enter-batch-mode"]')
-    expect(exitToggle.text()).toBe('退出批量管理')
+    expect(exitToggle.text()).toBe('退出批量选择')
     expect(exitToggle.attributes('aria-pressed')).toBe('true')
-    expect(wrapper.get('[data-test="batch-management-bar"]').text()).not.toContain('退出批量管理')
+    expect(wrapper.get('[data-test="batch-management-bar"]').text()).not.toContain('退出批量选择')
 
     await exitToggle.trigger('click')
 
-    expect(wrapper.get('[data-test="enter-batch-mode"]').text()).toBe('批量管理')
+    expect(wrapper.get('[data-test="enter-batch-mode"]').text()).toBe('批量选择')
     expect(wrapper.find('[data-test="batch-management-bar"]').exists()).toBe(false)
   })
 

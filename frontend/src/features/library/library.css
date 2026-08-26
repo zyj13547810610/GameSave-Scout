@@ -13,7 +13,7 @@
 .library-layout { display: grid; min-width: 0; min-height: 0; flex: 1; grid-template-columns: 15.625rem minmax(0, 1fr); gap: 1.25rem; }
 .library-layout .library-content { flex: 1; }
 
-.library-toolbar { display: grid; grid-template-columns: minmax(11.25rem, 1fr) repeat(3, minmax(8rem, 10rem)) auto; gap: .625rem; margin-bottom: 1rem; }
+.library-toolbar { display: grid; grid-template-columns: minmax(11.25rem, 1fr) repeat(3, minmax(8rem, 10rem)); gap: .625rem; margin-bottom: 1rem; }
 .library-toolbar select { border: 1px solid #393641; border-radius: .5rem; padding: .5625rem; color: #eceaf2; background: #17151e; }
 .library-toolbar button { white-space: nowrap; }
 .group-management-dialog { display: grid; overflow: hidden; width: min(44rem, calc(100vw - 2rem)); max-width: 44rem; max-height: min(46rem, calc(100dvh - 2rem)); grid-template-rows: auto auto auto minmax(0, 1fr) auto; gap: 1rem; }
@@ -31,6 +31,8 @@
 .group-row-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
 .content-heading { margin-bottom: 1rem; }
 .content-heading h2 { margin: 0; }
+.game-management-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; border: 1px solid #393641; border-radius: .65rem; padding: .35rem; background: #17151e; }
+.game-management-actions button { min-height: 2.35rem; }
 .cover-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr)); gap: 1rem; }
 .cover-card { display: grid; min-width: 0; gap: .5625rem; min-height: auto; border: 0; padding: 0; text-align: left; background: transparent; }
 .cover-card strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

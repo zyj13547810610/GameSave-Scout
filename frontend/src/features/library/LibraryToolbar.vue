@@ -14,7 +14,6 @@ defineEmits<{
   'update:status': [value: string]
   'update:engine': [value: string]
   'update:group': [value: string]
-  manageGroups: [event: MouseEvent]
 }>()
 </script>
 
@@ -32,6 +31,5 @@ defineEmits<{
       <option value="ungrouped">未分组</option>
       <option v-for="item in groups" :key="item.id" :value="item.id">{{ item.name }}</option>
     </select>
-    <button data-test="manage-groups" class="secondary" type="button" @click="$emit('manageGroups', $event)">管理分组</button>
   </div>
 </template>
