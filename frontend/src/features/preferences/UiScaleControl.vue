@@ -12,7 +12,7 @@ function update(event: Event) {
 
 <template>
   <label class="ui-scale-control">
-    <span>界面缩放</span>
+    <span class="ui-scale-label">界面缩放</span>
     <select data-test="ui-scale" :value="modelValue" @change="update">
       <option v-for="scale in UI_SCALE_OPTIONS" :key="scale" :value="scale">
         {{ Math.round(scale * 100) }}%

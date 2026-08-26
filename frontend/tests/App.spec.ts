@@ -386,6 +386,30 @@ describe('App', () => {
     expect(stackRule.cssText).toContain('grid-column: span 2')
   })
 
+  it('compresses secondary header labels without collapsing the four navigation entries', async () => {
+    const wrapper = mount(App, {
+      global: { plugins: [createPinia()], provide: { [bridgeKey as symbol]: createMockBridge() } },
+    })
+    await flushPromises()
+
+    expect(wrapper.get('.app-brand-full').text()).toContain('GameSave Scout')
+    expect(wrapper.get('.app-brand-compact').text()).toBe('GSS')
+    expect(wrapper.findAll('.primary-navigation button')).toHaveLength(4)
+    expect(wrapper.find('.primary-navigation select').exists()).toBe(false)
+    expect(wrapper.get('.ui-scale-label').text()).toBe('界面缩放')
+    expect(wrapper.get('.add-root-full').text()).toContain('添加游戏目录')
+    expect(wrapper.get('.add-root-compact').text()).toContain('目录')
+
+    const compactRule = Array.from(document.styleSheets)
+      .flatMap((sheet) => Array.from(sheet.cssRules))
+      .find((rule) => rule.cssText.startsWith('@media (max-width: 68rem)'))
+    expect(compactRule).toBeDefined()
+    expect(compactRule?.cssText).toContain('.app-brand-full')
+    expect(compactRule?.cssText).toContain('.ui-scale-label')
+    expect(compactRule?.cssText).toContain('.add-root-full')
+    wrapper.unmount()
+  })
+
   it('keeps library controls outside the independently scrollable game content', async () => {
     const bridge = createMockBridge({
       async list_games() { return ok([fixtureGame()]) },

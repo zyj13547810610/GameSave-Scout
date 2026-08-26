@@ -4,6 +4,8 @@
 .app-brand { flex: none; border: 1px solid #2d2a35; border-radius: .875rem; padding: 1rem; background: #17151e; }
 .app-brand h1, .app-brand p { margin: 0; }
 .app-brand p { margin-top: .25rem; color: #8d899a; font-size: .75rem; }
+.app-brand-compact, .add-root-compact { display: none; }
+.app-global-header .app-actions { flex-wrap: nowrap; }
 .primary-navigation { display: grid; min-width: 0; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .5rem; }
 .primary-navigation button { border-color: #393641; color: #c8c2d2; background: #201d27; }
 .primary-navigation button[aria-current="page"] { border-color: #8064e5; color: white; background: #6548d1; }
@@ -191,6 +193,16 @@
 @container (max-width: 44rem) {
   .library-toolbar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .library-toolbar input[type="search"] { grid-column: span 2; }
+}
+@media (max-width: 68rem) {
+  .app-shell { gap: .75rem; padding: .75rem; }
+  .app-global-header { grid-template-columns: auto minmax(0, 1fr) auto; gap: .6rem; }
+  .app-brand { padding: .65rem; }
+  .app-brand-full, .ui-scale-label, .add-root-full { display: none; }
+  .app-brand-compact, .add-root-compact { display: inline; }
+  .primary-navigation { gap: .35rem; }
+  .primary-navigation button { min-width: 0; padding-inline: .4rem; white-space: nowrap; }
+  .library-layout { grid-template-columns: 11rem minmax(0, 1fr); gap: .75rem; }
 }
 @media (max-width: 700px) {
   .app-shell { gap: .75rem; padding: .75rem; }
