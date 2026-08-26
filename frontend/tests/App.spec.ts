@@ -14,7 +14,7 @@ beforeEach(() => {
 })
 
 describe('App', () => {
-  it('keeps first-level navigation in a fixed sidebar beside the flexible workspace', async () => {
+  it('keeps four first-level entries in one global header above the workspace', async () => {
     const wrapper = mount(App, {
       attachTo: document.body,
       global: { plugins: [createPinia()], provide: { [bridgeKey as symbol]: createMockBridge() } },
@@ -22,15 +22,21 @@ describe('App', () => {
     await flushPromises()
 
     const shell = wrapper.get('.app-shell')
-    const sidebar = wrapper.get('.app-sidebar')
-    const navigation = wrapper.get('.primary-navigation')
+    const header = wrapper.get('.app-global-header')
+    const navigation = header.get('.primary-navigation')
     const libraryLayout = wrapper.get('.library-layout')
 
-    expect(navigation.element.parentElement).toBe(sidebar.element)
+    expect(navigation.findAll('button').map((item) => item.text())).toEqual([
+      '游戏库',
+      '批量存档',
+      '批量封面',
+      '规则管理',
+    ])
+    expect(header.element.parentElement).toBe(shell.element)
     expect(getComputedStyle(shell.element).display).toBe('grid')
-    expect(getComputedStyle(shell.element).gridTemplateColumns).toBe('15.625rem minmax(0, 1fr)')
-    expect(getComputedStyle(navigation.element).gridTemplateColumns).toBe('1fr')
-    expect(getComputedStyle(libraryLayout.element).display).toBe('flex')
+    expect(getComputedStyle(shell.element).gridTemplateRows).toBe('auto minmax(0, 1fr)')
+    expect(getComputedStyle(navigation.element).gridTemplateColumns).toBe('repeat(4, minmax(0, 1fr))')
+    expect(getComputedStyle(libraryLayout.element).display).toBe('grid')
     wrapper.unmount()
   })
 
@@ -51,7 +57,8 @@ describe('App', () => {
     await flushPromises()
 
     expect(wrapper.get('[data-test="nav-batch-saves"]').attributes('aria-current')).toBe('page')
-    expect(wrapper.find('[data-test="root-scroll-region"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="root-scroll-region"]').exists()).toBe(true)
+    expect(wrapper.get('.library-layout').isVisible()).toBe(false)
     expect(wrapper.find('[data-test="enter-cover-wizard"]').exists()).toBe(false)
     expect(wrapper.find('[data-test="add-game-root"]').exists()).toBe(false)
     expect(wrapper.find('[data-test="batch-save-workspace"]').exists()).toBe(true)
@@ -286,7 +293,7 @@ describe('App', () => {
       global: { plugins: [createPinia()], provide: { [bridgeKey as symbol]: bridge } },
     })
     await flushPromises()
-    await wrapper.get('.app-header button').trigger('click')
+    await wrapper.get('[data-test="add-game-root"]').trigger('click')
     await wrapper.get('[data-test="display-path"]').setValue('D:\\Games')
     await wrapper.get('.dialog-card form').trigger('submit')
     await flushPromises()
@@ -327,7 +334,7 @@ describe('App', () => {
     expect(startScan).not.toHaveBeenCalled()
   })
 
-  it('places batch management to the left of batch covers', async () => {
+  it('keeps batch covers out of the library heading after moving it to global navigation', async () => {
     const bridge = createMockBridge({
       async list_games() { return ok([fixtureGame()]) },
     })
@@ -339,10 +346,8 @@ describe('App', () => {
     })
     await flushPromises()
 
-    expect(wrapper.findAll('.compact-actions button').map((item) => item.text())).toEqual([
-      '批量管理',
-      '批量封面',
-    ])
+    expect(wrapper.findAll('.compact-actions button').map((item) => item.text())).toEqual(['批量管理'])
+    expect(wrapper.get('[data-test="nav-covers"]').text()).toBe('批量封面')
   })
 
   it('keeps the batch entry heading separated from the filters below', async () => {
@@ -398,8 +403,9 @@ describe('App', () => {
     wrapper.unmount()
   })
 
-  it('opens the in-app cover workspace while preserving library state', async () => {
+  it('opens covers as a first-level workspace and closes its session before restoring library state', async () => {
     const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined)
+    const closeCoverWizard = vi.fn(async () => ok({ closed: true }))
     const bridge = createMockBridge({
       async list_games() { return ok([fixtureGame()]) },
       async start_cover_wizard() {
@@ -412,6 +418,7 @@ describe('App', () => {
           currentGameId: 'game-1', includeExisting: false, sourceOperationActive: false,
         })
       },
+      close_cover_wizard: closeCoverWizard,
     })
     const wrapper = mount(App, {
       attachTo: document.body,
@@ -425,24 +432,27 @@ describe('App', () => {
     const layout = wrapper.get('.library-layout').element
     const gameScroll = wrapper.get('[data-test="library-scroll-region"]').element
     const rootScroll = wrapper.get('[data-test="root-scroll-region"]').element
-    const entry = wrapper.get('[data-test="enter-cover-wizard"]')
     gameScroll.scrollTop = 240
     rootScroll.scrollTop = 120
 
-    await entry.trigger('click')
+    await wrapper.get('[data-test="nav-covers"]').trigger('click')
     await flushPromises()
-    expect(wrapper.get('[data-test="cover-wizard-workspace"]')).toBeTruthy()
+    expect(wrapper.get('[data-test="nav-covers"]').attributes('aria-current')).toBe('page')
+    expect(wrapper.get('[data-test="cover-wizard-workspace"]').attributes('role')).toBeUndefined()
+    expect(wrapper.get('[data-test="cover-wizard-workspace"]').attributes('aria-modal')).toBeUndefined()
+    expect(wrapper.get('[data-test="cover-wizard-workspace"]').text()).not.toContain('返回游戏库')
     expect(document.body.contains(layout)).toBe(true)
-    expect(layout.getAttribute('inert')).not.toBeNull()
-    expect(layout.getAttribute('aria-hidden')).toBe('true')
+    expect(wrapper.get('.library-layout').isVisible()).toBe(false)
 
-    await wrapper.get('[data-test="cover-wizard-workspace"] [data-autofocus]').trigger('click')
+    await wrapper.get('[data-test="nav-library"]').trigger('click')
     await flushPromises()
     expect(wrapper.find('[data-test="cover-wizard-workspace"]').exists()).toBe(false)
+    expect(closeCoverWizard).toHaveBeenCalledWith({ sessionId: 'wizard-1' })
     expect((wrapper.get('input[aria-label="搜索游戏"]').element as HTMLInputElement).value).toBe('Alice')
-    expect(gameScroll.scrollTop).toBe(240)
-    expect(rootScroll.scrollTop).toBe(120)
-    expect(document.activeElement).toBe(entry.element)
+    expect(wrapper.get('[data-test="library-scroll-region"]').element).toBe(gameScroll)
+    expect(wrapper.get('[data-test="root-scroll-region"]').element).toBe(rootScroll)
+    expect(wrapper.get('[data-test="library-scroll-region"]').element.scrollTop).toBe(240)
+    expect(wrapper.get('[data-test="root-scroll-region"]').element.scrollTop).toBe(120)
     expect(scrollTo).not.toHaveBeenCalled()
     wrapper.unmount()
   })

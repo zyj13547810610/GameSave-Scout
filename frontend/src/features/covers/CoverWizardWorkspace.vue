@@ -14,13 +14,13 @@ const props = defineProps<{
   games: Game[]
   settings: CoverWizardSettings
 }>()
-const emit = defineEmits<{ updated: [game: Game]; close: [] }>()
+const emit = defineEmits<{ updated: [game: Game] }>()
 const store = useCoverWizardStore()
-const root = ref<HTMLElement | null>(null)
 const localSettings = ref({ ...props.settings })
 const settingsError = ref('')
 const settingsBusy = ref(false)
 const opening = ref(true)
+let openingPromise: Promise<void> | null = null
 type GalleryHandle = { scrollToTop: () => void }
 const gallery = ref<GalleryHandle | null>(null)
 
@@ -30,11 +30,14 @@ const currentGame = computed(() => (
 const currentTitle = computed(() => currentGame.value?.title ?? '当前游戏')
 const currentVersion = computed(() => currentGame.value?.version ?? null)
 
-onMounted(async () => {
-  await store.open(props.bridge)
-  opening.value = false
-  await nextTick()
-  root.value?.querySelector<HTMLElement>('[data-autofocus]')?.focus()
+onMounted(() => {
+  openingPromise = (async () => {
+    try {
+      await store.open(props.bridge)
+    } finally {
+      opening.value = false
+    }
+  })()
 })
 onBeforeUnmount(() => {
   store.clearPolling()
@@ -151,41 +154,26 @@ async function adopt() {
   if (game) emit('updated', game)
 }
 
-async function requestClose() {
-  if (store.activeTaskId && !window.confirm('退出将取消正在进行的搜索，并清理未采用候选。是否继续？')) return
-  if (await store.requestClose(props.bridge)) emit('close')
+async function requestClose(): Promise<boolean> {
+  await openingPromise
+  if (!store.session) {
+    store.clearPolling()
+    return true
+  }
+  if (store.activeTaskId && !window.confirm('退出将取消正在进行的搜索，并清理未采用候选。是否继续？')) {
+    return false
+  }
+  return store.requestClose(props.bridge)
 }
 
-function onKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape') {
-    event.preventDefault()
-    void requestClose()
-    return
-  }
-  if (event.key !== 'Tab' || !root.value) return
-  const focusable = Array.from(root.value.querySelectorAll<HTMLElement>(
-    'button:not(:disabled), input:not(:disabled), select:not(:disabled), summary, [tabindex]:not([tabindex="-1"])',
-  )).filter((item) => item.offsetParent !== null)
-  if (!focusable.length) return
-  const first = focusable[0]
-  const last = focusable[focusable.length - 1]
-  if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault(); last.focus()
-  } else if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault(); first.focus()
-  }
-}
+defineExpose({ requestClose })
 </script>
 
 <template>
   <section
-    ref="root"
     class="cover-wizard-workspace"
     data-test="cover-wizard-workspace"
-    role="dialog"
-    aria-modal="true"
     aria-labelledby="cover-wizard-title"
-    @keydown="onKeydown"
     @dragover.prevent
     @drop.prevent="addFiles($event.dataTransfer?.files ?? [])"
   >
@@ -194,7 +182,6 @@ function onKeydown(event: KeyboardEvent) {
         <p>批量封面</p>
         <h1 id="cover-wizard-title">为游戏挑选封面</h1>
       </div>
-      <button data-autofocus type="button" class="secondary" @click="requestClose">返回游戏库</button>
     </header>
     <div v-if="opening" class="cover-gallery-empty">正在建立封面会话…</div>
     <div v-else-if="!store.session" class="cover-gallery-empty" role="alert">

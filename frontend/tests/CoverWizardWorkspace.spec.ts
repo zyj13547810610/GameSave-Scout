@@ -216,7 +216,7 @@ describe('CoverWizardWorkspace', () => {
     wrapper.unmount()
   })
 
-  it('closes settings with Escape before allowing the workspace to exit', async () => {
+  it('closes settings with Escape without treating the first-level workspace as a dialog', async () => {
     const wrapper = mount(CoverWizardWorkspace, {
       attachTo: document.body,
       props: {
@@ -233,10 +233,13 @@ describe('CoverWizardWorkspace', () => {
 
     expect(wrapper.find('[data-test="cover-settings-popover"]').exists()).toBe(false)
     expect(wrapper.emitted('close')).toBeUndefined()
+    expect(wrapper.get('[data-test="cover-wizard-workspace"]').attributes('role')).toBeUndefined()
+    expect(wrapper.get('[data-test="cover-wizard-workspace"]').attributes('aria-modal')).toBeUndefined()
+    expect(wrapper.text()).not.toContain('返回游戏库')
 
     await wrapper.get('[data-test="cover-wizard-workspace"]').trigger('keydown', { key: 'Escape' })
     await flushPromises()
-    expect(wrapper.emitted('close')).toHaveLength(1)
+    expect(wrapper.emitted('close')).toBeUndefined()
     wrapper.unmount()
   })
 })
