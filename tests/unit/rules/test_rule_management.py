@@ -122,6 +122,39 @@ def test_user_rule_crud_is_transactional_and_ids_cannot_change(
     assert builtin_delete.value.code == "builtin_rule_readonly"
 
 
+def test_new_engine_rule_requires_category_but_legacy_draft_stays_valid(
+    tmp_path: Path,
+) -> None:
+    service, catalog, repository, _ = _service(tmp_path)
+    service.save_rule(None, _engine_draft("legacy"), None)
+    legacy_file = repository.engine_dir / "legacy.yaml"
+    legacy_file.write_text(
+        "\n".join(
+            line
+            for line in legacy_file.read_text(encoding="utf-8").splitlines()
+            if "category:" not in line
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    assert catalog.refresh().applied is True
+    legacy_draft = {**_engine_draft("legacy")}
+    legacy_draft.pop("category")
+
+    validation = service.validate_draft(legacy_draft)
+    updated = service.save_rule("user:legacy", legacy_draft, None)
+
+    assert validation.valid is True
+    assert validation.normalized_draft is not None
+    assert "category" not in validation.normalized_draft
+    assert updated.detail.qualified_id == "user:legacy"
+
+    unclassified_new = {**legacy_draft, "id": "unclassified_new"}
+    with pytest.raises(RuleManagementError) as missing_category:
+        service.save_rule(None, unclassified_new, None)
+    assert missing_category.value.code == "engine_category_required"
+
+
 def test_formal_user_rule_requires_bound_test_and_matching_changes_downgrade(
     tmp_path: Path,
 ) -> None:
@@ -272,6 +305,7 @@ def _engine_draft(rule_id: str, *, status: str = "experimental") -> dict[str, ob
         "id": rule_id,
         "label": "Mine",
         "type": "engine",
+        "category": "general",
         "status": status,
         "priority": 0,
         "enabled": True,

@@ -5,7 +5,7 @@ import RuleEditorForm from '../src/features/rules/RuleEditorForm.vue'
 
 const draft: EngineRuleDraft = {
   version: '1', id: 'kiri', label: 'KiriKiri', type: 'engine', status: 'formal',
-  priority: 100, enabled: true, notes: null, references: [], variant: '2/Z',
+  priority: 100, enabled: true, notes: null, references: [], variant: '2/Z', category: 'visual_novel_doujin',
   threshold: .7, all: [{ op: 'path_exists', path: 'data.xp3', weight: 1 }],
   any: [], negative: [],
 }
@@ -53,6 +53,30 @@ describe('RuleEditorForm', () => {
     expect((enabled.element as HTMLSelectElement).value).toBe('enabled')
     await enabled.setValue('disabled')
     expect(wrapper.emitted('update:draft')?.at(-1)?.[0]).toMatchObject({ enabled: false })
+  })
+
+  it('requires a category for a newly created engine rule without guessing general', async () => {
+    const unclassified: EngineRuleDraft = { ...draft, category: null }
+    const wrapper = mount(RuleEditorForm, {
+      props: { draft: unclassified, mode: 'create', validation, busy: false, dirty: true },
+    })
+
+    const category = wrapper.get('select[name="category"]')
+    expect((category.element as HTMLSelectElement).value).toBe('')
+    expect(wrapper.get('[data-test="save-rule"]').attributes('disabled')).toBeDefined()
+
+    await category.setValue('general')
+    expect(wrapper.emitted('update:draft')?.at(-1)?.[0]).toMatchObject({ category: 'general' })
+  })
+
+  it('shows an old unclassified user rule without forcing a fake category', () => {
+    const unclassified: EngineRuleDraft = { ...draft, category: null }
+    const wrapper = mount(RuleEditorForm, {
+      props: { draft: unclassified, mode: 'edit', validation, busy: false, dirty: true },
+    })
+
+    expect(wrapper.get('select[name="category"]').text()).toContain('未分类')
+    expect(wrapper.get('[data-test="save-rule"]').attributes('disabled')).toBeUndefined()
   })
 
   it('shows backend validation failure and disables save without dropping the draft', async () => {

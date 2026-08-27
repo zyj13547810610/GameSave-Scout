@@ -421,6 +421,7 @@ export type ScanResult = {
 export type RuleSource = 'builtin' | 'user'
 export type RuleStatus = 'formal' | 'experimental'
 export type RuleType = 'engine' | 'save_game' | 'save_engine'
+export type EngineCategory = 'general' | 'visual_novel_doujin'
 
 export type RuleDiagnostic = {
   severity: 'info' | 'warning' | 'error'
@@ -470,6 +471,7 @@ type RuleDraftCommon = {
 
 export type EngineRuleDraft = RuleDraftCommon & {
   type: 'engine'
+  category?: EngineCategory | null
   variant?: string
   threshold: number
   all: EngineRuleEvidenceDraft[]

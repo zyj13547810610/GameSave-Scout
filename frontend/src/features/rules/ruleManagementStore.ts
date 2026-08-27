@@ -41,7 +41,7 @@ function defaultDraft(type: RuleType): RuleDraft {
     references: [] as string[],
   }
   if (type === 'engine') {
-    return { ...common, type, threshold: 1, all: [], any: [], negative: [] }
+    return { ...common, type, category: null, threshold: 1, all: [], any: [], negative: [] }
   }
   if (type === 'save_engine') {
     return { ...common, type, engine_ids: [], locations: [] }

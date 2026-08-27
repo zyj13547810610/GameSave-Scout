@@ -7,7 +7,7 @@
 - `formal`（正式）：必须有公开、可复核的格式或产品资料，并同时具备明确的正向与相似结构负向测试。
 - `experimental`（实验）：证据或排他性尚不足，可以显示为实验候选，但不能伪装成正式结论。
 - `enabled: false`：规则保留在资源中但不参与检测。
-- `references` 只记录公开的 HTTPS 页面；资料访问日期统一为 **2026-08-21**。
+- `references` 只记录公开的 HTTPS 页面；V0.3.0～V0.3.2 资料访问日期为 **2026-08-21**，V0.3.5 新增资料复核日期为 **2026-08-27**。
 - GARbro 的格式实现和支持列表可证明“某种归档签名确实存在，并被相关格式处理器使用”，但单个归档扩展名或短魔数通常不能独立证明唯一引擎。GameSave Scout 不复制 GARbro 解析器代码，也不借此解包或收集游戏内容。
 - 正向夹具只保存人工生成的最小字节和目录结构；负向夹具覆盖同名随机文件、常见扩展名、签名偏移/截断及容易混淆的组合。仓库不纳入真实游戏文件。
 
@@ -29,6 +29,19 @@
 | `livemaker` / LiveMaker/LiveNovel | `game.dat` 起始完整 `vff\0`；[GARbro ArcVF](https://github.com/morkt/GARbro/blob/master/ArcFormats/LiveMaker/ArcVF.cs) | 单个 GAL/GALX 只是图像格式；独立 EXE 内嵌归档不在本轮声明式读取范围 | 正向：标准外置 VF 归档；负向：随机 DAT、偏移头、孤立 GALX | **转正式**；公开 VF 头直接标注为 LiveMaker 资源归档，且不使用通用图像格式 |
 | `cmvs` / CMVS/CVNS | `start.ps3` 加任一 CPZ5/6/7 归档；[GARbro ArcCPZ](https://github.com/morkt/GARbro/blob/master/ArcFormats/Cmvs/ArcCPZ.cs) | 单一 CPZ 可能是孤立资源，版本 4 或未知版本不能类推 | 正向：启动脚本与受支持归档组合；负向：随机/孤立 CPZ、孤立脚本、CPZ4 | **转正式**；两类独立证据组合达到正式门槛 |
 | `godot` / Godot | 游戏 EXE 加 `project.godot` 配置，或 EXE 加 PCK 的 `GDPC` 头；[Godot 文件系统](https://docs.godotengine.org/en/stable/tutorials/scripting/filesystem.html)、[PCK 导出](https://docs.godotengine.org/en/stable/tutorials/export/exporting_pcks.html)、[官方魔数定义](https://github.com/godotengine/godot/blob/master/core/io/file_access_pack.h) | 任意 `.pck` 扩展名或普通 INI 文本都不足；内嵌 PCK 暂不扫描 EXE 尾部 | 正向：官方项目配置或独立 PCK 头；负向：普通 PCK、偏移魔数、伪配置 | **转正式**；官方文件名/格式与游戏 EXE 组合通过负向测试 |
+
+## V0.3.5 第三批声明式规则
+
+本批六条规则只检查文件名、受限魔数或目录组合，不解析资源正文。公开资料用于证明这些文件或结构与对应引擎有关；是否达到正式门槛仍由组合证据、相似结构负向夹具和误报边界共同决定。
+
+| 稳定 ID / 标签 | 检测组合与公开依据 | 主要误报边界 | 当前状态 |
+| --- | --- | --- | --- |
+| `game_maker` / GameMaker | 根目录 `data.win` 同时以 `FORM` 开头且偏移 8 为 `GEN8`；[GameMaker Windows 目标设置](https://manual.gamemaker.io/monthly/en/Settings/Windows.htm)、[UndertaleModTool 的 FORM/GEN8 数据模型](https://github.com/UnderminersTeam/UndertaleModTool/blob/master/UndertaleModLib/UndertaleData.cs) | `data.win` 文件名、孤立 `FORM` 或偏移错误的 `GEN8` 均不命中；不覆盖 YYC 等不携带该数据文件的构建 | **正式**；固定位置双签名比单文件名具有足够排他性 |
+| `cryengine` / CRYENGINE | 同一受限目录树同时存在 `CrySystem.dll` 与 `CryAction.dll`；[CRYENGINE Game Code 文档](https://www.cryengine.com/docs/static/engines/cryengine-3/categories/1638401/pages/1605726)、[CryAction 文档](https://www.cryengine.com/docs/static/engines/cryengine-5/categories/23756813/pages/23309036) | 单个 DLL、只有 `Cry*` 名称的第三方文件或新版不再分发 `CryAction.dll` 的布局不命中；本规则只覆盖经典 Windows 动态库布局 | **正式**；两项官方运行时模块组合，覆盖范围主动收窄 |
+| `re_engine` / RE Engine | 根目录 EXE 与根目录 `re_chunk_000.pak` 组合；[REE.PAK.Tool](https://github.com/Ekey/REE.PAK.Tool)、[REFramework](https://github.com/praydog/REFramework) | 任意 PAK、仅补丁 PAK、无 EXE 的解包目录或模组工具缓存不命中；该社区证据能证明 PC 发行布局，但不是 Capcom 的公开格式规范 | **正式**；固定根文件名再绑定可执行文件，且负向夹具排除孤立归档 |
+| `mt_framework` / MT Framework | `nativePC` 目录中实际存在至少一个 ARC；[ARCtool](https://github.com/FluffyQuack/ARCtool)、[KnuxLib 的 MT Framework 格式表](https://github.com/Knuxfan24/KnuxLib) | `nativePC` 可能由模组工具创建，`.arc` 也不是唯一格式；未读取 ARC 版本或头部，无法排除所有同名目录 | **实验**；保留候选价值，但不把目录名与扩展名组合提升为正式结论 |
+| `defold` / Defold | 根目录同时存在 `game.arci`、`game.arcd`、`game.dmanifest`；[Defold 官方归档格式](https://github.com/defold/defold/blob/dev/engine/docs/ARCHIVE_FORMAT.md) | 只复制其中一两个文件、改名备份或普通同扩展名文件不命中；不覆盖 Web 分片与定制输出名 | **正式**；官方文档明确给出三件套及各自职责 |
+| `suika2` / Suika2 | 根目录 `suika.exe`、`conf/config.txt` 与 `txt/init.txt` 三件套；[Suika2 上游仓库](https://github.com/denisoa/suika2) | 单独同名 EXE、普通 `config.txt` 或只有脚本目录不命中；定制启动器或改变标准目录的发行可能漏检 | **正式**；上游示例目录中的执行文件、配置与初始脚本组合通过正负夹具 |
 
 ## 当前正式引擎规则
 

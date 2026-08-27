@@ -82,6 +82,7 @@
         "id": {"type": "string", "pattern": "^[a-z0-9_]{1,80}$"},
         "label": {"type": "string", "minLength": 1},
         "type": {"const": "engine"},
+        "category": {"enum": ["general", "visual_novel_doujin"]},
         "variant": {"type": ["string", "null"]},
         "status": {"enum": ["formal", "experimental"]},
         "priority": {"type": "integer", "minimum": -1000, "maximum": 1000},

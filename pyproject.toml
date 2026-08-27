@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gamesave-scout"
-version = "0.3.4"
+version = "0.3.5"
 description = "Portable Windows game library and save-location manager"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"

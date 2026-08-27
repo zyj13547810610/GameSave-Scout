@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, watch } from 'vue'
-import type { RuleDraft, RuleDraftValidation } from '../../api/contracts'
+import type { EngineCategory, RuleDraft, RuleDraftValidation } from '../../api/contracts'
 import EngineRuleForm from './EngineRuleForm.vue'
 import SaveRuleForm from './SaveRuleForm.vue'
 import RuleYamlPreview from './RuleYamlPreview.vue'
@@ -21,7 +21,10 @@ const emit = defineEmits<{
 let validationTimer: number | null = null
 const structurallyComplete = computed(() => {
   if (!props.draft.id.trim() || !props.draft.label.trim()) return false
-  if (props.draft.type === 'engine') return props.draft.all.length + props.draft.any.length > 0
+  if (props.draft.type === 'engine') {
+    return (props.mode !== 'create' || Boolean(props.draft.category))
+      && props.draft.all.length + props.draft.any.length > 0
+  }
   if (props.draft.locations.length === 0) return false
   return props.draft.type === 'save_game'
     ? props.draft.titles.some((item) => item.trim())
@@ -84,6 +87,13 @@ onBeforeUnmount(() => {
           <select name="enabled" :disabled="mode === 'readonly'" :value="draft.enabled ? 'enabled' : 'disabled'" @change="updateCommon({ enabled: ($event.target as HTMLSelectElement).value === 'enabled' })">
             <option value="enabled">已启用</option>
             <option value="disabled">已停用</option>
+          </select>
+        </label>
+        <label v-if="draft.type === 'engine'">适用生态
+          <select name="category" :disabled="mode === 'readonly'" :value="draft.category ?? ''" @change="updateCommon({ category: (($event.target as HTMLSelectElement).value || null) as EngineCategory | null })">
+            <option value="">未分类{{ mode === 'create' ? '（请选择）' : '' }}</option>
+            <option value="general">通用 / 主流游戏</option>
+            <option value="visual_novel_doujin">视觉小说 / 同人游戏</option>
           </select>
         </label>
         <label class="rule-editor-wide">备注

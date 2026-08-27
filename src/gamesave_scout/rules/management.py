@@ -262,6 +262,15 @@ class RuleManagementService:
         verification_token: str | None,
     ) -> RuleMutationResult:
         rule = self._require_draft(draft)
+        if (
+            original_qualified_id is None
+            and isinstance(rule, EngineRule)
+            and rule.category is None
+        ):
+            raise RuleManagementError(
+                "engine_category_required",
+                "新建引擎规则必须选择适用生态。",
+            )
         snapshot = self._catalog.snapshot()
         original = (
             None

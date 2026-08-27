@@ -11,13 +11,14 @@ from gamesave_scout.engines.base import EngineDetector
 from gamesave_scout.engines.detectors.creator_engines import CreatorEngineDetector
 from gamesave_scout.engines.detectors.renpy import RenPyDetector
 from gamesave_scout.engines.detectors.rpg_maker import RpgMakerDetector
+from gamesave_scout.engines.detectors.runtime_frameworks import RuntimeFrameworkDetector
 from gamesave_scout.engines.detectors.unity import UnityDetector
 from gamesave_scout.engines.detectors.unreal import UnrealDetector
 from gamesave_scout.engines.detectors.wolf import WolfRpgDetector
 from gamesave_scout.engines.models import DetectionOutcome
 from gamesave_scout.engines.registry import DetectorRegistry
 from gamesave_scout.engines.rule_detector import RuleDetector
-from gamesave_scout.engines.rule_schema import EngineRule, load_engine_rules
+from gamesave_scout.engines.rule_schema import EngineCategory, EngineRule, load_engine_rules
 from gamesave_scout.rules.serialization import serialize_rule_document
 
 
@@ -26,27 +27,36 @@ class EngineOption:
     id: str
     label: str
     experimental: bool = False
+    category: EngineCategory | None = None
 
 
 _BUILTIN_OPTIONS = (
-    EngineOption("rpg_maker_2k", "RPG Maker 2000/2003"),
-    EngineOption("rpg_maker_xp", "RPG Maker XP"),
-    EngineOption("rpg_maker_vx", "RPG Maker VX"),
-    EngineOption("rpg_maker_vx_ace", "RPG Maker VX Ace"),
-    EngineOption("rpg_maker_mv", "RPG Maker MV"),
-    EngineOption("rpg_maker_mz", "RPG Maker MZ"),
-    EngineOption("mkxp_z", "MKXP-Z"),
-    EngineOption("rgu", "RGU"),
-    EngineOption("renpy", "Ren'Py"),
-    EngineOption("unity", "Unity"),
-    EngineOption("unreal", "Unreal Engine"),
-    EngineOption("wolf_rpg", "WOLF RPG Editor"),
-    EngineOption("smile_game_builder", "SMILE GAME BUILDER"),
-    EngineOption("rpg_developer_bakin", "RPG Developer Bakin"),
-    EngineOption("visual_novel_maker", "Visual Novel Maker"),
+    EngineOption("rpg_maker_2k", "RPG Maker 2000/2003", category="visual_novel_doujin"),
+    EngineOption("rpg_maker_xp", "RPG Maker XP", category="visual_novel_doujin"),
+    EngineOption("rpg_maker_vx", "RPG Maker VX", category="visual_novel_doujin"),
+    EngineOption("rpg_maker_vx_ace", "RPG Maker VX Ace", category="visual_novel_doujin"),
+    EngineOption("rpg_maker_mv", "RPG Maker MV", category="visual_novel_doujin"),
+    EngineOption("rpg_maker_mz", "RPG Maker MZ", category="visual_novel_doujin"),
+    EngineOption("mkxp_z", "MKXP-Z", category="visual_novel_doujin"),
+    EngineOption("rgu", "RGU", category="visual_novel_doujin"),
+    EngineOption("renpy", "Ren'Py", category="visual_novel_doujin"),
+    EngineOption("unity", "Unity", category="general"),
+    EngineOption("unreal", "Unreal Engine", category="general"),
+    EngineOption("wolf_rpg", "WOLF RPG Editor", category="visual_novel_doujin"),
+    EngineOption("smile_game_builder", "SMILE GAME BUILDER", category="visual_novel_doujin"),
+    EngineOption("rpg_developer_bakin", "RPG Developer Bakin", category="visual_novel_doujin"),
+    EngineOption("visual_novel_maker", "Visual Novel Maker", category="visual_novel_doujin"),
+    EngineOption("source", "Source", category="general"),
+    EngineOption("source2", "Source 2", category="general"),
+    EngineOption("monogame", "MonoGame", category="general"),
+    EngineOption("fna", "FNA", category="general"),
+    EngineOption("xna", "Microsoft XNA", category="general"),
+    EngineOption("love", "LÖVE", category="general"),
+    EngineOption("construct2", "Construct 2", True, "general"),
+    EngineOption("construct3", "Construct 3", True, "general"),
 )
 BUILTIN_ENGINE_IDS = frozenset(option.id for option in _BUILTIN_OPTIONS)
-BUILTIN_ENGINE_CACHE_VERSION = "2026.08.18-1"
+BUILTIN_ENGINE_CACHE_VERSION = "2026.08.27-1"
 
 
 class EngineDetectionService:
@@ -86,12 +96,13 @@ class EngineDetectionService:
             UnrealDetector(),
             WolfRpgDetector(),
             CreatorEngineDetector(),
+            RuntimeFrameworkDetector(),
             *(RuleDetector(rule) for rule in enabled_rules),
         )
         options_by_id = {option.id: option for option in _BUILTIN_OPTIONS}
         for rule in enabled_rules:
             options_by_id[rule.engine_id] = EngineOption(
-                rule.engine_id, rule.label, rule.experimental
+                rule.engine_id, rule.label, rule.experimental, rule.category
             )
         options = tuple(
             sorted(
@@ -136,3 +147,7 @@ class EngineDetectionService:
     def is_experimental(self, engine_id: str | None) -> bool:
         option = self._options_by_id.get(engine_id or "")
         return option.experimental if option is not None else False
+
+    def category_for(self, engine_id: str | None) -> EngineCategory | None:
+        option = self._options_by_id.get(engine_id or "")
+        return option.category if option is not None else None

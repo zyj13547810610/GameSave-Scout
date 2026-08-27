@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+import yaml
 
 from gamesave_scout.engines.base import DetectionContext
 from gamesave_scout.engines.rule_detector import RuleDetector
@@ -9,6 +10,7 @@ from gamesave_scout.engines.rule_schema import (
     load_engine_rules,
     parse_engine_rule_document,
 )
+from gamesave_scout.rules.serialization import serialize_rule_document
 
 
 def test_rule_requires_all_and_scores_any_evidence(tmp_path: Path) -> None:
@@ -104,6 +106,56 @@ def test_pure_parser_uses_caller_source_and_preserves_notes() -> None:
     assert rule.metadata.qualified_id == "user:user_engine"
     assert rule.metadata.status == "experimental"
     assert rule.notes == "合成夹具验证"
+    assert rule.category is None
+
+
+def test_user_engine_category_is_preserved_by_parser_and_serializer() -> None:
+    rule = parse_engine_rule_document(
+        {
+            "version": "1",
+            "rules": [
+                {
+                    "id": "user_engine",
+                    "label": "用户引擎",
+                    "type": "engine",
+                    "category": "visual_novel_doujin",
+                    "all": [
+                        {"op": "path_exists", "path": "game.dat", "weight": 1}
+                    ],
+                }
+            ],
+        },
+        source="user",
+        require_single=True,
+    )[0]
+
+    serialized = yaml.safe_load(serialize_rule_document(rule))
+
+    assert rule.category == "visual_novel_doujin"
+    assert serialized["rules"][0]["category"] == "visual_novel_doujin"
+
+
+@pytest.mark.parametrize("category", ["anime", [], {}])
+def test_unknown_engine_category_is_rejected(category: object) -> None:
+    with pytest.raises(RuleSchemaError, match="category"):
+        parse_engine_rule_document(
+            {
+                "version": "1",
+                "rules": [
+                    {
+                        "id": "user_engine",
+                        "label": "用户引擎",
+                        "type": "engine",
+                        "category": category,
+                        "all": [
+                            {"op": "path_exists", "path": "game.dat", "weight": 1}
+                        ],
+                    }
+                ],
+            },
+            source="user",
+            require_single=True,
+        )
 
 
 def test_unknown_rule_key_is_rejected(tmp_path: Path) -> None:

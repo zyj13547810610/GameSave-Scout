@@ -4,7 +4,7 @@ GameSave Scout 是一个面向 Windows 10/11 x64 的本地优先、便携式个�
 
 GameSave Scout 不需要账号或云服务。游戏库、配置、封面、日志和 WebView 用户数据默认保存在程序旁的 `data` 目录，可以随整个程序目录迁移。当前源码范围与实现状态见[开发路线图](docs/superpowers/plans/2026-08-12-GameSave-Scout-开发路线图.md)。
 
-> 当前 V0.3.4 源码与发布链统一使用 **GameSave Scout**：Python 包为 `gamesave_scout`，命令为 `gamesave-scout`，可执行文件为 `GameSaveScout.exe`，发布前缀为 `GameSave-Scout`。程序旁 `data` 和 SQLite schema 4 保持不变；V0.3.4 便携包尚未构建。
+> 当前 V0.3.5 源码与发布链统一使用 **GameSave Scout**：Python 包为 `gamesave_scout`，命令为 `gamesave-scout`，可执行文件为 `GameSaveScout.exe`，发布前缀为 `GameSave-Scout`。程序旁 `data` 和 SQLite schema 4 保持不变；V0.3.5 便携包尚未构建。
 
 ## 主要功能
 
@@ -15,7 +15,7 @@ GameSave Scout 不需要账号或云服务。游戏库、配置、封面、日�
 - 为单个游戏选择、粘贴、替换或移除封面，也可在批量封面工作台中从 VNDB、拖放/粘贴、游戏目录浅层扫描和自定义非递归封面目录收集候选；
 - 批量封面不会自动采用图片；VNDB 默认关闭，开启后只发送游戏标题，不发送安装路径或本地文件；
 - 窗口顶部以“游戏库、批量存档、批量封面、规则管理”四个入口切换一级工作区；工具页全宽显示，主页和批量封面使用固定控制区与内部独立滚动，滚动条采用统一深色主题；
-- 通过专用检测器与 74 条带公开依据、正式/实验状态的内置声明式规则识别 Galgame、RPG Maker、Unity、Ren'Py、Unreal、Godot 等引擎，并保留证据和手动覆盖；
+- 通过 23 个代码型引擎结果与 80 条带公开依据、正式/实验状态的内置声明式规则识别 Galgame、RPG Maker、Unity、Unreal、Source、GameMaker、RE Engine 等引擎；内置及用户规则可标记“通用 / 主流游戏”或“视觉小说 / 同人游戏”生态，并保留证据和手动覆盖；
 - 按需合并用户/内置游戏专属规则、Ludusavi SQLite 索引和 11 条内置引擎存档规则查找静态存档位置，并区分实际“已找到”和尚未创建的“可能路径 / 未发现”；
 - 通过独立“规则管理”工作台查看、测试、复制和本地启停内置规则，或用引导表单维护用户引擎规则、游戏专属存档规则和引擎通用存档规则；
 - 提供单次引导式存档寻找：先监控文件变化，再启动游戏并由用户完成一次保存，最后审核候选位置；
@@ -26,10 +26,22 @@ GameSave Scout 不需要账号或云服务。游戏库、配置、封面、日�
 
 ## 版本更新记录
 
-以下记录按源码开发里程碑整理；`V0.1.0`、`V0.1.4`、`V0.2.1` 和 `V0.3.2` 已生成本地双版本便携候选包。V0.3.4 是当前源码版本，便携构建后置；V0.3.3 不作为正式便携版本保留。详细设计、实现边界和验证记录以[固定设计文档](docs/superpowers/plans)为准。
+以下记录按源码开发里程碑整理；`V0.1.0`、`V0.1.4`、`V0.2.1` 和 `V0.3.2` 已生成本地双版本便携候选包。V0.3.5 是当前源码版本，便携构建后置。详细设计、实现边界和验证记录以[固定设计文档](docs/superpowers/plans)为准。
 
 <details open>
-<summary><strong>V0.3.4 — 2026-08-26（最新源码，便携包待构建）</strong></summary>
+<summary><strong>V0.3.5 — 2026-08-27（最新源码，便携包待构建）</strong></summary>
+
+- 为全部 80 条声明式引擎规则和 23 个代码型引擎结果补充“通用 / 主流游戏”或“视觉小说 / 同人游戏”生态元数据；分类只用于规则维护，不改变检测分数、优先级、存档匹配或数据库结构；
+- 规则管理的引擎表单新增“适用生态”下拉框；新建规则必须主动选择，旧的未分类用户规则保持兼容并可继续编辑，不执行迁移；
+- 新增 GameMaker、CRYENGINE、RE Engine、MT Framework、Defold、Suika2 六条声明式规则；
+- 新增 Source、Source 2、MonoGame、FNA、Microsoft XNA、LÖVE、Construct 2、Construct 3 八个有界代码检测结果；Construct 2/3 与 MT Framework 暂保持实验状态；
+- 内置声明式规则增至 80 条（71 条正式、9 条实验），代码型结果增至 23 个；Naninovel 与 UTAGE 等 Unity 上层框架等待后续支持“主引擎 + 上层框架”层级后再加入；
+- 源码收口通过 Python 1319 项（另 1 项平台条件跳过）、前端 57 个文件共 250 项，以及 Ruff、mypy、Vue 类型检查、141 模块生产构建和隔离 schema 4 smoke；用户已确认分类显示、新旧规则编辑、五档缩放和当前可用游戏重新检测均符合预期。
+
+</details>
+
+<details>
+<summary><strong>V0.3.4 — 2026-08-26（源码功能收口）</strong></summary>
 
 - 修复启动时只能快速核验一个游戏根目录的回归，多个游戏库扫描恢复共享并发，批量存档扫描继续保持磁盘互斥；
 - 游戏库、批量存档、批量封面和规则管理统一为顶部四个一级入口，品牌区与游戏目录保持固定宽度；
@@ -170,7 +182,7 @@ GameSave Scout 不需要账号或云服务。游戏库、配置、封面、日�
 
 ## 当前状态
 
-V0.1.x、V0.2.0、V0.2.1 和 V0.3.2 已完成既定源码与本地候选收口。V0.3.4 已包含顶部四入口、工具工作区、固定游戏目录、仅存档卡片的整卡撤销与详情删除，以及批量封面已有封面标识；schema 保持 4。当前源码门禁为 Python 1281 项通过、1 项跳过，前端 57 个测试文件共 248 项及 Ruff、mypy、Vue 类型检查、141 模块生产构建和 schema 4 源码 smoke 均通过；V0.3.4 便携包尚未构建，V0.3.3 不作为正式便携版本保留。缺少样本的真实游戏规则矩阵仍保留为后续工作。完整目标 Windows 10/11 设备、SmartScreen、UNC/只读目录和特殊运行时故障矩阵没有全部执行，作为后续可选兼容性复核。
+V0.1.x、V0.2.0、V0.2.1 和 V0.3.2 已完成既定源码与本地候选收口。V0.3.5 在 V0.3.4 顶部导航、固定游戏目录、仅存档卡片安全删除和批量封面已有封面标识的基础上，完成引擎生态分类、14 个新增引擎结果和规则编辑器分类选择；schema 保持 4。V0.3.5 便携构建后置。缺少样本的真实游戏规则矩阵仍保留为后续工作。完整目标 Windows 10/11 设备、SmartScreen、UNC/只读目录和特殊运行时故障矩阵没有全部执行，作为后续可选兼容性复核。
 
 V0.2 批量存档发现展示已安装、失效、未关联及已记录存档位置，而不只显示“孤立”结果；候选始终由用户审核，不自动确认归属。存档备份、恢复、同步和版本管理继续后置，目前尚未实现。
 
@@ -178,7 +190,7 @@ V0.2 批量存档发现展示已安装、失效、未关联及已记录存档位
 
 从窗口顶部选择“规则管理”后，可以在三个标签间切换：
 
-- “引擎规则”：查看内置规则，或新建用户引擎识别规则；保存后在下一次“重新检测”或完整扫描时生效。
+- “引擎规则”：查看内置规则，或新建用户引擎识别规则；新建时需要选择“通用 / 主流游戏”或“视觉小说 / 同人游戏”生态，旧的未分类用户规则仍可编辑；保存后在下一次“重新检测”或完整扫描时生效。
 - “存档规则”：维护按精确游戏身份匹配的游戏专属规则，以及按已识别引擎推导位置的引擎通用规则；保存后在下一次“查找存档”或批量扫描时生效。
 - “Ludusavi”：查看随包/活动快照版本，显式检查更新、恢复随包版本或打开用户规则目录；程序启动不会联网更新。
 
@@ -206,12 +218,12 @@ V0.2 批量存档发现展示已安装、失效、未关联及已记录存档位
 
 ## 便携版选择与使用
 
-V0.3.4 将继续生成两个 Windows x64 便携包，但本轮尚未构建；下表是目标产物名称。需要现成候选时，V0.3.2 仍是最近一次完成独立复核的历史便携版本。
+V0.3.5 将继续生成两个 Windows x64 便携包，但本轮尚未构建；下表是目标产物名称。需要现成候选时，使用已经发布并由发布者校验过的历史版本。
 
 | 版本 | 目录/ZIP 名称 | WebView2 | 适用场景 |
 | --- | --- | --- | --- |
-| 完整离线版 | `GameSave-Scout-0.3.4-win-x64` | 自带 Fixed Version Runtime | 体积较大，可在系统没有 WebView2 时离线启动 |
-| 轻量联网版 | `GameSave-Scout-0.3.4-win-x64-lite` | 使用系统 Evergreen Runtime | 下载体积较小，系统缺失 Runtime 时需要联网手动安装 |
+| 完整离线版 | `GameSave-Scout-0.3.5-win-x64` | 自带 Fixed Version Runtime | 体积较大，可在系统没有 WebView2 时离线启动 |
+| 轻量联网版 | `GameSave-Scout-0.3.5-win-x64-lite` | 使用系统 Evergreen Runtime | 下载体积较小，系统缺失 Runtime 时需要联网手动安装 |
 
 使用步骤：
 
@@ -251,7 +263,7 @@ npm --prefix frontend ci
 conda activate .\.venv
 ```
 
-当前 V0.3.4 源码使用 SQLite schema 4，并按开发期约定不迁移 schema 1/2/3 数据库。如果程序提示检测到旧库，请先完全退出 GameSave Scout，再自行移走或删除可舍弃的 `data\library.db` 后重启。该操作会丢失旧数据库记录；程序不会自动删除 `data\covers` 中的图片，但新库也不会自动恢复旧封面关联。
+当前 V0.3.5 源码使用 SQLite schema 4，并按开发期约定不迁移 schema 1/2/3 数据库。如果程序提示检测到旧库，请先完全退出 GameSave Scout，再自行移走或删除可舍弃的 `data\library.db` 后重启。该操作会丢失旧数据库记录；程序不会自动删除 `data\covers` 中的图片，但新库也不会自动恢复旧封面关联。
 
 后端检查：
 
@@ -305,25 +317,25 @@ $webView2Bootstrapper = (Resolve-Path ".\webview安装包\MicrosoftEdgeWebview2S
 
 ```text
 dist/
-├─ GameSave-Scout-0.3.4-win-x64/
-├─ GameSave-Scout-0.3.4-win-x64.zip
-├─ GameSave-Scout-0.3.4-win-x64.zip.sha256
-├─ GameSave-Scout-0.3.4-win-x64-lite/
-├─ GameSave-Scout-0.3.4-win-x64-lite.zip
-└─ GameSave-Scout-0.3.4-win-x64-lite.zip.sha256
+├─ GameSave-Scout-0.3.5-win-x64/
+├─ GameSave-Scout-0.3.5-win-x64.zip
+├─ GameSave-Scout-0.3.5-win-x64.zip.sha256
+├─ GameSave-Scout-0.3.5-win-x64-lite/
+├─ GameSave-Scout-0.3.5-win-x64-lite.zip
+└─ GameSave-Scout-0.3.5-win-x64-lite.zip.sha256
 ```
 
 可以独立复核两个 ZIP：
 
 ```powershell
-Get-FileHash .\dist\GameSave-Scout-0.3.4-win-x64.zip -Algorithm SHA256
-Get-Content .\dist\GameSave-Scout-0.3.4-win-x64.zip.sha256
+Get-FileHash .\dist\GameSave-Scout-0.3.5-win-x64.zip -Algorithm SHA256
+Get-Content .\dist\GameSave-Scout-0.3.5-win-x64.zip.sha256
 
-Get-FileHash .\dist\GameSave-Scout-0.3.4-win-x64-lite.zip -Algorithm SHA256
-Get-Content .\dist\GameSave-Scout-0.3.4-win-x64-lite.zip.sha256
+Get-FileHash .\dist\GameSave-Scout-0.3.5-win-x64-lite.zip -Algorithm SHA256
+Get-Content .\dist\GameSave-Scout-0.3.5-win-x64-lite.zip.sha256
 ```
 
-V0.3.4 尚未生成 ZIP，因此当前没有可发布的 V0.3.4 SHA-256。历史 V0.3.2 候选包的 ZIP SHA-256 为：
+V0.3.5 尚未生成 ZIP，因此当前没有可发布的 V0.3.5 SHA-256。历史 V0.3.2 候选包的 ZIP SHA-256 为：
 
 - 完整离线版：`af4c7b50236a25ed0f3529e6466078904b8b20a910d93af26ee39ee40491e252`
 - 轻量联网版：`181dbb7156b97778a7739dac59baa3107d99decaa94cced7bb8d387d628880bb`

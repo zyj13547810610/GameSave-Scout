@@ -86,6 +86,8 @@ def _rule_mapping(rule: RuleDefinition) -> dict[str, Any]:
     common["references"] = list(rule.metadata.references)
 
     if isinstance(rule, EngineRule):
+        if rule.category is not None:
+            common["category"] = rule.category
         if rule.variant is not None:
             common["variant"] = rule.variant
         common["threshold"] = rule.threshold

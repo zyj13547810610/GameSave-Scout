@@ -23,6 +23,7 @@ type EvidenceOp = Literal[
     "text_contains",
     "pe_field_contains",
 ]
+type EngineCategory = Literal["general", "visual_novel_doujin"]
 
 _TOP_KEYS = {"version", "rules"}
 _RULE_KEYS = {
@@ -30,6 +31,7 @@ _RULE_KEYS = {
     "label",
     "type",
     "variant",
+    "category",
     "status",
     "priority",
     "enabled",
@@ -78,6 +80,7 @@ class EngineRule:
     metadata: RuleMetadata
     label: str
     notes: str | None
+    category: EngineCategory | None
     variant: str | None
     threshold: float
     required: tuple[EvidenceRule, ...]
@@ -147,6 +150,7 @@ def _parse_rule(
     if rule_type != "engine":
         raise RuleSchemaError(f"unsupported engine rule type: {rule_type}")
     notes = _optional_notes(raw.get("notes"))
+    category = _engine_category(raw.get("category"))
     variant_raw = raw.get("variant")
     if variant_raw is not None and not isinstance(variant_raw, str):
         raise RuleSchemaError("variant must be a string or null")
@@ -181,6 +185,7 @@ def _parse_rule(
         metadata,
         label,
         notes,
+        category,
         variant_raw,
         threshold,
         required,
@@ -278,6 +283,19 @@ def _optional_notes(value: object) -> str | None:
     ):
         raise RuleSchemaError("notes must be a bounded string or null")
     return value
+
+
+def _engine_category(value: object) -> EngineCategory | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or value not in {
+        "general",
+        "visual_novel_doujin",
+    }:
+        raise RuleSchemaError(
+            "category must be general or visual_novel_doujin"
+        )
+    return cast(EngineCategory, value)
 
 
 def _reject_unknown(raw: dict[str, Any], allowed: set[str], label: str) -> None:

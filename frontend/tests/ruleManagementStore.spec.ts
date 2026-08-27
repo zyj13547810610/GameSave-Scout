@@ -123,6 +123,7 @@ describe('ruleManagementStore', () => {
   it('keeps verification for metadata edits and revokes it for matching edits', async () => {
     const store = useRuleManagementStore()
     store.startNew('engine')
+    expect(store.draft).toMatchObject({ type: 'engine', category: null })
     store.updateDraft({
       ...store.draft!,
       type: 'engine', id: 'kiri', label: 'KiriKiri', threshold: .7,
