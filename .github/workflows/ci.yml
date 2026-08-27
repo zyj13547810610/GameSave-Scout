@@ -28,8 +28,8 @@ jobs:
       - name: Source startup smoke
         shell: pwsh
         run: |
-          $report = Join-Path $env:RUNNER_TEMP 'gameshelf-smoke.json'
-          $appRoot = Join-Path $env:RUNNER_TEMP 'GameShelf-source-smoke'
-          python -m gameshelf.app --smoke-test --json-output $report --app-root $appRoot
+          $report = Join-Path $env:RUNNER_TEMP 'gamesave-scout-smoke.json'
+          $appRoot = Join-Path $env:RUNNER_TEMP 'GameSave-Scout-source-smoke'
+          python -m gamesave_scout.app --smoke-test --json-output $report --app-root $appRoot
           $payload = Get-Content -LiteralPath $report -Raw -Encoding utf8 | ConvertFrom-Json
-          if (-not $payload.ok) { throw 'GameShelf source smoke failed.' }
+          if (-not $payload.ok) { throw 'GameSave Scout source smoke failed.' }
