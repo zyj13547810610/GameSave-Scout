@@ -269,7 +269,7 @@ NEGATIVE_DIRECT_RULE_FIXTURES = tuple(
 @pytest.mark.parametrize(
     ("engine_id", "files"),
     [
-        ("artemis", {"assets_01.pfs": b"pf\0\0", "movie.mja": b"MJA0"}),
+        ("artemis", {"assets_01.pfs": b"pf8\x1d", "movie.mja": b"MJA0"}),
         ("reallive", {"Gameexe.ini": b"[Window]", "seen.txt": b"PACL" + b"\0" * 32}),
         ("bgi_ethornell", {"data.arc": b"PackFile    " + b"\0" * 32}),
         ("catsystem2", {"data.dat": b"CsPack2" + b"\0" * 32, "scene.cst": b"CatScene"}),
@@ -424,7 +424,7 @@ def test_artemis_pfs_extension_without_magic_remains_unknown(tmp_path: Path) -> 
 
 
 def test_artemis_reports_the_actual_variable_pfs_path(tmp_path: Path) -> None:
-    (tmp_path / "assets_01.pfs").write_bytes(b"pf\0\0")
+    (tmp_path / "assets_01.pfs").write_bytes(b"pf8\x1d")
     (tmp_path / "movie.mja").write_bytes(b"MJA0")
     rules = load_engine_rules(Path("resources/rules/builtin/engines.yaml"))
 
@@ -435,6 +435,41 @@ def test_artemis_reports_the_actual_variable_pfs_path(tmp_path: Path) -> None:
         "assets_01.pfs",
         "movie.mja",
     }
+
+
+@pytest.mark.parametrize("version", [b"6", b"8"])
+def test_artemis_accepts_standard_pfs_with_iarsys_companion(
+    tmp_path: Path,
+    version: bytes,
+) -> None:
+    (tmp_path / "game.pfs").write_bytes(b"pf" + version + b"\x1d")
+    (tmp_path / "iarsys.dll").write_bytes(b"MZ")
+
+    outcome = _direct_registry().detect(tmp_path, None)
+
+    assert outcome.best is not None
+    assert outcome.best.engine_id == "artemis"
+    assert {item.path for item in outcome.best.evidence} == {
+        "game.pfs",
+        "iarsys.dll",
+    }
+
+
+@pytest.mark.parametrize(
+    "files",
+    [
+        {"game.pfs": b"pf8\x1d"},
+        {"iarsys.dll": b"MZ"},
+    ],
+)
+def test_artemis_requires_pfs_and_independent_companion(
+    tmp_path: Path,
+    files: dict[str, bytes],
+) -> None:
+    for relative, content in files.items():
+        (tmp_path / relative).write_bytes(content)
+
+    assert _direct_registry().detect(tmp_path, None).best is None
 
 
 @pytest.mark.parametrize("scene_name", ["Scene.pck", "Scene.chs", "Scene.gbk"])
@@ -459,7 +494,7 @@ def test_siglus_accepts_exact_scene_file_variants(
     )
 
     assert outcome.best is not None and outcome.best.engine_id == "siglus"
-    assert outcome.best.rule_version == "2026.08.27-1"
+    assert outcome.best.rule_version == "2026.08.28-1"
     assert {item.path for item in outcome.best.evidence} == {
         "SiglusEngine.exe",
         scene_name,

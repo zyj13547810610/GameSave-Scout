@@ -56,7 +56,7 @@ _BUILTIN_OPTIONS = (
     EngineOption("construct3", "Construct 3", True, "general"),
 )
 BUILTIN_ENGINE_IDS = frozenset(option.id for option in _BUILTIN_OPTIONS)
-BUILTIN_ENGINE_CACHE_VERSION = "2026.08.27-1"
+BUILTIN_ENGINE_CACHE_VERSION = "2026.08.28-1"
 
 
 class EngineDetectionService:

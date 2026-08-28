@@ -8,7 +8,7 @@ from gamesave_scout.engines.base import DetectionContext
 from gamesave_scout.engines.bounded_reader import read_text_limit
 from gamesave_scout.engines.models import EngineEvidence, EngineMatch
 
-_VERSION = "rpg-maker-2026.08.13"
+_VERSION = "rpg-maker-2026.08.28"
 
 
 class RpgMakerDetector:
@@ -17,7 +17,7 @@ class RpgMakerDetector:
         return any(
             (root / name).exists()
             for name in ("RPG_RT.exe", "Game.ini", "www", "js", "mkxp.json", "mkxp.conf")
-        )
+        ) or (root / "data" / "www").is_dir()
 
     def inspect(self, context: DetectionContext) -> EngineMatch | None:
         root = context.game_dir
@@ -53,6 +53,12 @@ class RpgMakerDetector:
             (
                 root / "www" / "js" / "rpg_core.js",
                 root / "www" / "data" / "System.json",
+                "rpg_maker_mv",
+                "MV",
+            ),
+            (
+                root / "data" / "www" / "js" / "rpg_core.js",
+                root / "data" / "www" / "data" / "System.json",
                 "rpg_maker_mv",
                 "MV",
             ),

@@ -2,6 +2,7 @@ import pytest
 
 from gamesave_scout.engines.base import DetectionContext
 from gamesave_scout.engines.detectors.rpg_maker import RpgMakerDetector
+from gamesave_scout.engines.registry import DetectorRegistry
 
 
 @pytest.mark.parametrize(
@@ -61,3 +62,39 @@ def test_rpg_maker_variants(file_tree, files, engine_id, variant) -> None:
 )
 def test_generic_files_do_not_force_rpg_maker(file_tree, files) -> None:
     assert RpgMakerDetector().inspect(DetectionContext(file_tree(files), None)) is None
+
+
+def test_rpg_maker_mv_outer_launcher_data_www_layout(file_tree) -> None:
+    root = file_tree(
+        {
+            "data/package.json": b'{"main":"www/index.html"}',
+            "data/www/js/rpg_core.js": b"// rpg_core.js v1.6.2\nUtils.RPGMAKER_NAME = 'MV'",
+            "data/www/data/System.json": b"{}",
+        }
+    )
+
+    outcome = DetectorRegistry((RpgMakerDetector(),)).detect(root, None)
+
+    assert outcome.best is not None
+    assert outcome.best.engine_id == "rpg_maker_mv"
+    assert outcome.best.variant == "MV"
+
+
+@pytest.mark.parametrize(
+    "files",
+    [
+        {"data/www/js/rpg_core.js": b"Utils.RPGMAKER_NAME = 'MV'"},
+        {"data/www/data/System.json": b"{}"},
+        {
+            "data/www/js/rpg_core.js": b"generic javascript",
+            "data/www/data/System.json": b"{}",
+        },
+    ],
+)
+def test_rpg_maker_mv_outer_launcher_incomplete_evidence_remains_unknown(
+    file_tree,
+    files,
+) -> None:
+    root = file_tree(files)
+
+    assert DetectorRegistry((RpgMakerDetector(),)).detect(root, None).best is None
