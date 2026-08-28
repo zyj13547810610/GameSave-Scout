@@ -58,8 +58,8 @@ class _LocalDiscovery:
         self.shallow: dict[str, LocalDiscoverySummary] = {}
         self.directory: dict[str, LocalDiscoverySummary] = {}
 
-    def scan_game_directory(self, game, install, root, limit, context):
-        del install, root, limit, context
+    def scan_game_directory(self, game, install, root, limit, depth, context):
+        del install, root, limit, depth, context
         return self.shallow.get(game.id, _summary())
 
     def match_cover_directory(self, games, directory, root, context):
@@ -258,7 +258,7 @@ def test_adopt_revalidates_source_and_cleans_only_temporary_files(
     )
     external_candidate.preview_path.write_bytes(b"preview")
     harness.local.shallow[harness.save_only_id] = _summary((external_candidate,))
-    service.collect_shallow(session.id, harness.save_only_id, 10, _Progress())
+    service.collect_shallow(session.id, harness.save_only_id, 10, 2, _Progress())
     external.write_bytes(_png("purple"))
 
     with pytest.raises(CandidateSourceChangedError):
@@ -431,7 +431,7 @@ def test_busy_close_and_stale_cleanup_are_bounded(
     session = service.start()
     worker = Thread(
         target=service.collect_shallow,
-        args=(session.id, harness.alice_id, 10, _Progress()),
+        args=(session.id, harness.alice_id, 10, 2, _Progress()),
     )
     worker.start()
     assert entered.wait(5)

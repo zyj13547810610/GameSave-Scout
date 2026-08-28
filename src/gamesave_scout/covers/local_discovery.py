@@ -43,12 +43,17 @@ class LocalCoverDiscovery:
         install_directory: Path,
         session_root: Path,
         limit: int,
+        depth: int,
         context: CoverProgress,
     ) -> LocalDiscoverySummary:
         if type(limit) is not int or not 1 <= limit <= 100:
             raise ValueError("游戏目录封面候选数量必须为 1 到 100。")
+        if type(depth) is not int or not 1 <= depth <= 3:
+            raise ValueError("游戏目录封面扫描层数必须为 1 到 3。")
         paths, enumeration_truncated = _enumerate_images(
-            install_directory, shallow=True, context=context
+            install_directory,
+            max_depth=depth - 1,
+            context=context,
         )
         candidates: list[CoverCandidate] = []
         warnings: list[str] = []
@@ -89,7 +94,9 @@ class LocalCoverDiscovery:
         context: CoverProgress,
     ) -> Mapping[str, LocalDiscoverySummary]:
         paths, enumeration_truncated = _enumerate_images(
-            directory, shallow=False, context=context
+            directory,
+            max_depth=0,
+            context=context,
         )
         assigned: dict[str, list[tuple[Path, CoverMatchKind, float, str]]] = {
             game.id: [] for game in games
@@ -149,42 +156,37 @@ class LocalCoverDiscovery:
 
 
 def _enumerate_images(
-    directory: Path, *, shallow: bool, context: CoverProgress
+    directory: Path,
+    *,
+    max_depth: int,
+    context: CoverProgress,
 ) -> tuple[list[Path], bool]:
     paths: list[Path] = []
-    truncated = False
-    try:
-        root_entries = sorted(os.scandir(directory), key=lambda item: item.name.casefold())
-    except OSError:
-        return paths, False
-
-    child_directories: list[Path] = []
-    for entry in root_entries:
-        context.raise_if_cancelled()
-        if _is_regular_image(entry):
-            paths.append(Path(entry.path))
-        elif shallow and _is_safe_directory(entry):
-            child_directories.append(Path(entry.path))
-        if len(paths) >= MAX_DISCOVERY_FILES:
-            return paths, True
-
-    if shallow:
-        for child in child_directories:
+    current_directories = [directory]
+    for current_depth in range(max_depth + 1):
+        next_directories: list[Path] = []
+        for current in current_directories:
             context.raise_if_cancelled()
             try:
-                entries = sorted(os.scandir(child), key=lambda item: item.name.casefold())
+                entries = sorted(
+                    os.scandir(current),
+                    key=lambda item: item.name.casefold(),
+                )
             except OSError:
                 continue
             for entry in entries:
                 context.raise_if_cancelled()
                 if _is_regular_image(entry):
                     paths.append(Path(entry.path))
+                elif current_depth < max_depth and _is_safe_directory(entry):
+                    next_directories.append(Path(entry.path))
                 if len(paths) >= MAX_DISCOVERY_FILES:
-                    truncated = True
-                    break
-            if truncated:
-                break
-    return paths, truncated
+                    return paths, True
+        current_directories = sorted(
+            next_directories,
+            key=lambda path: path.as_posix().casefold(),
+        )
+    return paths, False
 
 
 def _is_regular_image(entry: os.DirEntry[str]) -> bool:

@@ -71,6 +71,7 @@ class _LocalDiscovery(Protocol):
         install_directory: Path,
         session_root: Path,
         limit: int,
+        depth: int,
         context: CoverProgress,
     ) -> LocalDiscoverySummary: ...
 
@@ -265,6 +266,7 @@ class CoverWizardService:
         session_id: str,
         game_id: str,
         limit: int,
+        depth: int,
         context: CoverProgress,
     ) -> LocalDiscoverySummary:
         session = self._begin_source(session_id)
@@ -277,6 +279,7 @@ class CoverWizardService:
                 self._library.install_directory(game_id),
                 session.root,
                 limit,
+                depth,
                 context,
             )
             with self._lock:

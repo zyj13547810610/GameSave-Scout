@@ -40,6 +40,7 @@ class _Wizard:
     shallow_summary: LocalDiscoverySummary | None = None
     added_payload: bytes | None = None
     failure: Exception | None = None
+    shallow_call: tuple[str, str, int, int] | None = None
 
     def start(self, include_existing: bool = False) -> CoverWizardSnapshot:
         if self.failure is not None:
@@ -79,9 +80,10 @@ class _Wizard:
         assert game_ids == [self.game.id]
         return self.state
 
-    def collect_shallow(self, session_id, game_id, limit, context):
-        del limit, context
+    def collect_shallow(self, session_id, game_id, limit, depth, context):
+        del context
         assert (session_id, game_id) == (self.state.id, self.game.id)
+        self.shallow_call = (session_id, game_id, limit, depth)
         if self.shallow_summary is not None:
             return self.shallow_summary
         return LocalDiscoverySummary((self.candidate,), 1, 0, False, ())
@@ -261,10 +263,10 @@ def test_online_disabled_never_submits_vndb_task(tmp_path: Path) -> None:
 
 
 def test_source_tasks_return_json_safe_counts(tmp_path: Path) -> None:
-    api, tasks, _ = _api(tmp_path, online=True)
+    api, tasks, wizard = _api(tmp_path, online=True)
     try:
         result = api.start_cover_shallow_scan(
-            {"sessionId": "wizard-1", "gameId": "game-1", "limit": 10}
+            {"sessionId": "wizard-1", "gameId": "game-1", "limit": 10, "depth": 3}
         )
         task = tasks.wait(result["data"]["taskId"], timeout=5)
         assert task.status == "completed"
@@ -274,7 +276,9 @@ def test_source_tasks_return_json_safe_counts(tmp_path: Path) -> None:
             "sessionId": "wizard-1",
             "completedCount": 1,
             "failedCount": 0,
+            "truncated": False,
         }
+        assert wizard.shallow_call == ("wizard-1", "game-1", 10, 3)
     finally:
         tasks.close()
 
@@ -286,7 +290,7 @@ def test_empty_shallow_scan_reports_completed_without_candidates(
     wizard.shallow_summary = LocalDiscoverySummary((), 0, 0, False, ())
     try:
         result = api.start_cover_shallow_scan(
-            {"sessionId": "wizard-1", "gameId": "game-1", "limit": 10}
+            {"sessionId": "wizard-1", "gameId": "game-1", "limit": 10, "depth": 2}
         )
         task = tasks.wait(result["data"]["taskId"], timeout=5)
 
@@ -297,7 +301,27 @@ def test_empty_shallow_scan_reports_completed_without_candidates(
             "sessionId": "wizard-1",
             "completedCount": 0,
             "failedCount": 0,
+            "truncated": False,
         }
+    finally:
+        tasks.close()
+
+
+def test_shallow_scan_rejects_missing_boolean_and_out_of_range_depths(
+    tmp_path: Path,
+) -> None:
+    api, tasks, wizard = _api(tmp_path)
+    try:
+        for depth in (None, True, 0, 4):
+            request = {"sessionId": "wizard-1", "gameId": "game-1", "limit": 10}
+            if depth is not None:
+                request["depth"] = depth
+
+            result = api.start_cover_shallow_scan(request)
+
+            assert result["ok"] is False
+            assert result["error"]["code"] == "invalid_request"
+        assert wizard.shallow_call is None
     finally:
         tasks.close()
 

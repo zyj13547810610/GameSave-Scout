@@ -93,6 +93,7 @@ async function scanShallow() {
       sessionId: store.session.id,
       gameId: store.selectedGameId,
       limit: localSettings.value.coverLocalScanCandidateLimit,
+      depth: localSettings.value.coverLocalScanDepth,
     }),
   )
 }

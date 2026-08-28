@@ -687,6 +687,7 @@ export interface GameSaveScoutBridge {
     sessionId: string
     gameId: string
     limit: number
+    depth: 1 | 2 | 3
   }): Promise<ApiResult<{ taskId: string }>>
   start_cover_directory_import(input: {
     sessionId: string

@@ -746,27 +746,39 @@ class BridgeApi:
     def start_cover_shallow_scan(self, request: object) -> ApiResult:
         try:
             payload = _payload(request)
-            _only_keys(payload, {"sessionId", "gameId", "limit"})
+            _only_keys(payload, {"sessionId", "gameId", "limit", "depth"})
             session_id = _string(payload, "sessionId")
             game_id = _string(payload, "gameId")
             limit = _integer(payload, "limit")
+            depth = _integer(payload, "depth")
             if limit not in range(1, 101):
                 raise InvalidRequest("limit must be between 1 and 100.")
+            if depth not in range(1, 4):
+                raise InvalidRequest("depth must be between 1 and 3.")
             wizard = self._require_cover_wizard()
 
             def operation(context: TaskContext) -> dict[str, JSONValue]:
-                summary = wizard.collect_shallow(session_id, game_id, limit, context)
+                summary = wizard.collect_shallow(
+                    session_id,
+                    game_id,
+                    limit,
+                    depth,
+                    context,
+                )
                 candidate_count = len(summary.candidates)
                 message = (
                     "浅层扫描完成，未找到候选封面。"
                     if candidate_count == 0
                     else f"浅层扫描完成，找到 {candidate_count} 张候选封面。"
                 )
+                if summary.truncated:
+                    message += " 已达到 5000 张检查上限，结果已截断。"
                 context.report(1, 1, message)
                 return {
                     "sessionId": session_id,
                     "completedCount": candidate_count,
                     "failedCount": summary.skipped,
+                    "truncated": summary.truncated,
                 }
 
             return success({"taskId": self._tasks.submit("cover_shallow_scan", operation)})

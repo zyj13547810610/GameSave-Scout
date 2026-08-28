@@ -16,6 +16,7 @@ from gamesave_scout.library.models import Game
 class _Progress:
     checks: int = 0
     reports: int = 0
+    messages: list[str] | None = None
 
     def report(
         self,
@@ -25,8 +26,10 @@ class _Progress:
         *,
         details: object = None,
     ) -> None:
-        del completed, total, message, details
+        del completed, total, details
         self.reports += 1
+        if self.messages is not None:
+            self.messages.append(message)
 
     def raise_if_cancelled(self) -> None:
         self.checks += 1
@@ -74,31 +77,48 @@ def _write_image(path: Path, size: tuple[int, int] = (400, 600)) -> None:
     Image.new("RGB", size, (60, 90, 120)).save(path, image_format)
 
 
-def test_shallow_scan_reads_root_and_direct_children_only(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    ("depth", "expected_names"),
+    [
+        (1, {"root.png"}),
+        (2, {"root.png", "a-child.jpg", "b-child.jpg"}),
+        (3, {"root.png", "a-child.jpg", "b-child.jpg", "grandchild.png"}),
+    ],
+)
+def test_shallow_scan_respects_total_layer_count_and_stable_breadth_first_order(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    depth: int,
+    expected_names: set[str],
 ) -> None:
     install = tmp_path / "game"
     _write_image(install / "root.png")
-    _write_image(install / "child" / "child.jpg")
-    _write_image(install / "child" / "nested" / "deep.png")
+    _write_image(install / "A" / "a-child.jpg")
+    _write_image(install / "B" / "b-child.jpg")
+    _write_image(install / "A" / "Deep" / "grandchild.png")
     _write_image(install / "linked" / "ignored.png")
     monkeypatch.setattr(
         local_discovery,
         "_is_reparse_point",
         lambda entry: entry.name == "linked",
     )
-    progress = _Progress()
+    progress = _Progress(messages=[])
 
     result = LocalCoverDiscovery().scan_game_directory(
-        _game(), install, tmp_path / "session", 10, progress
+        _game(), install, tmp_path / "session", 10, depth, progress
     )
 
-    assert {item.display_name for item in result.candidates} == {"root.png", "child.jpg"}
-    assert result.inspected == 2
+    assert {item.display_name for item in result.candidates} == expected_names
+    assert result.inspected == len(expected_names)
     assert result.skipped == 0
     assert result.truncated is False
     assert progress.checks >= 4
-    assert progress.reports == 2
+    assert progress.reports == len(expected_names)
+    assert progress.messages == [
+        f"正在检查 {name}"
+        for name in ["root.png", "a-child.jpg", "b-child.jpg", "grandchild.png"]
+        if name in expected_names
+    ]
 
 
 def test_shallow_scan_ranks_title_portrait_before_unrelated_landscape(
@@ -109,7 +129,7 @@ def test_shallow_scan_ranks_title_portrait_before_unrelated_landscape(
     _write_image(install / "Alice cover.png", (1200, 1800))
 
     result = LocalCoverDiscovery().scan_game_directory(
-        _game(), install, tmp_path / "session", 1, _Progress()
+        _game(), install, tmp_path / "session", 1, 2, _Progress()
     )
 
     assert [item.display_name for item in result.candidates] == ["Alice cover.png"]
@@ -159,13 +179,30 @@ def test_one_damaged_image_isolated_from_later_valid_image(tmp_path: Path) -> No
     _write_image(install / "b-valid.png")
 
     result = LocalCoverDiscovery().scan_game_directory(
-        _game(), install, tmp_path / "session", 10, _Progress()
+        _game(), install, tmp_path / "session", 10, 2, _Progress()
     )
 
     assert [item.display_name for item in result.candidates] == ["b-valid.png"]
     assert result.inspected == 2
     assert result.skipped == 1
     assert len(result.warnings) == 1
+
+
+def test_shallow_scan_stops_at_the_global_image_limit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    install = tmp_path / "game"
+    for name in ("a.png", "b.png", "c.png"):
+        _write_image(install / name)
+    monkeypatch.setattr(local_discovery, "MAX_DISCOVERY_FILES", 2)
+
+    result = LocalCoverDiscovery().scan_game_directory(
+        _game(), install, tmp_path / "session", 10, 1, _Progress()
+    )
+
+    assert result.inspected == 2
+    assert result.truncated is True
 
 
 def test_candidate_limit_is_bounded_to_one_hundred_for_cover_directory(
