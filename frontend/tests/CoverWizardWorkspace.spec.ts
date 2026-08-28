@@ -5,6 +5,7 @@ import CoverWizardWorkspace from '../src/features/covers/CoverWizardWorkspace.vu
 import type { CoverCandidate, CoverWizardSettings } from '../src/api/contracts'
 import { createMockBridge, fixtureCoverWizard, fixtureGame, ok } from '../src/api/mockBridge'
 import '../src/features/library/library.css'
+import { useCoverWizardStore } from '../src/features/covers/coverWizardStore'
 
 const settings: CoverWizardSettings = {
   coverOnlineEnabled: false,
@@ -18,6 +19,109 @@ beforeEach(() => vi.restoreAllMocks())
 afterEach(() => document.documentElement.classList.remove('cover-wizard-open'))
 
 describe('CoverWizardWorkspace', () => {
+  it.each([
+    ['installed without a main program', fixtureGame({ id: 'game-1', mainExeRelpath: null })],
+    ['missing', fixtureGame({ id: 'game-1', status: 'missing', mainExeRelpath: 'Alice.exe' })],
+    ['save-only', fixtureGame({ id: 'game-1', status: 'save_only', mainExeRelpath: 'Alice.exe' })],
+  ])('disables batch cover launch for %s games', async (_label, game) => {
+    const wrapper = mount(CoverWizardWorkspace, {
+      props: {
+        bridge: createMockBridge({ async start_cover_wizard() { return ok(snapshot()) } }),
+        games: [game],
+        settings,
+      },
+      global: { plugins: [createPinia()] },
+    })
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="cover-launch-current"]').attributes('disabled')).toBeDefined()
+    wrapper.unmount()
+  })
+
+  it('launches the current game once without changing cover workspace state', async () => {
+    const pinia = createPinia()
+    const launchResult = ok({
+      gameId: 'game-1',
+      pid: 1234,
+      launchedAt: '2026-08-28T16:00:00+08:00',
+    })
+    let finishLaunch = () => {}
+    const launch = vi.fn(() => new Promise<typeof launchResult>((resolve) => {
+      finishLaunch = () => resolve(launchResult)
+    }))
+    const bridge = createMockBridge({
+      async start_cover_wizard() { return ok(snapshot()) },
+      async list_cover_candidates() { return ok([candidate()]) },
+      launch_game: launch,
+    })
+    const wrapper = mount(CoverWizardWorkspace, {
+      props: {
+        bridge,
+        games: [fixtureGame({ id: 'game-1', mainExeRelpath: 'Alice.exe' })],
+        settings,
+      },
+      global: { plugins: [pinia] },
+    })
+    await flushPromises()
+    const store = useCoverWizardStore(pinia)
+    store.selectedCandidateId = 'candidate-1'
+    const gallery = wrapper.get('[data-test="cover-gallery-scroll"]').element
+    gallery.scrollTop = 123
+    const stateBefore = {
+      gameId: store.selectedGameId,
+      candidateId: store.selectedCandidateId,
+      candidates: [...store.candidates],
+    }
+
+    const button = wrapper.get('[data-test="cover-launch-current"]')
+    await button.trigger('click')
+    expect(button.attributes('disabled')).toBeDefined()
+    await button.trigger('click')
+    expect(launch).toHaveBeenCalledTimes(1)
+    finishLaunch()
+    await flushPromises()
+
+    expect(launch).toHaveBeenCalledWith({ gameId: 'game-1' })
+    expect(wrapper.get('[data-test="cover-launch-message"]').text()).toBe('游戏已启动')
+    expect(button.attributes('disabled')).toBeUndefined()
+    expect({
+      gameId: store.selectedGameId,
+      candidateId: store.selectedCandidateId,
+      candidates: [...store.candidates],
+    }).toEqual(stateBefore)
+    expect(gallery.scrollTop).toBe(123)
+    wrapper.unmount()
+  })
+
+  it.each([
+    ['business failure', async () => ({
+      ok: false as const,
+      error: { code: 'launch_failed', message: '工作目录不存在' },
+    }), '工作目录不存在'],
+    ['rejected promise', async () => { throw new Error('bridge unavailable') }, '启动游戏失败，请稍后重试。'],
+  ])('recovers the batch launch button after %s', async (_label, launchGame, expected) => {
+    const wrapper = mount(CoverWizardWorkspace, {
+      props: {
+        bridge: createMockBridge({
+          async start_cover_wizard() { return ok(snapshot()) },
+          launch_game: launchGame,
+        }),
+        games: [fixtureGame({ id: 'game-1', mainExeRelpath: 'Alice.exe' })],
+        settings,
+      },
+      global: { plugins: [createPinia()] },
+    })
+    await flushPromises()
+
+    const button = wrapper.get('[data-test="cover-launch-current"]')
+    await button.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="cover-launch-message"]').text()).toBe(expected)
+    expect(button.attributes('disabled')).toBeUndefined()
+    wrapper.unmount()
+  })
+
   it('keeps fixed controls outside isolated queue and gallery scroll regions', async () => {
     const wrapper = mount(CoverWizardWorkspace, {
       props: {

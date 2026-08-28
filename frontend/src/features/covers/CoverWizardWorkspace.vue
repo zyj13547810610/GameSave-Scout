@@ -22,6 +22,8 @@ const store = useCoverWizardStore()
 const localSettings = ref({ ...props.settings })
 const settingsError = ref('')
 const settingsBusy = ref(false)
+const launchBusy = ref(false)
+const launchMessage = ref('')
 const opening = ref(true)
 let openingPromise: Promise<void> | null = null
 type GalleryHandle = { scrollToTop: () => void }
@@ -57,6 +59,21 @@ watch(
 
 async function selectGame(gameId: string) {
   await store.selectGame(props.bridge, gameId)
+}
+
+async function launchCurrentGame() {
+  const game = currentGame.value
+  if (launchBusy.value || game?.status !== 'installed' || !game.mainExeRelpath) return
+  launchBusy.value = true
+  launchMessage.value = ''
+  try {
+    const result = await props.bridge.launch_game({ gameId: game.id })
+    launchMessage.value = result.ok ? '游戏已启动' : result.error.message
+  } catch {
+    launchMessage.value = '启动游戏失败，请稍后重试。'
+  } finally {
+    launchBusy.value = false
+  }
 }
 
 async function searchCurrent() {
@@ -212,7 +229,20 @@ defineExpose({ requestClose })
             <div class="cover-review-title-row">
               <h2>{{ currentTitle }}</h2>
               <span v-if="currentVersion" class="cover-review-version">{{ currentVersion }}</span>
+              <button
+                data-test="cover-launch-current"
+                class="secondary cover-review-launch"
+                type="button"
+                :disabled="launchBusy || currentGame?.status !== 'installed' || !currentGame?.mainExeRelpath"
+                @click="launchCurrentGame"
+              >{{ launchBusy ? '正在启动…' : '启动游戏' }}</button>
             </div>
+            <p
+              v-if="launchMessage"
+              data-test="cover-launch-message"
+              class="cover-launch-message status-message"
+              aria-live="polite"
+            >{{ launchMessage }}</p>
           </div>
           <CoverWizardSettingsPanel
             :settings="localSettings"

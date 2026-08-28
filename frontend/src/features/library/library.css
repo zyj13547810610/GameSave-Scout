@@ -241,6 +241,8 @@
 .cover-review-title-row { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: .5rem; }
 .cover-review-title-row h2 { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
 .cover-review-version { display: inline-flex; min-width: 0; max-width: 100%; border: 1px solid #51436d; border-radius: 999px; padding: .2rem .55rem; color: #d5c9f7; background: #292038; overflow-wrap: anywhere; font-size: .75rem; }
+.cover-review-launch { flex: none; min-height: 2.25rem; padding: .45rem .7rem; }
+.cover-launch-message { margin: .35rem 0 0; overflow-wrap: anywhere; }
 .cover-wizard-settings { position: relative; width: min(24rem, 100%); }
 .cover-settings-trigger { width: 100%; }
 .cover-settings-popover { position: absolute; z-index: 8; top: calc(100% + .5rem); right: 0; overflow-y: auto; width: min(24rem, calc(100vw - 2rem)); max-width: 100%; max-height: 70dvh; border: 1px solid #393641; border-radius: .6rem; padding: .6rem; background: #17151e; box-shadow: 0 .75rem 2rem rgb(0 0 0 / 35%); overscroll-behavior-y: contain; scrollbar-gutter: stable; }
