@@ -15,7 +15,13 @@ describe('BatchSaveSettings', () => {
       async bootstrap() {
         return ok({
           appName: 'GameSave Scout', schemaVersion: 4, portable: true, uiScale: 1,
-          coverWizardSettings: { coverOnlineEnabled: false, coverVndbCandidateLimit: 5, coverLocalScanCandidateLimit: 10 },
+          coverWizardSettings: {
+            coverOnlineEnabled: false,
+            coverVndbCandidateLimit: 5,
+            coverLocalScanCandidateLimit: 10,
+            coverOptimizeEnabled: true,
+            coverLocalScanDepth: 2,
+          },
           libraryScanSettings: { startupQuickScan: true, scanConcurrency: 1 },
           batchSaveSettings: { customRoots: [] },
         })

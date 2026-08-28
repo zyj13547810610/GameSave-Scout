@@ -68,6 +68,8 @@ const coverWizardSettings = ref<CoverWizardSettings>({
   coverOnlineEnabled: false,
   coverVndbCandidateLimit: 5,
   coverLocalScanCandidateLimit: 10,
+  coverOptimizeEnabled: true,
+  coverLocalScanDepth: 2,
 })
 const libraryScanSettings = ref<LibraryScanSettings>({
   startupQuickScan: true,

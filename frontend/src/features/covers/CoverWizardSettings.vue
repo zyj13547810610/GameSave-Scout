@@ -33,6 +33,8 @@ function submit() {
     coverOnlineEnabled: form.coverOnlineEnabled,
     coverVndbCandidateLimit: Number(form.coverVndbCandidateLimit),
     coverLocalScanCandidateLimit: Number(form.coverLocalScanCandidateLimit),
+    coverOptimizeEnabled: form.coverOptimizeEnabled,
+    coverLocalScanDepth: Number(form.coverLocalScanDepth) as 1 | 2 | 3,
   })
 }
 </script>

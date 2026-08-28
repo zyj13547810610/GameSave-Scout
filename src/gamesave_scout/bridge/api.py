@@ -301,12 +301,16 @@ class BridgeApi:
                     "coverOnlineEnabled",
                     "coverVndbCandidateLimit",
                     "coverLocalScanCandidateLimit",
+                    "coverOptimizeEnabled",
+                    "coverLocalScanDepth",
                 },
             )
             config = self._require_config().set_cover_wizard_settings(
                 online_enabled=_boolean(payload, "coverOnlineEnabled"),
                 vndb_candidate_limit=_integer(payload, "coverVndbCandidateLimit"),
                 local_scan_candidate_limit=_integer(payload, "coverLocalScanCandidateLimit"),
+                optimize_enabled=_boolean(payload, "coverOptimizeEnabled"),
+                local_scan_depth=_integer(payload, "coverLocalScanDepth"),
             )
             return success(_cover_wizard_settings_dto(config))
         except InvalidRequest as error:
@@ -2019,6 +2023,8 @@ def _cover_wizard_settings_dto(config: AppConfig) -> dict[str, JSONValue]:
         "coverOnlineEnabled": config.cover_online_enabled,
         "coverVndbCandidateLimit": config.cover_vndb_candidate_limit,
         "coverLocalScanCandidateLimit": config.cover_local_scan_candidate_limit,
+        "coverOptimizeEnabled": config.cover_optimize_enabled,
+        "coverLocalScanDepth": config.cover_local_scan_depth,
     }
 
 

@@ -83,6 +83,8 @@ export function createMockBridge(overrides: Partial<GameSaveScoutBridge> = {}): 
           coverOnlineEnabled: false,
           coverVndbCandidateLimit: 5,
           coverLocalScanCandidateLimit: 10,
+          coverOptimizeEnabled: true,
+          coverLocalScanDepth: 2,
         },
         libraryScanSettings: { startupQuickScan: true, scanConcurrency: 1 },
         batchSaveSettings: { customRoots: [] },

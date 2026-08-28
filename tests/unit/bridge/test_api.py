@@ -24,6 +24,8 @@ def test_bootstrap_returns_json_safe_success(tmp_path: Path) -> None:
                     "coverOnlineEnabled": False,
                     "coverVndbCandidateLimit": 5,
                     "coverLocalScanCandidateLimit": 10,
+                    "coverOptimizeEnabled": True,
+                    "coverLocalScanDepth": 2,
                 },
                 "batchSaveSettings": {"customRoots": []},
             },
@@ -188,6 +190,8 @@ def test_set_cover_wizard_settings_persists_valid_values(tmp_path: Path) -> None
                 "coverOnlineEnabled": True,
                 "coverVndbCandidateLimit": 8,
                 "coverLocalScanCandidateLimit": 25,
+                "coverOptimizeEnabled": False,
+                "coverLocalScanDepth": 3,
             }
         )
 
@@ -197,10 +201,14 @@ def test_set_cover_wizard_settings_persists_valid_values(tmp_path: Path) -> None
                 "coverOnlineEnabled": True,
                 "coverVndbCandidateLimit": 8,
                 "coverLocalScanCandidateLimit": 25,
+                "coverOptimizeEnabled": False,
+                "coverLocalScanDepth": 3,
             },
         }
         assert config.current.ui_scale == 1.0
         assert config.current.cover_online_enabled is True
+        assert config.current.cover_optimize_enabled is False
+        assert config.current.cover_local_scan_depth == 3
     finally:
         tasks.close()
 
@@ -213,6 +221,8 @@ def test_set_cover_wizard_settings_rejects_out_of_range_values(tmp_path: Path) -
                 "coverOnlineEnabled": False,
                 "coverVndbCandidateLimit": 21,
                 "coverLocalScanCandidateLimit": 10,
+                "coverOptimizeEnabled": True,
+                "coverLocalScanDepth": 2,
             }
         )
 

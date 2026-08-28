@@ -17,6 +17,8 @@ describe('desktop bridge', () => {
           coverOnlineEnabled: false,
           coverVndbCandidateLimit: 5,
           coverLocalScanCandidateLimit: 10,
+          coverOptimizeEnabled: true,
+          coverLocalScanDepth: 2,
         },
         batchSaveSettings: { customRoots: [] },
       },

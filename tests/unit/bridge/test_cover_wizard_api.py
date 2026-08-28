@@ -118,6 +118,8 @@ def _api(tmp_path: Path, *, online: bool = False):
             online_enabled=True,
             vndb_candidate_limit=5,
             local_scan_candidate_limit=10,
+            optimize_enabled=True,
+            local_scan_depth=2,
         )
     game = _game()
     candidate = CoverCandidate(

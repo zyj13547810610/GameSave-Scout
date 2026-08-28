@@ -10,6 +10,8 @@ const settings: CoverWizardSettings = {
   coverOnlineEnabled: false,
   coverVndbCandidateLimit: 5,
   coverLocalScanCandidateLimit: 10,
+  coverOptimizeEnabled: true,
+  coverLocalScanDepth: 2,
 }
 
 beforeEach(() => vi.restoreAllMocks())

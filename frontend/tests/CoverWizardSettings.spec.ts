@@ -7,6 +7,8 @@ const settings: Settings = {
   coverOnlineEnabled: false,
   coverVndbCandidateLimit: 5,
   coverLocalScanCandidateLimit: 10,
+  coverOptimizeEnabled: true,
+  coverLocalScanDepth: 2,
 }
 
 describe('CoverWizardSettings', () => {
@@ -57,6 +59,8 @@ describe('CoverWizardSettings', () => {
       coverOnlineEnabled: true,
       coverVndbCandidateLimit: 7,
       coverLocalScanCandidateLimit: 12,
+      coverOptimizeEnabled: true,
+      coverLocalScanDepth: 2,
     }]])
     wrapper.unmount()
   })

@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 UI_SCALE_OPTIONS = frozenset({0.8, 0.9, 1.0, 1.1, 1.2})
 COVER_VNDB_LIMIT_RANGE = range(1, 21)
 COVER_LOCAL_LIMIT_RANGE = range(1, 101)
+COVER_LOCAL_DEPTH_RANGE = range(1, 4)
 SCAN_CONCURRENCY_RANGE = range(1, 5)
 BATCH_SAVE_DEPTH_RANGE = range(1, 13)
 MAX_BATCH_SAVE_CUSTOM_ROOTS = 32
@@ -53,7 +54,7 @@ class BatchSaveCustomRoot:
 
 @dataclass(frozen=True)
 class AppConfig:
-    version: int = 5
+    version: int = 6
     language: str = "zh-CN"
     startup_quick_scan: bool = True
     scan_concurrency: int = 1
@@ -62,6 +63,8 @@ class AppConfig:
     cover_online_enabled: bool = False
     cover_vndb_candidate_limit: int = 5
     cover_local_scan_candidate_limit: int = 10
+    cover_optimize_enabled: bool = True
+    cover_local_scan_depth: int = 2
     batch_save_custom_roots: tuple[BatchSaveCustomRoot, ...] = ()
 
     def to_json(self) -> dict[str, Any]:
@@ -75,6 +78,8 @@ class AppConfig:
             "coverOnlineEnabled": self.cover_online_enabled,
             "coverVndbCandidateLimit": self.cover_vndb_candidate_limit,
             "coverLocalScanCandidateLimit": self.cover_local_scan_candidate_limit,
+            "coverOptimizeEnabled": self.cover_optimize_enabled,
+            "coverLocalScanDepth": self.cover_local_scan_depth,
             "batchSaveCustomRoots": [
                 {
                     "id": root.id,
@@ -100,6 +105,8 @@ class JsonConfigStore:
         "coverOnlineEnabled",
         "coverVndbCandidateLimit",
         "coverLocalScanCandidateLimit",
+        "coverOptimizeEnabled",
+        "coverLocalScanDepth",
         "batchSaveCustomRoots",
     }
 
@@ -154,11 +161,13 @@ class JsonConfigStore:
         cover_online_enabled = raw.get("coverOnlineEnabled", False)
         cover_vndb_candidate_limit = raw.get("coverVndbCandidateLimit", 5)
         cover_local_scan_candidate_limit = raw.get("coverLocalScanCandidateLimit", 10)
+        cover_optimize_enabled = raw.get("coverOptimizeEnabled", True)
+        cover_local_scan_depth = raw.get("coverLocalScanDepth", 2)
         batch_save_custom_roots = _parse_batch_save_custom_roots(
             raw.get("batchSaveCustomRoots", [])
         )
 
-        if type(version) is not int or version not in {1, 2, 3, 4, 5}:
+        if type(version) is not int or version not in {1, 2, 3, 4, 5, 6}:
             raise InvalidConfigError("配置文件无效：不支持的版本。")
         if not isinstance(language, str) or not language:
             raise InvalidConfigError("配置文件无效：语言必须是非空字符串。")
@@ -205,8 +214,23 @@ class JsonConfigStore:
         if not valid_local_limit:
             logger.warning("配置中的 coverLocalScanCandidateLimit 无效，已回退为 10。")
 
+        valid_optimize_enabled = isinstance(cover_optimize_enabled, bool)
+        normalized_optimize_enabled = (
+            cover_optimize_enabled if valid_optimize_enabled else True
+        )
+        if not valid_optimize_enabled:
+            logger.warning("配置中的 coverOptimizeEnabled 无效，已回退为开启。")
+
+        valid_local_depth = (
+            type(cover_local_scan_depth) is int
+            and cover_local_scan_depth in COVER_LOCAL_DEPTH_RANGE
+        )
+        normalized_local_depth = cover_local_scan_depth if valid_local_depth else 2
+        if not valid_local_depth:
+            logger.warning("配置中的 coverLocalScanDepth 无效，已回退为 2。")
+
         config = AppConfig(
-            version=5,
+            version=6,
             language=language,
             startup_quick_scan=startup_quick_scan,
             scan_concurrency=normalized_scan_concurrency,
@@ -215,15 +239,19 @@ class JsonConfigStore:
             cover_online_enabled=normalized_online_enabled,
             cover_vndb_candidate_limit=normalized_vndb_limit,
             cover_local_scan_candidate_limit=normalized_local_limit,
+            cover_optimize_enabled=normalized_optimize_enabled,
+            cover_local_scan_depth=normalized_local_depth,
             batch_save_custom_roots=batch_save_custom_roots,
         )
         needs_save = (
-            version != 5
+            version != 6
             or raw.get("scanConcurrency") != normalized_scan_concurrency
             or raw.get("uiScale") != normalized_ui_scale
             or raw.get("coverOnlineEnabled") != normalized_online_enabled
             or raw.get("coverVndbCandidateLimit") != normalized_vndb_limit
             or raw.get("coverLocalScanCandidateLimit") != normalized_local_limit
+            or raw.get("coverOptimizeEnabled") != normalized_optimize_enabled
+            or raw.get("coverLocalScanDepth") != normalized_local_depth
             or raw.get("batchSaveCustomRoots")
             != config.to_json()["batchSaveCustomRoots"]
         )
@@ -291,6 +319,8 @@ class ConfigService:
         online_enabled: object,
         vndb_candidate_limit: object,
         local_scan_candidate_limit: object,
+        optimize_enabled: object,
+        local_scan_depth: object,
     ) -> AppConfig:
         if not isinstance(online_enabled, bool):
             raise InvalidCoverWizardSettingsError("封面在线搜索开关必须是布尔值。")
@@ -304,12 +334,21 @@ class ConfigService:
             or local_scan_candidate_limit not in COVER_LOCAL_LIMIT_RANGE
         ):
             raise InvalidCoverWizardSettingsError("封面本地扫描数量必须为 1 到 100。")
+        if not isinstance(optimize_enabled, bool):
+            raise InvalidCoverWizardSettingsError("封面自动优化开关必须是布尔值。")
+        if (
+            type(local_scan_depth) is not int
+            or local_scan_depth not in COVER_LOCAL_DEPTH_RANGE
+        ):
+            raise InvalidCoverWizardSettingsError("封面浅层扫描层数必须为 1 到 3。")
         with self._lock:
             updated = replace(
                 self._current,
                 cover_online_enabled=online_enabled,
                 cover_vndb_candidate_limit=vndb_candidate_limit,
                 cover_local_scan_candidate_limit=local_scan_candidate_limit,
+                cover_optimize_enabled=optimize_enabled,
+                cover_local_scan_depth=local_scan_depth,
             )
             self._store.save(updated)
             self._current = updated

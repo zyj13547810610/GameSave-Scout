@@ -10,6 +10,8 @@ export type CoverWizardSettings = {
   coverOnlineEnabled: boolean
   coverVndbCandidateLimit: number
   coverLocalScanCandidateLimit: number
+  coverOptimizeEnabled: boolean
+  coverLocalScanDepth: 1 | 2 | 3
 }
 
 export type LibraryScanSettings = {

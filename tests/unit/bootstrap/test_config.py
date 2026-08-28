@@ -16,12 +16,12 @@ from gamesave_scout.bootstrap.config import (
 )
 
 
-def test_missing_config_creates_version_five_portable_defaults(tmp_path: Path) -> None:
+def test_missing_config_creates_version_six_portable_defaults(tmp_path: Path) -> None:
     path = tmp_path / "data" / "config.json"
     store = JsonConfigStore(path)
 
     assert store.load() == AppConfig(
-        version=5,
+        version=6,
         language="zh-CN",
         startup_quick_scan=True,
         scan_concurrency=1,
@@ -30,6 +30,8 @@ def test_missing_config_creates_version_five_portable_defaults(tmp_path: Path) -
         cover_online_enabled=False,
         cover_vndb_candidate_limit=5,
         cover_local_scan_candidate_limit=10,
+        cover_optimize_enabled=True,
+        cover_local_scan_depth=2,
         batch_save_custom_roots=(),
     )
     assert json.loads(path.read_text(encoding="utf-8"))["uiScale"] == 1.0
@@ -54,7 +56,7 @@ def test_config_store_round_trips_utf8_and_camel_case_json(tmp_path: Path) -> No
 
     assert store.load() == config
     assert json.loads(path.read_text(encoding="utf-8")) == {
-        "version": 5,
+        "version": 6,
         "language": "zh-CN",
         "startupQuickScan": True,
         "scanConcurrency": 1,
@@ -63,6 +65,8 @@ def test_config_store_round_trips_utf8_and_camel_case_json(tmp_path: Path) -> No
         "coverOnlineEnabled": False,
         "coverVndbCandidateLimit": 5,
         "coverLocalScanCandidateLimit": 10,
+        "coverOptimizeEnabled": True,
+        "coverLocalScanDepth": 2,
         "batchSaveCustomRoots": [
             {
                 "id": "root-1",
@@ -95,7 +99,7 @@ def test_version_one_config_is_migrated_without_losing_existing_values(
     config = JsonConfigStore(path).load()
 
     assert config == AppConfig(
-        version=5,
+        version=6,
         language="ja-JP",
         startup_quick_scan=False,
         scan_concurrency=1,
@@ -104,6 +108,8 @@ def test_version_one_config_is_migrated_without_losing_existing_values(
         cover_online_enabled=False,
         cover_vndb_candidate_limit=5,
         cover_local_scan_candidate_limit=10,
+        cover_optimize_enabled=True,
+        cover_local_scan_depth=2,
         batch_save_custom_roots=(),
     )
     assert json.loads(path.read_text(encoding="utf-8")) == config.to_json()
@@ -146,7 +152,7 @@ def test_failed_migration_write_still_returns_normalized_runtime_config(
 
     config = store.load()
 
-    assert config.version == 5
+    assert config.version == 6
     assert config.ui_scale == 1.0
     assert "无法写回规范化配置" in caplog.text
 
@@ -184,7 +190,7 @@ def test_version_two_config_migrates_without_losing_ui_scale(tmp_path: Path) -> 
     config = JsonConfigStore(path).load()
 
     assert config == AppConfig(
-        version=5,
+        version=6,
         language="zh-CN",
         startup_quick_scan=False,
         scan_concurrency=1,
@@ -193,6 +199,8 @@ def test_version_two_config_migrates_without_losing_ui_scale(tmp_path: Path) -> 
         cover_online_enabled=False,
         cover_vndb_candidate_limit=5,
         cover_local_scan_candidate_limit=10,
+        cover_optimize_enabled=True,
+        cover_local_scan_depth=2,
         batch_save_custom_roots=(),
     )
     assert json.loads(path.read_text(encoding="utf-8")) == config.to_json()
@@ -212,6 +220,8 @@ def test_invalid_cover_preferences_fall_back_independently(
                 "coverOnlineEnabled": 1,
                 "coverVndbCandidateLimit": 0,
                 "coverLocalScanCandidateLimit": 101,
+                "coverOptimizeEnabled": "yes",
+                "coverLocalScanDepth": 4,
             }
         ),
         encoding="utf-8",
@@ -223,9 +233,13 @@ def test_invalid_cover_preferences_fall_back_independently(
     assert config.cover_online_enabled is False
     assert config.cover_vndb_candidate_limit == 5
     assert config.cover_local_scan_candidate_limit == 10
+    assert config.cover_optimize_enabled is True
+    assert config.cover_local_scan_depth == 2
     assert "coverOnlineEnabled" in caplog.text
     assert "coverVndbCandidateLimit" in caplog.text
     assert "coverLocalScanCandidateLimit" in caplog.text
+    assert "coverOptimizeEnabled" in caplog.text
+    assert "coverLocalScanDepth" in caplog.text
     assert json.loads(path.read_text(encoding="utf-8")) == config.to_json()
 
 
@@ -244,7 +258,7 @@ def test_invalid_scan_concurrency_falls_back_to_one_and_is_normalized(
 
     config = JsonConfigStore(path).load()
 
-    assert config.version == 5
+    assert config.version == 6
     assert config.startup_quick_scan is False
     assert config.scan_concurrency == 1
     assert json.loads(path.read_text(encoding="utf-8"))["scanConcurrency"] == 1
@@ -261,6 +275,8 @@ def test_library_scan_settings_save_atomically_without_losing_other_preferences(
         online_enabled=True,
         vndb_candidate_limit=8,
         local_scan_candidate_limit=25,
+        optimize_enabled=False,
+        local_scan_depth=3,
     )
 
     updated = service.set_library_scan_settings(
@@ -324,23 +340,31 @@ def test_cover_settings_save_without_losing_ui_scale(tmp_path: Path) -> None:
         online_enabled=True,
         vndb_candidate_limit=8,
         local_scan_candidate_limit=25,
+        optimize_enabled=False,
+        local_scan_depth=3,
     )
 
     assert updated.ui_scale == 1.2
     assert updated.cover_online_enabled is True
     assert updated.cover_vndb_candidate_limit == 8
     assert updated.cover_local_scan_candidate_limit == 25
+    assert updated.cover_optimize_enabled is False
+    assert updated.cover_local_scan_depth == 3
     assert JsonConfigStore(path).load() == updated
 
 
 @pytest.mark.parametrize(
-    ("online_enabled", "vndb_limit", "local_limit"),
+    ("online_enabled", "vndb_limit", "local_limit", "optimize_enabled", "depth"),
     [
-        (1, 5, 10),
-        (False, True, 10),
-        (False, 0, 10),
-        (False, 5, True),
-        (False, 5, 101),
+        (1, 5, 10, True, 2),
+        (False, True, 10, True, 2),
+        (False, 0, 10, True, 2),
+        (False, 5, True, True, 2),
+        (False, 5, 101, True, 2),
+        (False, 5, 10, 1, 2),
+        (False, 5, 10, True, True),
+        (False, 5, 10, True, 0),
+        (False, 5, 10, True, 4),
     ],
 )
 def test_config_service_rejects_invalid_cover_settings(
@@ -348,6 +372,8 @@ def test_config_service_rejects_invalid_cover_settings(
     online_enabled: object,
     vndb_limit: object,
     local_limit: object,
+    optimize_enabled: object,
+    depth: object,
 ) -> None:
     service = ConfigService(JsonConfigStore(tmp_path / "data" / "config.json"))
 
@@ -356,6 +382,8 @@ def test_config_service_rejects_invalid_cover_settings(
             online_enabled=online_enabled,
             vndb_candidate_limit=vndb_limit,
             local_scan_candidate_limit=local_limit,
+            optimize_enabled=optimize_enabled,
+            local_scan_depth=depth,
         )
 
 
@@ -445,7 +473,7 @@ def test_config_store_rejects_wrong_field_types(tmp_path: Path) -> None:
         JsonConfigStore(path).load()
 
 
-@pytest.mark.parametrize("version", [1, 2, 3, 4])
+@pytest.mark.parametrize("version", [1, 2, 3, 4, 5])
 def test_previous_config_versions_gain_empty_batch_save_roots(
     tmp_path: Path,
     version: int,
@@ -455,7 +483,7 @@ def test_previous_config_versions_gain_empty_batch_save_roots(
 
     config = JsonConfigStore(path).load()
 
-    assert config.version == 5
+    assert config.version == 6
     assert config.batch_save_custom_roots == ()
     assert json.loads(path.read_text(encoding="utf-8"))["batchSaveCustomRoots"] == []
 
