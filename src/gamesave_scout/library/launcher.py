@@ -70,12 +70,14 @@ class GameLauncher:
         if executable.suffix.casefold() != ".exe" or not executable.is_file():
             raise InvalidLaunchConfiguration("The selected executable does not exist.")
 
-        if game.working_dir_relpath is None:
-            working_directory = install_dir
-        else:
+        if game.working_dir_relpath is not None:
             working_directory = _safe_relative(
                 install_dir, game.working_dir_relpath, "working directory"
             )
+        elif game.main_exe_is_manual:
+            working_directory = executable.parent
+        else:
+            working_directory = install_dir
         if not working_directory.is_dir():
             raise InvalidLaunchConfiguration("The configured working directory is unavailable.")
 

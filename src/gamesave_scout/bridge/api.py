@@ -1256,6 +1256,11 @@ class BridgeApi:
             return failure("invalid_request", str(error))
         except (InvalidLaunchConfiguration, LauncherGameNotFoundError) as error:
             return failure("launch_failed", str(error))
+        except OSError:
+            return failure(
+                "launch_failed",
+                "Windows 无法启动该程序，请检查主程序、工作目录和依赖文件。",
+            )
 
     def choose_cover_file(self, request: object) -> ApiResult:
         try:

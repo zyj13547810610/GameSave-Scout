@@ -1,4 +1,4 @@
-import { enableAutoUnmount, mount } from '@vue/test-utils'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { GameSaveScoutBridge } from '../src/api/contracts'
 import { createMockBridge, fixtureGame, ok } from '../src/api/mockBridge'
@@ -124,6 +124,26 @@ describe('GameDetailDrawer', () => {
     await wrapper.get('[data-test="quick-launch"]').trigger('click')
 
     expect(wrapper.get('[data-test="quick-message"]').text()).toBe('启动失败：主程序不存在')
+  })
+
+  it('restores the launch button when the bridge promise rejects', async () => {
+    const bridge = createMockBridge({
+      launch_game: async () => {
+        throw new Error('webview disconnected')
+      },
+    })
+    const wrapper = mount(GameDetailDrawer, {
+      props: {
+        game: fixtureGame({ mainExeRelpath: 'Alice.exe' }),
+        bridge,
+      },
+    })
+
+    await wrapper.get('[data-test="quick-launch"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="quick-launch"]').attributes('disabled')).toBeUndefined()
+    expect(wrapper.get('[data-test="quick-message"]').text()).toBe('启动游戏失败，请稍后重试。')
   })
 
   it('shows only one visible close button', () => {

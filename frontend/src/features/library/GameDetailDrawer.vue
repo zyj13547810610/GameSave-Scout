@@ -74,9 +74,14 @@ async function launchGame() {
   if (quickBusy.value) return
   quickBusy.value = true
   quickMessage.value = ''
-  const result = await props.bridge.launch_game({ gameId: props.game.id })
-  quickBusy.value = false
-  quickMessage.value = result.ok ? '游戏已启动' : result.error.message
+  try {
+    const result = await props.bridge.launch_game({ gameId: props.game.id })
+    quickMessage.value = result.ok ? '游戏已启动' : result.error.message
+  } catch {
+    quickMessage.value = '启动游戏失败，请稍后重试。'
+  } finally {
+    quickBusy.value = false
+  }
 }
 
 async function openInstallDirectory() {

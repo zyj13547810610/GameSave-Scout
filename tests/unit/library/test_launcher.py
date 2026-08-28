@@ -33,6 +33,50 @@ def test_launch_uses_array_cwd_and_shell_false(
     assert game_launcher.game(game.id).last_launched_at is not None
 
 
+def test_auto_selected_executable_without_working_directory_uses_install_directory(
+    game_launcher: "LauncherHarness",
+) -> None:
+    game = game_launcher.fixture_game(
+        exe="bin/Auto.exe",
+        main_exe_is_manual=False,
+    )
+
+    game_launcher.launcher.launch(game.id)
+
+    assert game_launcher.process.calls[0].cwd == game_launcher.install_dir
+
+
+def test_manual_executable_without_working_directory_uses_executable_parent(
+    game_launcher: "LauncherHarness",
+) -> None:
+    game = game_launcher.fixture_game(
+        exe="game/Paralogue/Binaries/Win64/KiritoMod049.exe",
+        main_exe_is_manual=True,
+    )
+
+    game_launcher.launcher.launch(game.id)
+
+    assert game_launcher.process.calls[0].cwd == (
+        game_launcher.install_dir / "game" / "Paralogue" / "Binaries" / "Win64"
+    )
+    assert game_launcher.game(game.id).working_dir_relpath is None
+
+
+def test_explicit_working_directory_overrides_manual_executable_parent(
+    game_launcher: "LauncherHarness",
+) -> None:
+    (game_launcher.install_dir / "runtime").mkdir()
+    game = game_launcher.fixture_game(
+        exe="bin/Manual.exe",
+        main_exe_is_manual=True,
+        working_dir="runtime",
+    )
+
+    game_launcher.launcher.launch(game.id)
+
+    assert game_launcher.process.calls[0].cwd == game_launcher.install_dir / "runtime"
+
+
 def test_launch_rejects_relative_exe_that_escapes_install_dir(
     game_launcher: "LauncherHarness",
 ) -> None:
@@ -144,6 +188,7 @@ class LauncherHarness:
         exe: str,
         args: list[str] | None = None,
         working_dir: str | None = None,
+        main_exe_is_manual: bool = False,
         create_exe: bool = True,
     ) -> Game:
         game = self.service.create_game_for_test(self.root_id, "Alice", "Alice")
@@ -157,10 +202,17 @@ class LauncherHarness:
             lambda connection: connection.execute(
                 """
                 UPDATE games
-                SET main_exe_relpath = ?, launch_args_json = ?, working_dir_relpath = ?
+                SET main_exe_relpath = ?, main_exe_is_manual = ?,
+                    launch_args_json = ?, working_dir_relpath = ?
                 WHERE id = ?
                 """,
-                (exe, json.dumps(args or []), working_dir, game.id),
+                (
+                    exe,
+                    int(main_exe_is_manual),
+                    json.dumps(args or []),
+                    working_dir,
+                    game.id,
+                ),
             ).rowcount
         ).result()
         return self.game(game.id)

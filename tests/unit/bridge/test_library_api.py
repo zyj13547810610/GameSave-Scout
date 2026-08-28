@@ -1,3 +1,4 @@
+from collections.abc import Mapping, Sequence
 from io import BytesIO
 from pathlib import Path
 from threading import Event
@@ -11,10 +12,10 @@ from gamesave_scout.covers.service import CoverService
 from gamesave_scout.db.connection import ConnectionFactory
 from gamesave_scout.db.migrator import Migrator
 from gamesave_scout.db.writer import DbWriter
-from gamesave_scout.library.launcher import GameLauncher
+from gamesave_scout.library.launcher import GameLauncher, ProcessLauncher
 from gamesave_scout.library.repository import LibraryRepository
 from gamesave_scout.library.service import LibraryService
-from gamesave_scout.platform.windows.processes import WindowsProcessLauncher
+from gamesave_scout.platform.windows.processes import LaunchedProcess, WindowsProcessLauncher
 from gamesave_scout.platform.windows.shell import WindowsShell
 from gamesave_scout.scanning.service import ScanService
 
@@ -504,8 +505,57 @@ def test_batch_remove_rejects_non_removable_status_in_payload(tmp_path: Path) ->
         writer.close()
 
 
+def test_launch_game_returns_stable_error_when_windows_rejects_process(
+    tmp_path: Path,
+) -> None:
+    api, tasks, writer, library = _library_api(
+        tmp_path,
+        process_launcher=FailingProcessLauncher(),
+    )
+    game_root = tmp_path / "games"
+    install_dir = game_root / "Alice"
+    install_dir.mkdir(parents=True)
+    (install_dir / "Alice.exe").write_bytes(b"not-a-real-pe")
+    try:
+        root = library.add_root(str(game_root), "children", 1, [])
+        game = library.create_game_for_test(root.id, "Alice", "Alice")
+        writer.submit(
+            lambda connection: connection.execute(
+                "UPDATE games SET main_exe_relpath = ? WHERE id = ?",
+                ("Alice.exe", game.id),
+            ).rowcount
+        ).result()
+
+        result = api.launch_game({"gameId": game.id})
+
+        assert result == {
+            "ok": False,
+            "error": {
+                "code": "launch_failed",
+                "message": "Windows 无法启动该程序，请检查主程序、工作目录和依赖文件。",
+            },
+        }
+    finally:
+        tasks.close()
+        writer.close()
+
+
+class FailingProcessLauncher:
+    def launch(
+        self,
+        executable: Path,
+        arguments: Sequence[str],
+        cwd: Path,
+        environment: Mapping[str, str],
+    ) -> LaunchedProcess:
+        del executable, arguments, cwd, environment
+        raise OSError(2, "missing dependency")
+
+
 def _library_api(
     tmp_path: Path,
+    *,
+    process_launcher: ProcessLauncher | None = None,
 ) -> tuple[BridgeApi, TaskRegistry, DbWriter, LibraryService]:
     paths = AppPaths.from_root(tmp_path / "portable")
     paths.ensure_writable()
@@ -518,7 +568,12 @@ def _library_api(
     library = LibraryService(repository, writer)
     covers = CoverService(paths, repository, writer)
     scanner = ScanService(repository, writer)
-    launcher = GameLauncher(repository, writer, WindowsProcessLauncher(), WindowsShell())
+    launcher = GameLauncher(
+        repository,
+        writer,
+        process_launcher or WindowsProcessLauncher(),
+        WindowsShell(),
+    )
     api = BridgeApi(
         paths,
         tasks,
