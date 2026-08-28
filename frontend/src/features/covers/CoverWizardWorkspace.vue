@@ -229,6 +229,10 @@ defineExpose({ requestClose })
             <div class="cover-review-title-row">
               <h2>{{ currentTitle }}</h2>
               <span v-if="currentVersion" class="cover-review-version">{{ currentVersion }}</span>
+            </div>
+          </div>
+          <div class="cover-review-heading-tools">
+            <div class="cover-review-heading-actions" data-test="cover-heading-actions">
               <button
                 data-test="cover-launch-current"
                 class="secondary cover-review-launch"
@@ -236,6 +240,12 @@ defineExpose({ requestClose })
                 :disabled="launchBusy || currentGame?.status !== 'installed' || !currentGame?.mainExeRelpath"
                 @click="launchCurrentGame"
               >{{ launchBusy ? '正在启动…' : '启动游戏' }}</button>
+              <CoverWizardSettingsPanel
+                :settings="localSettings"
+                :busy="settingsBusy"
+                :error="settingsError"
+                @save="saveSettings"
+              />
             </div>
             <p
               v-if="launchMessage"
@@ -244,12 +254,6 @@ defineExpose({ requestClose })
               aria-live="polite"
             >{{ launchMessage }}</p>
           </div>
-          <CoverWizardSettingsPanel
-            :settings="localSettings"
-            :busy="settingsBusy"
-            :error="settingsError"
-            @save="saveSettings"
-          />
         </div>
         <CoverCandidateToolbar
           :game="currentGame"

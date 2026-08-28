@@ -19,6 +19,33 @@ beforeEach(() => vi.restoreAllMocks())
 afterEach(() => document.documentElement.classList.remove('cover-wizard-open'))
 
 describe('CoverWizardWorkspace', () => {
+  it('places launch before candidate settings in one heading action group', async () => {
+    const wrapper = mount(CoverWizardWorkspace, {
+      props: {
+        bridge: createMockBridge({ async start_cover_wizard() { return ok(snapshot()) } }),
+        games: [fixtureGame({ id: 'game-1', mainExeRelpath: 'Alice.exe' })],
+        settings,
+      },
+      global: { plugins: [createPinia()] },
+    })
+    await flushPromises()
+
+    const actions = wrapper.get('[data-test="cover-heading-actions"]')
+    const controls = actions.findAll('button')
+    expect(controls.map((control) => control.text())).toEqual(['启动游戏', '候选设置'])
+    expect(getComputedStyle(actions.element).display).toBe('grid')
+    expect(getComputedStyle(actions.element).gridTemplateColumns).toContain('max-content')
+    expect(getComputedStyle(actions.element).gridTemplateColumns).toContain('minmax(0, 24rem)')
+    expect(actions.get('[data-test="cover-launch-current"]').element.nextElementSibling).toBe(
+      actions.get('.cover-wizard-settings').element,
+    )
+    expect(getComputedStyle(actions.get('[data-test="cover-launch-current"]').element).minHeight).toBe(
+      getComputedStyle(actions.get('[data-test="cover-settings-trigger"]').element).minHeight,
+    )
+    expect(wrapper.get('.cover-review-title-row').find('[data-test="cover-launch-current"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   it.each([
     ['installed without a main program', fixtureGame({ id: 'game-1', mainExeRelpath: null })],
     ['missing', fixtureGame({ id: 'game-1', status: 'missing', mainExeRelpath: 'Alice.exe' })],

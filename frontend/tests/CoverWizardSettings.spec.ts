@@ -1,7 +1,8 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import CoverWizardSettings from '../src/features/covers/CoverWizardSettings.vue'
 import type { CoverWizardSettings as Settings } from '../src/api/contracts'
+import '../src/features/library/library.css'
 
 const settings: Settings = {
   coverOnlineEnabled: false,
@@ -12,6 +13,71 @@ const settings: Settings = {
 }
 
 describe('CoverWizardSettings', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  it('sizes the popover from viewport space instead of the narrow trigger container', async () => {
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(640)
+    vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(1180)
+    const wrapper = mount(CoverWizardSettings, {
+      attachTo: document.body,
+      props: { settings },
+    })
+    const trigger = wrapper.get('[data-test="cover-settings-trigger"]')
+    vi.spyOn(trigger.element, 'getBoundingClientRect').mockReturnValue({
+      x: 140,
+      y: 150,
+      width: 80,
+      height: 50,
+      top: 150,
+      right: 220,
+      bottom: 200,
+      left: 140,
+      toJSON: () => ({}),
+    } as DOMRect)
+
+    await trigger.trigger('click')
+    await flushPromises()
+
+    const popover = wrapper.get('[data-test="cover-settings-popover"]')
+    const style = getComputedStyle(popover.element)
+    expect(style.position).toBe('fixed')
+    expect(style.maxWidth).not.toBe('100%')
+    expect((popover.element as HTMLElement).style.left).toBe('16px')
+    expect((popover.element as HTMLElement).style.width).toBe('360px')
+    expect((popover.element as HTMLElement).style.top).toBe('208px')
+    expect((popover.element as HTMLElement).style.maxHeight).toBe('416px')
+    expect(popover.classes()).toContain('placement-below')
+    wrapper.unmount()
+  })
+
+  it('opens above the trigger when the remaining space below is too small', async () => {
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(640)
+    const wrapper = mount(CoverWizardSettings, {
+      attachTo: document.body,
+      props: { settings },
+    })
+    const trigger = wrapper.get('[data-test="cover-settings-trigger"]')
+    vi.spyOn(trigger.element, 'getBoundingClientRect').mockReturnValue({
+      x: 520,
+      y: 500,
+      width: 80,
+      height: 50,
+      top: 500,
+      right: 600,
+      bottom: 550,
+      left: 520,
+      toJSON: () => ({}),
+    } as DOMRect)
+
+    await trigger.trigger('click')
+    await flushPromises()
+
+    const popover = wrapper.get('[data-test="cover-settings-popover"]')
+    expect(popover.classes()).toContain('placement-above')
+    expect((popover.element as HTMLElement).style.maxHeight).toBe('448px')
+    wrapper.unmount()
+  })
+
   it('toggles an anchored dialog and preserves unsaved input across closing', async () => {
     const outside = document.createElement('button')
     document.body.appendChild(outside)

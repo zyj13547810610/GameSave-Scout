@@ -12,6 +12,15 @@ const form = reactive({ ...props.settings })
 const root = ref<HTMLElement | null>(null)
 const trigger = ref<HTMLButtonElement | null>(null)
 const open = ref(false)
+const popoverPlacement = ref<'above' | 'below'>('below')
+const popoverStyle = ref({
+  top: 'auto',
+  right: 'auto',
+  bottom: 'auto',
+  left: '1rem',
+  width: 'min(24rem, calc(100vw - 2rem))',
+  maxHeight: '70dvh',
+})
 const optimizeMode = computed({
   get: () => form.coverOptimizeEnabled ? 'optimize' : 'preserve',
   set: (value: string) => { form.coverOptimizeEnabled = value === 'optimize' },
@@ -30,13 +39,55 @@ async function closeAndRestoreFocus() {
   trigger.value?.focus()
 }
 
+function updatePopoverBounds() {
+  if (!open.value || !trigger.value) return
+  const rect = trigger.value.getBoundingClientRect()
+  const gap = 8
+  const viewportPadding = 16
+  const viewportWidth = window.innerWidth
+  const below = Math.max(0, window.innerHeight - rect.bottom - gap - viewportPadding)
+  const above = Math.max(0, rect.top - gap - viewportPadding)
+  popoverPlacement.value = below < 240 && above > below ? 'above' : 'below'
+  const available = popoverPlacement.value === 'above' ? above : below
+  const rootFontSize = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 15
+  const width = Math.max(0, Math.min(rootFontSize * 24, viewportWidth - viewportPadding * 2))
+  const maxLeft = Math.max(viewportPadding, viewportWidth - viewportPadding - width)
+  const left = Math.min(Math.max(rect.right - width, viewportPadding), maxLeft)
+  popoverStyle.value = {
+    top: popoverPlacement.value === 'below' ? `${Math.round(rect.bottom + gap)}px` : 'auto',
+    right: 'auto',
+    bottom: popoverPlacement.value === 'above'
+      ? `${Math.round(window.innerHeight - rect.top + gap)}px`
+      : 'auto',
+    left: `${Math.round(left)}px`,
+    width: `${Math.floor(width)}px`,
+    maxHeight: `${Math.floor(Math.min(window.innerHeight * 0.7, available))}px`,
+  }
+}
+
+async function toggleOpen() {
+  if (open.value) {
+    open.value = false
+    return
+  }
+  open.value = true
+  await nextTick()
+  updatePopoverBounds()
+}
+
 function onDocumentPointerDown(event: PointerEvent) {
   if (!open.value || root.value?.contains(event.target as Node)) return
   void closeAndRestoreFocus()
 }
 
-onMounted(() => document.addEventListener('pointerdown', onDocumentPointerDown))
-onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocumentPointerDown))
+onMounted(() => {
+  document.addEventListener('pointerdown', onDocumentPointerDown)
+  window.addEventListener('resize', updatePopoverBounds)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', onDocumentPointerDown)
+  window.removeEventListener('resize', updatePopoverBounds)
+})
 
 function submit() {
   emit('save', {
@@ -59,13 +110,15 @@ function submit() {
       aria-haspopup="dialog"
       :aria-expanded="open"
       aria-controls="cover-settings-popover"
-      @click="open = !open"
+      @click="toggleOpen"
     >候选设置</button>
     <section
       v-if="open"
       id="cover-settings-popover"
       data-test="cover-settings-popover"
       class="cover-settings-popover"
+      :class="`placement-${popoverPlacement}`"
+      :style="popoverStyle"
       role="dialog"
       aria-label="候选设置"
       @keydown.esc.stop.prevent="closeAndRestoreFocus"

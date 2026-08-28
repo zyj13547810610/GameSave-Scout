@@ -4,15 +4,16 @@ GameSave Scout 是一个面向 Windows 10/11 x64 的本地优先、便携式个�
 
 GameSave Scout 不需要账号或云服务。游戏库、配置、封面、日志和 WebView 用户数据默认保存在程序旁的 `data` 目录，可以随整个程序目录迁移。当前源码范围与实现状态见[开发路线图](docs/superpowers/plans/2026-08-12-GameSave-Scout-开发路线图.md)。
 
-> 当前 V0.3.5 源码与发布链统一使用 **GameSave Scout**：Python 包为 `gamesave_scout`，命令为 `gamesave-scout`，可执行文件为 `GameSaveScout.exe`，发布前缀为 `GameSave-Scout`。程序旁 `data` 和 SQLite schema 4 保持不变；V0.3.5 便携包尚未构建。
+> 当前 V0.3.6 源码与发布链统一使用 **GameSave Scout**：Python 包为 `gamesave_scout`，命令为 `gamesave-scout`，可执行文件为 `GameSaveScout.exe`，发布前缀为 `GameSave-Scout`。程序旁 `data` 和 SQLite schema 4 保持不变；V0.3.6 便携包尚未构建。
 
 ## 主要功能
 
 - 管理多个游戏根目录，支持直接子目录或 1～8 层递归扫描、独立排除规则和后台快速核验；
-- 编辑游戏标题、主程序、工作目录、启动参数和环境变量，并使用经过验证的配置启动游戏；
+- 编辑游戏标题、主程序、工作目录、启动参数和环境变量，并使用经过验证的配置启动游戏；自动推荐主程序继续以游戏根目录启动，手动选择的深层 EXE 默认使用自身目录；
 - 使用封面网格搜索和筛选游戏，通过主页“批量选择”一次处理已安装或失效记录，并支持 80%～120% 五档界面缩放；
 - 创建、重命名和删除扁平自定义分组；一个游戏可属于多个分组，并支持详情编辑、批量加入/移出以及与搜索、状态、引擎组合筛选；
-- 为单个游戏选择、粘贴、替换或移除封面，也可在批量封面工作台中从 VNDB、拖放/粘贴、游戏目录浅层扫描和自定义非递归封面目录收集候选；
+- 为单个游戏选择、粘贴、替换或移除封面，也可在批量封面工作台中直接启动当前游戏，并从 VNDB、拖放/粘贴、1～3 层游戏目录扫描和自定义非递归封面目录收集候选；
+- 新采用的封面默认自动优化到最长边不超过 1920 像素且不放大小图；普通图片保存为高质量 JPEG，透明图片保留 PNG，也可关闭优化以保留原尺寸与格式；
 - 批量封面不会自动采用图片；VNDB 默认关闭，开启后只发送游戏标题，不发送安装路径或本地文件；
 - 窗口顶部以“游戏库、批量存档、批量封面、规则管理”四个入口切换一级工作区；工具页全宽显示，主页和批量封面使用固定控制区与内部独立滚动，滚动条采用统一深色主题；
 - 通过 23 个代码型引擎结果与 80 条带公开依据、正式/实验状态的内置声明式规则识别 Galgame、RPG Maker、Unity、Unreal、Source、GameMaker、RE Engine 等引擎；内置及用户规则可标记“通用 / 主流游戏”或“视觉小说 / 同人游戏”生态，并保留证据和手动覆盖；
@@ -26,10 +27,21 @@ GameSave Scout 不需要账号或云服务。游戏库、配置、封面、日�
 
 ## 版本更新记录
 
-以下记录按源码开发里程碑整理；`V0.1.0`、`V0.1.4`、`V0.2.1` 和 `V0.3.2` 已生成本地双版本便携候选包。V0.3.5 是当前源码版本，便携构建后置。详细设计、实现边界和验证记录以[固定设计文档](docs/superpowers/plans)为准。
+以下记录按源码开发里程碑整理；`V0.1.0`、`V0.1.4`、`V0.2.1` 和 `V0.3.2` 已生成本地双版本便携候选包。V0.3.6 是当前源码版本，便携构建后置。详细设计、实现边界和验证记录以[固定设计文档](docs/superpowers/plans)为准。
 
 <details open>
-<summary><strong>V0.3.5 — 2026-08-27（最新源码，便携包待构建）</strong></summary>
+<summary><strong>V0.3.6 — 2026-08-28（最新源码，便携包待构建）</strong></summary>
+
+- 启动工作目录按“明确人工设置 > 手动主程序所在目录 > 自动推荐主程序的游戏根目录”派生；清空明确设置后恢复派生规则，进程创建失败返回稳定中文错误；
+- 增加默认开启的全局封面自动优化：横图和竖图统一限制最长边 1920 像素，不裁剪、不拉伸、不放大小图；无透明通道保存 JPEG 90，透明图片保存优化 PNG，关闭后保留原尺寸与解码格式；
+- 游戏详情和批量封面共享同一封面保存方式设置；批量候选设置新增可持久化的 1～3 层游戏目录扫描，默认 2 层，自定义封面目录继续不递归；
+- 批量封面右侧操作区可直接启动当前已安装游戏；入口位于“候选设置”左侧且等高，启动成功或失败均不改变队列、候选、当前选择和滚动位置；
+- 配置升级到版本 6，SQLite schema 继续为 4；当前自动门禁为 Python 1345 项通过、1 项平台条件跳过，前端 57 个测试文件共 266 项通过，并通过 Ruff、mypy、Vue 类型检查、141 模块生产构建和隔离 schema 4 源码 smoke。用户已确认真实 pywebview 五档缩放、最小窗口、启动目录、封面设置同步、批量启动和 1～3 层扫描均符合预期；便携包待构建。
+
+</details>
+
+<details>
+<summary><strong>V0.3.5 — 2026-08-27（源码里程碑，未构建便携包）</strong></summary>
 
 - 为全部 80 条声明式引擎规则和 23 个代码型引擎结果补充“通用 / 主流游戏”或“视觉小说 / 同人游戏”生态元数据；分类只用于规则维护，不改变检测分数、优先级、存档匹配或数据库结构；
 - 规则管理的引擎表单新增“适用生态”下拉框；新建规则必须主动选择，旧的未分类用户规则保持兼容并可继续编辑，不执行迁移；
@@ -182,7 +194,7 @@ GameSave Scout 不需要账号或云服务。游戏库、配置、封面、日�
 
 ## 当前状态
 
-V0.1.x、V0.2.0、V0.2.1 和 V0.3.2 已完成既定源码与本地候选收口。V0.3.5 在 V0.3.4 顶部导航、固定游戏目录、仅存档卡片安全删除和批量封面已有封面标识的基础上，完成引擎生态分类、14 个新增引擎结果和规则编辑器分类选择，并补强 Artemis 与 RPG Maker MV 外层启动器真实布局；schema 保持 4。V0.3.5 便携构建后置。缺少样本的真实游戏规则矩阵仍保留为后续工作。完整目标 Windows 10/11 设备、SmartScreen、UNC/只读目录和特殊运行时故障矩阵没有全部执行，作为后续可选兼容性复核。
+V0.1.x、V0.2.0、V0.2.1 和 V0.3.2 已完成既定源码与本地候选收口。当前 V0.3.6 在 V0.3.5 引擎生态分类和第三批规则基础上，完成启动工作目录派生、封面自动优化、详情/批量设置同步、批量封面直接启动和 1～3 层图片扫描；配置版本为 6，schema 保持 4，自动门禁与真实窗口人工验收均已通过，便携构建后置。缺少样本的真实游戏规则矩阵仍保留为后续工作。完整目标 Windows 10/11 设备、SmartScreen、UNC/只读目录和特殊运行时故障矩阵没有全部执行，作为后续可选兼容性复核。
 
 V0.2 批量存档发现展示已安装、失效、未关联及已记录存档位置，而不只显示“孤立”结果；候选始终由用户审核，不自动确认归属。存档备份、恢复、同步和版本管理继续后置，目前尚未实现。
 
@@ -218,12 +230,12 @@ V0.2 批量存档发现展示已安装、失效、未关联及已记录存档位
 
 ## 便携版选择与使用
 
-V0.3.5 将继续生成两个 Windows x64 便携包，但本轮尚未构建；下表是目标产物名称。需要现成候选时，使用已经发布并由发布者校验过的历史版本。
+V0.3.6 将继续生成两个 Windows x64 便携包，但本轮尚未构建；下表是目标产物名称。需要现成候选时，使用已经发布并由发布者校验过的历史版本。
 
 | 版本 | 目录/ZIP 名称 | WebView2 | 适用场景 |
 | --- | --- | --- | --- |
-| 完整离线版 | `GameSave-Scout-0.3.5-win-x64` | 自带 Fixed Version Runtime | 体积较大，可在系统没有 WebView2 时离线启动 |
-| 轻量联网版 | `GameSave-Scout-0.3.5-win-x64-lite` | 使用系统 Evergreen Runtime | 下载体积较小，系统缺失 Runtime 时需要联网手动安装 |
+| 完整离线版 | `GameSave-Scout-0.3.6-win-x64` | 自带 Fixed Version Runtime | 体积较大，可在系统没有 WebView2 时离线启动 |
+| 轻量联网版 | `GameSave-Scout-0.3.6-win-x64-lite` | 使用系统 Evergreen Runtime | 下载体积较小，系统缺失 Runtime 时需要联网手动安装 |
 
 使用步骤：
 
@@ -263,7 +275,7 @@ npm --prefix frontend ci
 conda activate .\.venv
 ```
 
-当前 V0.3.5 源码使用 SQLite schema 4，并按开发期约定不迁移 schema 1/2/3 数据库。如果程序提示检测到旧库，请先完全退出 GameSave Scout，再自行移走或删除可舍弃的 `data\library.db` 后重启。该操作会丢失旧数据库记录；程序不会自动删除 `data\covers` 中的图片，但新库也不会自动恢复旧封面关联。
+当前 V0.3.6 源码使用 SQLite schema 4，并按开发期约定不迁移 schema 1/2/3 数据库。如果程序提示检测到旧库，请先完全退出 GameSave Scout，再自行移走或删除可舍弃的 `data\library.db` 后重启。该操作会丢失旧数据库记录；程序不会自动删除 `data\covers` 中的图片，但新库也不会自动恢复旧封面关联。
 
 后端检查：
 
@@ -317,25 +329,25 @@ $webView2Bootstrapper = (Resolve-Path ".\webview安装包\MicrosoftEdgeWebview2S
 
 ```text
 dist/
-├─ GameSave-Scout-0.3.5-win-x64/
-├─ GameSave-Scout-0.3.5-win-x64.zip
-├─ GameSave-Scout-0.3.5-win-x64.zip.sha256
-├─ GameSave-Scout-0.3.5-win-x64-lite/
-├─ GameSave-Scout-0.3.5-win-x64-lite.zip
-└─ GameSave-Scout-0.3.5-win-x64-lite.zip.sha256
+├─ GameSave-Scout-0.3.6-win-x64/
+├─ GameSave-Scout-0.3.6-win-x64.zip
+├─ GameSave-Scout-0.3.6-win-x64.zip.sha256
+├─ GameSave-Scout-0.3.6-win-x64-lite/
+├─ GameSave-Scout-0.3.6-win-x64-lite.zip
+└─ GameSave-Scout-0.3.6-win-x64-lite.zip.sha256
 ```
 
 可以独立复核两个 ZIP：
 
 ```powershell
-Get-FileHash .\dist\GameSave-Scout-0.3.5-win-x64.zip -Algorithm SHA256
-Get-Content .\dist\GameSave-Scout-0.3.5-win-x64.zip.sha256
+Get-FileHash .\dist\GameSave-Scout-0.3.6-win-x64.zip -Algorithm SHA256
+Get-Content .\dist\GameSave-Scout-0.3.6-win-x64.zip.sha256
 
-Get-FileHash .\dist\GameSave-Scout-0.3.5-win-x64-lite.zip -Algorithm SHA256
-Get-Content .\dist\GameSave-Scout-0.3.5-win-x64-lite.zip.sha256
+Get-FileHash .\dist\GameSave-Scout-0.3.6-win-x64-lite.zip -Algorithm SHA256
+Get-Content .\dist\GameSave-Scout-0.3.6-win-x64-lite.zip.sha256
 ```
 
-V0.3.5 尚未生成 ZIP，因此当前没有可发布的 V0.3.5 SHA-256。历史 V0.3.2 候选包的 ZIP SHA-256 为：
+V0.3.6 尚未生成 ZIP，因此当前没有可发布的 V0.3.6 SHA-256。历史 V0.3.2 候选包的 ZIP SHA-256 为：
 
 - 完整离线版：`af4c7b50236a25ed0f3529e6466078904b8b20a910d93af26ee39ee40491e252`
 - 轻量联网版：`181dbb7156b97778a7739dac59baa3107d99decaa94cced7bb8d387d628880bb`

@@ -229,7 +229,7 @@ class LudusaviProvider:
             self._prepare_directories()
             current_status = self.status()
             current = current_status.metadata if current_status.available else None
-            headers = {"User-Agent": "GameSaveScout/0.3.5 Ludusavi snapshot updater"}
+            headers = {"User-Agent": "GameSaveScout/0.3.6 Ludusavi snapshot updater"}
             if current is not None and current.etag:
                 headers["If-None-Match"] = current.etag
             _report(report, "connecting")

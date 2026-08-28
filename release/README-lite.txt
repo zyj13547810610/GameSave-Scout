@@ -1,4 +1,4 @@
-GameSave Scout 0.3.5 Windows x64 轻量联网便携版
+GameSave Scout 0.3.6 Windows x64 轻量联网便携版
 ========================================
 
 运行方式
@@ -46,6 +46,6 @@ GameSave Scout 不会静默运行或等待安装器，也不会自动重新启�
 签名与许可证
 ------------
 
-GameSave Scout 0.3.5 本体未进行 Authenticode 代码签名。随包
+GameSave Scout 0.3.6 本体未进行 Authenticode 代码签名。随包
 MicrosoftEdgeWebview2Setup.exe 是微软官方签名的 Evergreen Bootstrapper；请勿替换。
 GameSave Scout 使用 MIT License，第三方来源和许可证详见 THIRD_PARTY_NOTICES.md。
