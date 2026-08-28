@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, watch } from 'vue'
-import type { Game, GameGroup, GameSaveScoutBridge } from '../../api/contracts'
+import type { CoverWizardSettings, Game, GameGroup, GameSaveScoutBridge } from '../../api/contracts'
 import GameCard from './GameCard.vue'
 import GameDetailDrawer from './GameDetailDrawer.vue'
 
@@ -11,11 +11,19 @@ const props = withDefaults(defineProps<{
   batchMode?: boolean
   selectedGameIds?: Set<string>
   selectedGameId?: string | null
+  coverSettings?: CoverWizardSettings
 }>(), {
   batchMode: false,
   selectedGameIds: () => new Set<string>(),
   selectedGameId: null,
   groups: () => [],
+  coverSettings: () => ({
+    coverOnlineEnabled: false,
+    coverVndbCandidateLimit: 5,
+    coverLocalScanCandidateLimit: 10,
+    coverOptimizeEnabled: true,
+    coverLocalScanDepth: 2,
+  }),
 })
 const emit = defineEmits<{
   updated: [game: Game]
@@ -23,6 +31,7 @@ const emit = defineEmits<{
   toggleSelection: [game: Game]
   manageGroups: [event: MouseEvent]
   openRules: [intent: { tab: 'save' | 'ludusavi'; gameId?: string }]
+  coverSettingsUpdated: [settings: CoverWizardSettings]
   'update:selectedGameId': [gameId: string | null]
 }>()
 const selected = computed(
@@ -76,10 +85,12 @@ watch(() => props.batchMode, (enabled) => {
     :game="selected"
     :groups="groups"
     :bridge="bridge"
+    :cover-settings="coverSettings"
     @close="close"
     @updated="updated"
     @removed="removed"
     @manage-groups="$emit('manageGroups', $event)"
     @open-rules="$emit('openRules', $event)"
+    @cover-settings-updated="$emit('coverSettingsUpdated', $event)"
   />
 </template>

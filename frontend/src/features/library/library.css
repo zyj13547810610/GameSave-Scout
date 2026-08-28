@@ -80,6 +80,8 @@
 .detail-cover-actions { margin-top: 1rem; border: 1px solid #393641; border-radius: .75rem; padding: 1rem; background: #1a171f; }
 .detail-cover-actions .cover-actions { display: grid; gap: .75rem; }
 .detail-cover-actions .cover-actions h3, .detail-cover-actions .cover-actions p { margin: 0; }
+.cover-save-mode { display: grid; min-width: 0; gap: .35rem; }
+.cover-save-mode select { width: 100%; min-width: 0; }
 .engine-badge { display: inline-flex; width: fit-content; align-items: center; gap: .375rem; border: 1px solid #4b435e; border-radius: 999px; padding: .2rem .5rem; color: #cfc2f5; background: #211b2d; font-size: .72rem; }
 .engine-badge small { color: #f1c77c; }
 .engine-details, .engine-picker { margin-top: 1rem; border-top: 1px solid #302c38; padding-top: 1rem; }
@@ -243,9 +245,10 @@
 .cover-settings-trigger { width: 100%; }
 .cover-settings-popover { position: absolute; z-index: 8; top: calc(100% + .5rem); right: 0; overflow-y: auto; width: min(24rem, calc(100vw - 2rem)); max-width: 100%; max-height: 70dvh; border: 1px solid #393641; border-radius: .6rem; padding: .6rem; background: #17151e; box-shadow: 0 .75rem 2rem rgb(0 0 0 / 35%); overscroll-behavior-y: contain; scrollbar-gutter: stable; }
 .cover-wizard-settings form { display: grid; gap: .5rem; margin-top: .5rem; }
-.cover-wizard-settings label { margin: 0; }
+.cover-wizard-settings label { display: grid; min-width: 0; gap: .3rem; margin: 0; }
 .cover-wizard-settings label:first-child { display: flex; align-items: center; gap: .5rem; }
 .cover-wizard-settings label:first-child input { width: auto; }
+.cover-wizard-settings input:not([type="checkbox"]), .cover-wizard-settings select { width: 100%; min-width: 0; }
 .cover-source-toolbar { display: grid; gap: .55rem; border: 1px solid #393641; border-radius: .7rem; padding: .75rem; background: #131119; }
 .cover-source-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
 .cover-file-button { min-height: 2.75rem; margin: 0; border: 1px solid #51436d; border-radius: .5rem; padding: .7rem .75rem; color: #eceaf2; background: #28242f; cursor: pointer; }

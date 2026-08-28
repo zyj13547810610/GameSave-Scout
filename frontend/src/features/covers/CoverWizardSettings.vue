@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import type { CoverWizardSettings } from '../../api/contracts'
 
 const props = defineProps<{
@@ -12,7 +12,17 @@ const form = reactive({ ...props.settings })
 const root = ref<HTMLElement | null>(null)
 const trigger = ref<HTMLButtonElement | null>(null)
 const open = ref(false)
-watch(() => props.settings, (value) => Object.assign(form, value), { deep: true })
+const optimizeMode = computed({
+  get: () => form.coverOptimizeEnabled ? 'optimize' : 'preserve',
+  set: (value: string) => { form.coverOptimizeEnabled = value === 'optimize' },
+})
+watch(
+  () => props.settings,
+  (value) => {
+    if (!open.value) Object.assign(form, value)
+  },
+  { deep: true },
+)
 
 async function closeAndRestoreFocus() {
   open.value = false
@@ -67,6 +77,19 @@ function submit() {
         </label>
         <label>浅层扫描候选
           <input v-model.number="form.coverLocalScanCandidateLimit" type="number" min="1" max="100">
+        </label>
+        <label>封面保存方式
+          <select v-model="optimizeMode" data-test="cover-optimize-mode">
+            <option value="optimize">自动优化（推荐，最长边 1920px）</option>
+            <option value="preserve">保留原尺寸与格式</option>
+          </select>
+        </label>
+        <label>扫描游戏安装目录层数
+          <select v-model.number="form.coverLocalScanDepth" data-test="cover-local-scan-depth">
+            <option :value="1">1 层（仅安装目录）</option>
+            <option :value="2">2 层（安装目录和直接子目录，默认）</option>
+            <option :value="3">3 层（再包含下一层子目录）</option>
+          </select>
         </label>
         <button type="submit" :disabled="busy">保存设置</button>
         <p v-if="error" class="inline-error" role="alert">设置未保存：{{ error }}</p>

@@ -1,6 +1,6 @@
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { GameSaveScoutBridge } from '../src/api/contracts'
+import type { CoverWizardSettings, GameSaveScoutBridge } from '../src/api/contracts'
 import { createMockBridge, fixtureGame, ok } from '../src/api/mockBridge'
 import GameDetailDrawer from '../src/features/library/GameDetailDrawer.vue'
 import '../src/features/library/library.css'
@@ -14,6 +14,24 @@ afterEach(() => {
 })
 
 describe('GameDetailDrawer', () => {
+  it('forwards a successfully updated shared cover setting', async () => {
+    const settings: CoverWizardSettings = {
+      coverOnlineEnabled: false,
+      coverVndbCandidateLimit: 5,
+      coverLocalScanCandidateLimit: 10,
+      coverOptimizeEnabled: true,
+      coverLocalScanDepth: 2,
+    }
+    const wrapper = mount(GameDetailDrawer, {
+      props: { game: fixtureGame(), bridge: createMockBridge(), coverSettings: settings },
+    })
+
+    await wrapper.get('[data-test="detail-cover-optimize-mode"]').setValue('preserve')
+
+    expect(wrapper.emitted('coverSettingsUpdated')).toEqual([[
+      { ...settings, coverOptimizeEnabled: false },
+    ]])
+  })
   it.each(['installed', 'missing', 'save_only'] as const)('opens a game-specific save rule from %s details', async (status) => {
     const game = fixtureGame({ id: `game-${status}`, status })
     const wrapper = mount(GameDetailDrawer, {

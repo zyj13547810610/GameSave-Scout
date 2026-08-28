@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
-import type { Game, GameGroup, GameSaveScoutBridge } from '../../api/contracts'
+import type { CoverWizardSettings, Game, GameGroup, GameSaveScoutBridge } from '../../api/contracts'
 import CoverActions from '../covers/CoverActions.vue'
 import EngineSection from '../engines/EngineSection.vue'
 import SaveLocationList from '../saves/SaveLocationList.vue'
@@ -11,13 +11,24 @@ const props = withDefaults(defineProps<{
   game: Game
   bridge: GameSaveScoutBridge
   groups?: GameGroup[]
-}>(), { groups: () => [] })
+  coverSettings?: CoverWizardSettings
+}>(), {
+  groups: () => [],
+  coverSettings: () => ({
+    coverOnlineEnabled: false,
+    coverVndbCandidateLimit: 5,
+    coverLocalScanCandidateLimit: 10,
+    coverOptimizeEnabled: true,
+    coverLocalScanDepth: 2,
+  }),
+})
 const emit = defineEmits<{
   close: []
   updated: [game: Game]
   removed: [gameId: string]
   manageGroups: [event: MouseEvent]
   openRules: [intent: { tab: 'save' | 'ludusavi'; gameId?: string }]
+  coverSettingsUpdated: [settings: CoverWizardSettings]
 }>()
 const drawer = ref<HTMLElement | null>(null)
 const quickBusy = ref(false)
@@ -164,7 +175,14 @@ onBeforeUnmount(() => {
         <p v-if="quickMessage" data-test="quick-message" class="status-message" aria-live="polite">{{ quickMessage }}</p>
       </section>
       <section data-test="detail-cover-actions" class="detail-cover-actions">
-        <CoverActions :game-id="game.id" :has-cover="Boolean(game.coverOriginalUrl)" :bridge="bridge" @updated="$emit('updated', $event)" />
+        <CoverActions
+          :game-id="game.id"
+          :has-cover="Boolean(game.coverOriginalUrl)"
+          :bridge="bridge"
+          :settings="coverSettings"
+          @updated="$emit('updated', $event)"
+          @settings-updated="$emit('coverSettingsUpdated', $event)"
+        />
       </section>
       <GameSettingsPanel :game="game" :bridge="bridge" @updated="$emit('updated', $event)" />
       <SaveLocationList

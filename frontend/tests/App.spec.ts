@@ -3,9 +3,11 @@ import { createPinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../src/App.vue'
 import { bridgeKey } from '../src/api/bridge'
-import type { ApiResult, Game, GameSaveScoutBridge, UiScaleValue } from '../src/api/contracts'
+import type { ApiResult, CoverWizardSettings, Game, GameSaveScoutBridge, UiScaleValue } from '../src/api/contracts'
 import { createMockBridge, fixtureGame, fixtureGroup, fixtureGuidedSession, fixtureRoot, ok } from '../src/api/mockBridge'
 import { useRuleManagementStore } from '../src/features/rules/ruleManagementStore'
+import CoverWizardWorkspace from '../src/features/covers/CoverWizardWorkspace.vue'
+import GameGrid from '../src/features/library/GameGrid.vue'
 import '../src/styles/base.css'
 
 beforeEach(() => {
@@ -14,6 +16,36 @@ beforeEach(() => {
 })
 
 describe('App', () => {
+  it('keeps detail and batch cover settings synchronized through one App value', async () => {
+    const bridge = createMockBridge({
+      async list_games() { return ok([fixtureGame({ id: 'settings-game' })]) },
+    })
+    const wrapper = mount(App, {
+      global: { plugins: [createPinia()], provide: { [bridgeKey as symbol]: bridge } },
+    })
+    await flushPromises()
+    const preserved: CoverWizardSettings = {
+      coverOnlineEnabled: false,
+      coverVndbCandidateLimit: 5,
+      coverLocalScanCandidateLimit: 10,
+      coverOptimizeEnabled: false,
+      coverLocalScanDepth: 3,
+    }
+    const grid = wrapper.findComponent(GameGrid)
+    grid.vm.$emit('coverSettingsUpdated', preserved)
+    await flushPromises()
+    expect(grid.props('coverSettings')).toEqual(preserved)
+
+    await wrapper.get('[data-test="nav-covers"]').trigger('click')
+    await flushPromises()
+    const workspace = wrapper.findComponent(CoverWizardWorkspace)
+    expect(workspace.props('settings')).toEqual(preserved)
+    const optimized = { ...preserved, coverOptimizeEnabled: true }
+    workspace.vm.$emit('settingsUpdated', optimized)
+    await flushPromises()
+    expect(workspace.props('settings')).toEqual(optimized)
+    wrapper.unmount()
+  })
   it('keeps four first-level entries in one global header above the workspace', async () => {
     const wrapper = mount(App, {
       attachTo: document.body,

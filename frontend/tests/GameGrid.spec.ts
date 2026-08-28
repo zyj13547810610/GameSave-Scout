@@ -1,12 +1,34 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
-import type { GameSaveScoutBridge } from '../src/api/contracts'
+import type { CoverWizardSettings, GameSaveScoutBridge } from '../src/api/contracts'
 import { createMockBridge, fixtureGame, ok } from '../src/api/mockBridge'
 import GameGrid from '../src/features/library/GameGrid.vue'
 import '../src/features/library/library.css'
 
 describe('GameGrid', () => {
+  const coverSettings: CoverWizardSettings = {
+    coverOnlineEnabled: false,
+    coverVndbCandidateLimit: 5,
+    coverLocalScanCandidateLimit: 10,
+    coverOptimizeEnabled: true,
+    coverLocalScanDepth: 2,
+  }
+
+  it('forwards shared cover settings through the selected game drawer', async () => {
+    const game = fixtureGame({ id: 'settings-game' })
+    const wrapper = mount(GameGrid, {
+      props: {
+        games: [game], bridge: createMockBridge(), selectedGameId: game.id, coverSettings,
+      },
+    })
+
+    await wrapper.get('[data-test="detail-cover-optimize-mode"]').setValue('preserve')
+
+    expect(wrapper.emitted('coverSettingsUpdated')).toEqual([[
+      { ...coverSettings, coverOptimizeEnabled: false },
+    ]])
+  })
   it('opens a right-side drawer without replacing the grid', async () => {
     const wrapper = mount(GameGrid, {
       props: { games: [fixtureGame({ id: '1' })], bridge: createMockBridge() },

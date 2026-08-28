@@ -14,7 +14,10 @@ const props = defineProps<{
   games: Game[]
   settings: CoverWizardSettings
 }>()
-const emit = defineEmits<{ updated: [game: Game] }>()
+const emit = defineEmits<{
+  updated: [game: Game]
+  settingsUpdated: [settings: CoverWizardSettings]
+}>()
 const store = useCoverWizardStore()
 const localSettings = ref({ ...props.settings })
 const settingsError = ref('')
@@ -141,13 +144,19 @@ async function paste() {
 async function saveSettings(settings: CoverWizardSettings) {
   settingsBusy.value = true
   settingsError.value = ''
-  const result = await props.bridge.set_cover_wizard_settings(settings)
-  settingsBusy.value = false
-  if (!result.ok) {
-    settingsError.value = result.error.message
-    return
+  try {
+    const result = await props.bridge.set_cover_wizard_settings(settings)
+    if (!result.ok) {
+      settingsError.value = result.error.message
+      return
+    }
+    localSettings.value = result.data
+    emit('settingsUpdated', result.data)
+  } catch {
+    settingsError.value = '保存封面设置失败，请稍后重试。'
+  } finally {
+    settingsBusy.value = false
   }
-  localSettings.value = result.data
 }
 
 async function adopt() {

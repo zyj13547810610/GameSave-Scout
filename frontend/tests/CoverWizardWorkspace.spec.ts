@@ -210,11 +210,53 @@ describe('CoverWizardWorkspace', () => {
     await wrapper.get('[data-test="cover-settings-trigger"]').trigger('click')
     const online = wrapper.get('.cover-wizard-settings input[type="checkbox"]')
     await online.setValue(true)
+    const optimize = wrapper.get('[data-test="cover-optimize-mode"]')
+    const depth = wrapper.get('[data-test="cover-local-scan-depth"]')
+    await optimize.setValue('preserve')
+    await depth.setValue('3')
     await wrapper.get('.cover-wizard-settings form').trigger('submit')
     await flushPromises()
 
     expect((online.element as HTMLInputElement).checked).toBe(true)
+    expect((optimize.element as HTMLSelectElement).value).toBe('preserve')
+    expect((depth.element as HTMLSelectElement).value).toBe('3')
     expect(wrapper.text()).toContain('设置未保存：磁盘只读')
+    wrapper.unmount()
+  })
+
+  it('emits the complete saved settings and sends the selected shallow depth', async () => {
+    const save = vi.fn(async (input: CoverWizardSettings) => ok(input))
+    const shallow = vi.fn(async () => ok({ taskId: 'task-depth' }))
+    const wrapper = mount(CoverWizardWorkspace, {
+      props: {
+        bridge: createMockBridge({
+          async start_cover_wizard() { return ok(snapshot()) },
+          set_cover_wizard_settings: save,
+          start_cover_shallow_scan: shallow,
+        }),
+        games: [fixtureGame({ id: 'game-1', installPath: 'D:\\Games\\Alice' })],
+        settings,
+      },
+      global: { plugins: [createPinia()] },
+    })
+    await flushPromises()
+    await wrapper.get('[data-test="cover-settings-trigger"]').trigger('click')
+    await wrapper.get('[data-test="cover-optimize-mode"]').setValue('preserve')
+    await wrapper.get('[data-test="cover-local-scan-depth"]').setValue('3')
+    await wrapper.get('.cover-wizard-settings form').trigger('submit')
+    await flushPromises()
+
+    const expected = { ...settings, coverOptimizeEnabled: false, coverLocalScanDepth: 3 as const }
+    expect(save).toHaveBeenCalledWith(expected)
+    expect(wrapper.emitted('settingsUpdated')).toEqual([[expected]])
+
+    const shallowButton = wrapper.findAll('.cover-source-actions button')
+      .find((button) => button.text() === '浅层扫描')!
+    await shallowButton.trigger('click')
+    await flushPromises()
+    expect(shallow).toHaveBeenCalledWith({
+      sessionId: 'wizard-1', gameId: 'game-1', limit: 10, depth: 3,
+    })
     wrapper.unmount()
   })
 

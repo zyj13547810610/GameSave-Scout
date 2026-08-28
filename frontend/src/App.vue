@@ -433,6 +433,7 @@ async function restoreGuidedSave(gameId: string) {
                 :games="filteredGames"
                 :groups="groups"
                 :bridge="bridge"
+                :cover-settings="coverWizardSettings"
                 :batch-mode="batchMode"
                 :selected-game-ids="selectedGameIds"
                 :selected-game-id="selectedGameId"
@@ -442,6 +443,7 @@ async function restoreGuidedSave(gameId: string) {
                 @removed="gameRemoved"
                 @manage-groups="openGroupManager"
                 @open-rules="openRules"
+                @cover-settings-updated="coverWizardSettings = $event"
               />
             </template>
           </div>
@@ -456,6 +458,7 @@ async function restoreGuidedSave(gameId: string) {
           :games="games"
           :settings="coverWizardSettings"
           @updated="store.updateGame"
+          @settings-updated="coverWizardSettings = $event"
         />
         <div v-if="showAddRoot" class="dialog-backdrop" @click.self="showAddRoot = false"><ScanRootDialog :bridge="bridge" @saved="rootSaved" @close="showAddRoot = false" /></div>
         <div v-if="editingRoot" class="dialog-backdrop" @click.self="editingRoot = null"><ScanRootDialog :bridge="bridge" :root="editingRoot" @saved="rootSaved" @close="editingRoot = null" /></div>
