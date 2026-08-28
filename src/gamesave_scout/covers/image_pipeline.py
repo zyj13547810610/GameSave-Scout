@@ -16,6 +16,7 @@ MAX_SOURCE_BYTES = 50 * 1024 * 1024
 MAX_SIDE = 16_384
 MAX_PIXELS = 64_000_000
 THUMB_SIZE = (400, 600)
+OPTIMIZED_MAX_SIDE = 1_920
 _SUPPORTED_FORMATS = {"PNG", "JPEG", "WEBP", "BMP"}
 
 
@@ -24,7 +25,11 @@ class InvalidCoverImage(ValueError):
 
 
 def normalize_cover(
-    source: BinaryIO, content_type: str, destination_stem: Path
+    source: BinaryIO,
+    content_type: str,
+    destination_stem: Path,
+    *,
+    optimize: bool,
 ) -> CoverFiles:
     del content_type  # The decoded format, not a caller-controlled MIME value, is authoritative.
     payload = source.read(MAX_SOURCE_BYTES + 1)
@@ -40,10 +45,23 @@ def normalize_cover(
             decoded.load()
             normalized = ImageOps.exif_transpose(decoded)
             normalized = _normalized_mode(normalized)
-            original_suffix = _original_suffix(image_format)
+            output_format = image_format
+            if optimize:
+                if max(normalized.size) > OPTIMIZED_MAX_SIDE:
+                    normalized.thumbnail(
+                        (OPTIMIZED_MAX_SIDE, OPTIMIZED_MAX_SIDE),
+                        Image.Resampling.LANCZOS,
+                    )
+                output_format = "PNG" if _has_alpha(normalized) else "JPEG"
+            original_suffix = _original_suffix(output_format)
             original = destination_stem.with_suffix(original_suffix)
             thumb = destination_stem.with_name(f"{destination_stem.name}.thumb.webp")
-            _atomic_image_save(normalized, original, image_format)
+            _atomic_image_save(
+                normalized,
+                original,
+                output_format,
+                optimized=optimize,
+            )
             created.append(original)
             fitted = ImageOps.fit(
                 normalized,
@@ -97,17 +115,29 @@ def _normalized_mode(image: Image.Image) -> Image.Image:
     return image.convert("RGB")
 
 
+def _has_alpha(image: Image.Image) -> bool:
+    return image.mode in {"RGBA", "LA"}
+
+
 def _original_suffix(image_format: str) -> str:
-    return {"PNG": ".png", "JPEG": ".jpg", "WEBP": ".webp"}.get(
+    return {"PNG": ".png", "JPEG": ".jpg", "WEBP": ".webp", "BMP": ".bmp"}.get(
         image_format, ".png"
     )
 
 
-def _atomic_image_save(image: Image.Image, destination: Path, image_format: str) -> None:
+def _atomic_image_save(
+    image: Image.Image,
+    destination: Path,
+    image_format: str,
+    *,
+    optimized: bool = False,
+) -> None:
     temporary = destination.with_name(f".{destination.name}.part")
     options: dict[str, int | bool] = {}
     if image_format == "JPEG":
-        options = {"quality": 92, "optimize": True}
+        options = {"quality": 90 if optimized else 92, "optimize": True}
+    elif image_format == "PNG" and optimized:
+        options = {"optimize": True}
     elif image_format == "WEBP":
         quality = 88 if destination.name.endswith(".thumb.webp") else 92
         options = {"quality": quality, "method": 6}

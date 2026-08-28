@@ -566,7 +566,7 @@ def _library_api(
     tasks = TaskRegistry(max_workers=1)
     repository = LibraryRepository(factory)
     library = LibraryService(repository, writer)
-    covers = CoverService(paths, repository, writer)
+    covers = CoverService(paths, repository, writer, lambda: True)
     scanner = ScanService(repository, writer)
     launcher = GameLauncher(
         repository,

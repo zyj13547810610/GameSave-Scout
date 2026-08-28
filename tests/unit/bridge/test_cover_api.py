@@ -74,7 +74,7 @@ def cover_api(tmp_path: Path):
         tasks,
         schema_version=1,
         library=library,
-        covers=CoverService(paths, repository, writer),
+        covers=CoverService(paths, repository, writer, lambda: True),
         asset_session_token="session-token",
     )
     window = FakeWindow()

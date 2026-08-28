@@ -167,7 +167,12 @@ def build_application(
     )
     shell = WindowsShell()
     launcher = GameLauncher(repository, writer, WindowsProcessLauncher(), shell)
-    covers = CoverService(paths, repository, writer)
+    covers = CoverService(
+        paths,
+        repository,
+        writer,
+        lambda: config.current.cover_optimize_enabled,
+    )
     cover_wizard = CoverWizardService(
         paths,
         library,

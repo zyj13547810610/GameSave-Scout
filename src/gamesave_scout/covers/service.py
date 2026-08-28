@@ -6,7 +6,7 @@ import logging
 import mimetypes
 import os
 import sqlite3
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
 from io import BytesIO
@@ -33,11 +33,16 @@ class _StoredCover:
 
 class CoverService:
     def __init__(
-        self, paths: AppPaths, repository: LibraryRepository, writer: DbWriter
+        self,
+        paths: AppPaths,
+        repository: LibraryRepository,
+        writer: DbWriter,
+        optimize_enabled: Callable[[], bool],
     ) -> None:
         self._paths = paths
         self._repository = repository
         self._writer = writer
+        self._optimize_enabled = optimize_enabled
 
     def import_file(self, game_id: str, source_path: Path) -> CoverFiles:
         content_type = mimetypes.guess_type(source_path.name)[0] or "application/octet-stream"
@@ -105,7 +110,12 @@ class CoverService:
         old = self._stored_cover(game_id)
         revision = old.revision + 1
         staging_stem = self._paths.temp_dir / f"cover-{game_id}-{uuid4().hex}"
-        normalized = normalize_cover(source, content_type, staging_stem)
+        normalized = normalize_cover(
+            source,
+            content_type,
+            staging_stem,
+            optimize=self._optimize_enabled(),
+        )
         staged_original = self._paths.temp_dir / normalized.original_relpath
         staged_thumb = self._paths.temp_dir / normalized.thumb_relpath
         final_original = self._paths.covers_original_dir / (

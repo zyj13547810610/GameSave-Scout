@@ -14,6 +14,14 @@ from gamesave_scout.library.repository import LibraryRepository
 from gamesave_scout.library.service import LibraryService
 
 
+class MutableCoverPolicy:
+    def __init__(self, enabled: bool) -> None:
+        self.enabled = enabled
+
+    def __call__(self) -> bool:
+        return self.enabled
+
+
 @pytest.fixture
 def cover_harness(tmp_path: Path):
     paths = AppPaths.from_root(tmp_path / "portable")
@@ -28,9 +36,10 @@ def cover_harness(tmp_path: Path):
     (root_path / "Alice").mkdir(parents=True)
     root = library.add_root(str(root_path), "children", 1, [])
     game = library.create_game_for_test(root.id, "Alice", "Alice")
-    service = CoverService(paths, repository, writer)
+    policy = MutableCoverPolicy(True)
+    service = CoverService(paths, repository, writer, policy)
     try:
-        yield paths, factory, writer, service, game.id
+        yield paths, factory, writer, service, game.id, policy
     finally:
         writer.close()
 
@@ -38,7 +47,7 @@ def cover_harness(tmp_path: Path):
 def test_clipboard_import_survives_source_lifetime_and_remove_cleans_managed_files(
     cover_harness,
 ) -> None:
-    paths, factory, _, service, game_id = cover_harness
+    paths, factory, _, service, game_id, _ = cover_harness
     cover = service.import_clipboard_png(game_id, _png("red"))
 
     assert (paths.data_dir / cover.original_relpath).is_file()
@@ -59,7 +68,7 @@ def test_clipboard_import_survives_source_lifetime_and_remove_cleans_managed_fil
 def test_failed_database_update_keeps_old_cover_and_removes_new_files(
     cover_harness, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    paths, factory, writer, service, game_id = cover_harness
+    paths, factory, writer, service, game_id, _ = cover_harness
     old = service.import_clipboard_png(game_id, _png("red"))
     original_submit = writer.submit
 
@@ -88,7 +97,7 @@ def test_failed_database_update_keeps_old_cover_and_removes_new_files(
 
 
 def test_import_file_never_modifies_or_deletes_external_source(cover_harness) -> None:
-    paths, _, _, service, game_id = cover_harness
+    paths, _, _, service, game_id, _ = cover_harness
     source = paths.app_root.parent / "external.png"
     payload = _png("green")
     source.write_bytes(payload)
@@ -102,7 +111,7 @@ def test_import_file_never_modifies_or_deletes_external_source(cover_harness) ->
 def test_cleanup_managed_files_deletes_only_direct_managed_cover_files(
     cover_harness,
 ) -> None:
-    paths, _, _, service, _ = cover_harness
+    paths, _, _, service, _, _ = cover_harness
     removable = paths.covers_original_dir / "remove.png"
     stuck = paths.covers_thumbs_dir / "stuck.webp"
     external = paths.data_dir.parent / "external.png"
@@ -124,7 +133,30 @@ def test_cleanup_managed_files_deletes_only_direct_managed_cover_files(
     assert external.read_bytes() == b"external"
 
 
+def test_service_reads_the_current_optimization_policy_for_each_import(
+    cover_harness,
+) -> None:
+    paths, _, _, service, game_id, policy = cover_harness
+
+    optimized = service.import_clipboard_png(game_id, _png_size((2560, 1440)))
+    with Image.open(paths.data_dir / optimized.original_relpath) as image:
+        assert image.size == (1920, 1080)
+        assert image.format == "JPEG"
+
+    policy.enabled = False
+    preserved = service.import_clipboard_png(game_id, _png_size((2560, 1440)))
+    with Image.open(paths.data_dir / preserved.original_relpath) as image:
+        assert image.size == (2560, 1440)
+        assert image.format == "PNG"
+
+
 def _png(color: str) -> bytes:
     stream = BytesIO()
     Image.new("RGBA", (30, 45), color).save(stream, format="PNG")
+    return stream.getvalue()
+
+
+def _png_size(size: tuple[int, int]) -> bytes:
+    stream = BytesIO()
+    Image.new("RGB", size, "#336699").save(stream, format="PNG")
     return stream.getvalue()

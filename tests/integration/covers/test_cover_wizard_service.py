@@ -129,7 +129,7 @@ def harness(tmp_path: Path) -> _Harness:
         )
 
     writer.submit(mark_save_only).result()
-    covers = CoverService(paths, repository, writer)
+    covers = CoverService(paths, repository, writer, lambda: True)
     covers.import_clipboard_png(bob.id, _png("blue"))
     result = _Harness(
         paths,
