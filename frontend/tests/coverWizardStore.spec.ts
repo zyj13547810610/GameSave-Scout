@@ -1,6 +1,11 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { CoverCandidate, CoverWizardSnapshot, TaskSnapshot } from '../src/api/contracts'
+import type {
+  CoverCandidate,
+  CoverWizardSnapshot,
+  GameSaveScoutBridge,
+  TaskSnapshot,
+} from '../src/api/contracts'
 import { createMockBridge, fixtureCoverWizard, fixtureGame, ok } from '../src/api/mockBridge'
 import { useCoverWizardStore } from '../src/features/covers/coverWizardStore'
 
@@ -90,10 +95,12 @@ describe('coverWizardStore', () => {
   })
 
   it('keeps the selected candidate when adoption fails', async () => {
+    const adopt = vi.fn(async () => ({
+      ok: false as const,
+      error: { code: 'invalid_cover', message: '保存失败' },
+    }))
     const bridge = createMockBridge({
-      async adopt_cover_candidate() {
-        return { ok: false, error: { code: 'invalid_cover', message: '保存失败' } }
-      },
+      adopt_cover_candidate: adopt,
     })
     const store = useCoverWizardStore()
     store.session = snapshot('game-1')
@@ -103,6 +110,82 @@ describe('coverWizardStore', () => {
     expect(await store.adopt(bridge)).toBeNull()
     expect(store.selectedCandidateId).toBe('candidate-1')
     expect(store.error).toBe('保存失败')
+    expect(adopt).toHaveBeenCalledWith({
+      sessionId: 'wizard-1',
+      gameId: 'game-1',
+      candidateId: 'candidate-1',
+    })
+  })
+
+  it('reloads candidates when used directory candidates are toggled', async () => {
+    const list = vi.fn(async (
+      _input: Parameters<GameSaveScoutBridge['list_cover_candidates']>[0],
+    ) => ok([]))
+    const bridge = createMockBridge({ list_cover_candidates: list })
+    const store = useCoverWizardStore()
+    store.session = snapshot('game-1')
+    store.selectedGameId = 'game-1'
+
+    await store.loadCandidates(bridge, 'game-1')
+    await store.setIncludeUsedDirectoryCandidates(bridge, true)
+
+    expect(list.mock.calls.map(([input]) => input)).toEqual([
+      { sessionId: 'wizard-1', gameId: 'game-1', includeUsed: false },
+      { sessionId: 'wizard-1', gameId: 'game-1', includeUsed: true },
+    ])
+    expect(store.includeUsedDirectoryCandidates).toBe(true)
+  })
+
+  it('does not overwrite a newly selected game after adoption resolves', async () => {
+    let resolveAdopt!: (value: ReturnType<typeof ok<{
+      game: ReturnType<typeof fixtureGame>
+      snapshot: CoverWizardSnapshot
+    }>>) => void
+    const pending = new Promise<ReturnType<typeof ok<{
+      game: ReturnType<typeof fixtureGame>
+      snapshot: CoverWizardSnapshot
+    }>>>((resolve) => { resolveAdopt = resolve })
+    const adopt = vi.fn(async () => pending)
+    const bridge = createMockBridge({
+      adopt_cover_candidate: adopt,
+      async list_cover_candidates() { return ok([]) },
+    })
+    const store = useCoverWizardStore()
+    store.session = snapshot('game-1')
+    store.selectedGameId = 'game-1'
+    store.selectedCandidateId = 'candidate-1'
+
+    const adopting = store.adopt(bridge)
+    await store.selectGame(bridge, 'game-2')
+    resolveAdopt(ok({
+      game: fixtureGame({ id: 'game-1' }),
+      snapshot: snapshot(null),
+    }))
+
+    expect((await adopting)?.id).toBe('game-1')
+    expect(store.selectedGameId).toBe('game-2')
+    expect(store.session?.currentGameId).toBe('game-1')
+    expect(adopt).toHaveBeenCalledWith({
+      sessionId: 'wizard-1',
+      gameId: 'game-1',
+      candidateId: 'candidate-1',
+    })
+  })
+
+  it('resets the used-candidate toggle when opening and closing sessions', async () => {
+    const bridge = createMockBridge({
+      async start_cover_wizard() { return ok(snapshot('game-1')) },
+      async list_cover_candidates() { return ok([]) },
+    })
+    const store = useCoverWizardStore()
+    store.includeUsedDirectoryCandidates = true
+
+    await store.open(bridge)
+    expect(store.includeUsedDirectoryCandidates).toBe(false)
+    store.includeUsedDirectoryCandidates = true
+
+    await store.close(bridge)
+    expect(store.includeUsedDirectoryCandidates).toBe(false)
   })
 
   it('cancels an active task, waits for terminal state, then closes', async () => {
@@ -142,6 +225,7 @@ function candidate(id: string, gameId: string): CoverCandidate {
     id, gameId, source: 'vndb', sourceLabel: 'VNDB', displayName: id,
     width: 600, height: 900, matchKind: 'exact', score: 100,
     evidence: [], previewUrl: `/candidate/${id}`, vndbId: `v-${id}`,
+    shared: false, usedBy: [],
   }
 }
 

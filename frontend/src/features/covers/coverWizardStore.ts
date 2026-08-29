@@ -27,6 +27,7 @@ export const useCoverWizardStore = defineStore('cover-wizard', {
     error: '',
     sourceError: '',
     closing: false,
+    includeUsedDirectoryCandidates: false,
   }),
   actions: {
     clearPolling() {
@@ -37,6 +38,7 @@ export const useCoverWizardStore = defineStore('cover-wizard', {
     },
     async open(bridge: GameSaveScoutBridge, includeExisting = false) {
       this.clearPolling()
+      this.includeUsedDirectoryCandidates = false
       this.error = ''
       this.sourceError = ''
       const revision = this.requestRevision
@@ -72,7 +74,11 @@ export const useCoverWizardStore = defineStore('cover-wizard', {
       if (!this.session) return
       const sessionId = this.session.id
       const revision = this.requestRevision
-      const result = await bridge.list_cover_candidates({ sessionId, gameId })
+      const result = await bridge.list_cover_candidates({
+        sessionId,
+        gameId,
+        includeUsed: this.includeUsedDirectoryCandidates,
+      })
       if (
         revision !== this.requestRevision
         || this.session?.id !== sessionId
@@ -82,6 +88,16 @@ export const useCoverWizardStore = defineStore('cover-wizard', {
       this.candidates = result.data
       if (!result.data.some((item) => item.id === this.selectedCandidateId)) {
         this.selectedCandidateId = null
+      }
+    },
+    async setIncludeUsedDirectoryCandidates(
+      bridge: GameSaveScoutBridge,
+      includeUsed: boolean,
+    ) {
+      this.includeUsedDirectoryCandidates = includeUsed
+      this.selectedCandidateId = null
+      if (this.selectedGameId) {
+        await this.loadCandidates(bridge, this.selectedGameId)
       }
     },
     async setIncludeExisting(bridge: GameSaveScoutBridge, includeExisting: boolean) {
@@ -165,18 +181,24 @@ export const useCoverWizardStore = defineStore('cover-wizard', {
       await this.refresh(bridge)
     },
     async adopt(bridge: GameSaveScoutBridge): Promise<Game | null> {
-      if (!this.session || !this.selectedCandidateId) return null
+      if (!this.session || !this.selectedGameId || !this.selectedCandidateId) return null
       const sessionId = this.session.id
-      const selected = this.selectedCandidateId
+      const gameId = this.selectedGameId
+      const candidateId = this.selectedCandidateId
       const result = await bridge.adopt_cover_candidate({
         sessionId,
-        candidateId: selected,
+        gameId,
+        candidateId,
       })
+      if (
+        this.session?.id !== sessionId
+        || this.selectedGameId !== gameId
+        || this.selectedCandidateId !== candidateId
+      ) return result.ok ? result.data.game : null
       if (!result.ok) {
         this.error = result.error.message
         return null
       }
-      if (this.session?.id !== sessionId) return null
       this.session = result.data.snapshot
       this.selectedCandidateId = null
       this.candidates = []
@@ -239,6 +261,7 @@ export const useCoverWizardStore = defineStore('cover-wizard', {
       this.taskSnapshot = null
       this.error = ''
       this.sourceError = ''
+      this.includeUsedDirectoryCandidates = false
       return true
     },
     fail(message: string) {

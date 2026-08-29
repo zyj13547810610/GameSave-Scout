@@ -219,6 +219,7 @@ export function createMockBridge(overrides: Partial<GameSaveScoutBridge> = {}): 
         sourceLabel: input.source === 'drop' ? '拖放' : '剪贴板',
         displayName: input.fileName, width: 600, height: 900,
         matchKind: 'manual', score: 100, evidence: [], previewUrl: null, vndbId: null,
+        shared: false, usedBy: [],
       })
     },
     async start_cover_vndb_search() { return ok({ taskId: 'cover-task-1' }) },

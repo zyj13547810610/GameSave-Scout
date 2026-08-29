@@ -436,5 +436,6 @@ function candidate(): CoverCandidate {
     id: 'candidate-1', gameId: 'game-1', source: 'vndb', sourceLabel: 'VNDB',
     displayName: 'Alice', width: 600, height: 900, matchKind: 'exact', score: 100,
     evidence: ['标题精确匹配'], previewUrl: '/candidate.webp', vndbId: 'v1',
+    shared: false, usedBy: [],
   }
 }

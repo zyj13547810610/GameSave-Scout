@@ -104,6 +104,11 @@ export type CoverWizardSnapshot = {
   sourceOperationActive: boolean
 }
 
+export type CoverCandidateUsage = {
+  gameId: string
+  title: string
+}
+
 export type CoverCandidate = {
   id: string
   gameId: string
@@ -117,6 +122,8 @@ export type CoverCandidate = {
   evidence: string[]
   previewUrl: string | null
   vndbId: string | null
+  shared: boolean
+  usedBy: CoverCandidateUsage[]
 }
 
 export type CoverUpload = {
@@ -672,6 +679,7 @@ export interface GameSaveScoutBridge {
   list_cover_candidates(input: {
     sessionId: string
     gameId: string
+    includeUsed: boolean
   }): Promise<ApiResult<CoverCandidate[]>>
   add_cover_candidate_bytes(input: CoverUpload & {
     sessionId: string
@@ -695,6 +703,7 @@ export interface GameSaveScoutBridge {
   }): Promise<ApiResult<{ taskId: string }>>
   adopt_cover_candidate(input: {
     sessionId: string
+    gameId: string
     candidateId: string
   }): Promise<ApiResult<{ game: Game; snapshot: CoverWizardSnapshot }>>
   skip_cover_wizard_game(input: {
