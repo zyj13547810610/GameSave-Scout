@@ -14,7 +14,11 @@ from gamesave_scout.covers.candidates import (
     CoverWizardQueueItem,
     CoverWizardSnapshot,
 )
-from gamesave_scout.covers.local_discovery import LocalDiscoverySummary
+from gamesave_scout.covers.local_discovery import (
+    DirectoryImportSummary,
+    InvalidCoverDirectory,
+    LocalDiscoverySummary,
+)
 from gamesave_scout.covers.wizard_service import (
     ActiveCoverWizardError,
     CandidateSourceChangedError,
@@ -41,6 +45,12 @@ class _Wizard:
     added_payload: bytes | None = None
     failure: Exception | None = None
     shallow_call: tuple[str, str, int, int] | None = None
+    list_call: tuple[str, str, bool] | None = None
+    adopt_call: tuple[str, str, str] | None = None
+    directory_summary: DirectoryImportSummary = DirectoryImportSummary(
+        (), 0, 0, 0, False, ()
+    )
+    directory_failure: Exception | None = None
 
     def start(self, include_existing: bool = False) -> CoverWizardSnapshot:
         if self.failure is not None:
@@ -58,8 +68,9 @@ class _Wizard:
         self.state = replace(self.state, include_existing=include_existing)
         return self.state
 
-    def list_candidates(self, session_id: str, game_id: str):
+    def list_candidates(self, session_id: str, game_id: str, include_used: bool):
         assert (session_id, game_id) == (self.state.id, self.game.id)
+        self.list_call = (session_id, game_id, include_used)
         return (self.candidate,)
 
     def add_candidate_bytes(
@@ -91,14 +102,19 @@ class _Wizard:
     def collect_directory(self, session_id, directory, context):
         del directory, context
         assert session_id == self.state.id
-        return {
-            self.game.id: LocalDiscoverySummary((self.candidate,), 1, 0, False, ())
-        }
+        if self.directory_failure is not None:
+            raise self.directory_failure
+        return self.directory_summary
 
-    def adopt(self, session_id: str, candidate_id: str) -> Game:
+    def adopt(self, session_id: str, game_id: str, candidate_id: str) -> Game:
         if self.failure is not None:
             raise self.failure
-        assert (session_id, candidate_id) == (self.state.id, self.candidate.id)
+        assert (session_id, game_id, candidate_id) == (
+            self.state.id,
+            self.game.id,
+            self.candidate.id,
+        )
+        self.adopt_call = (session_id, game_id, candidate_id)
         return self.game
 
     def skip(self, session_id: str, game_id: str) -> CoverWizardSnapshot:
@@ -171,11 +187,15 @@ def _api(tmp_path: Path, *, online: bool = False):
 
 
 def test_snapshot_and_candidate_dtos_hide_backend_paths(tmp_path: Path) -> None:
-    api, tasks, _ = _api(tmp_path)
+    api, tasks, wizard = _api(tmp_path)
     try:
         started = api.start_cover_wizard({"includeExisting": False})
         candidates = api.list_cover_candidates(
-            {"sessionId": "wizard-1", "gameId": "game-1"}
+            {
+                "sessionId": "wizard-1",
+                "gameId": "game-1",
+                "includeUsed": False,
+            }
         )
 
         assert started["data"] == {
@@ -211,10 +231,42 @@ def test_snapshot_and_candidate_dtos_hide_backend_paths(tmp_path: Path) -> None:
                     "/session/asset-token/candidate/wizard-1/candidate-1"
                 ),
                 "vndbId": "v19073",
+                "shared": False,
+                "usedBy": [],
             }
         ]
+        assert wizard.list_call == ("wizard-1", "game-1", False)
         assert "file_ref" not in str(candidates)
         assert str(tmp_path) not in str(candidates)
+    finally:
+        tasks.close()
+
+
+def test_candidate_queries_require_strict_include_used_boolean(
+    tmp_path: Path,
+) -> None:
+    api, tasks, wizard = _api(tmp_path)
+    try:
+        invalid_requests = (
+            {"sessionId": "wizard-1", "gameId": "game-1"},
+            {
+                "sessionId": "wizard-1",
+                "gameId": "game-1",
+                "includeUsed": 1,
+            },
+            {
+                "sessionId": "wizard-1",
+                "gameId": "game-1",
+                "includeUsed": False,
+                "extra": True,
+            },
+        )
+
+        for request in invalid_requests:
+            assert api.list_cover_candidates(request)["error"]["code"] == (
+                "invalid_request"
+            )
+        assert wizard.list_call is None
     finally:
         tasks.close()
 
@@ -307,6 +359,75 @@ def test_empty_shallow_scan_reports_completed_without_candidates(
         tasks.close()
 
 
+def test_directory_import_reports_zero_added_summary_and_safe_failure(
+    tmp_path: Path,
+) -> None:
+    api, tasks, wizard = _api(tmp_path)
+    wizard.directory_summary = DirectoryImportSummary(
+        candidates=(),
+        inspected=3,
+        duplicates=2,
+        invalid=1,
+        truncated=False,
+        warnings=("无法读取图片：broken.png",),
+    )
+    try:
+        result = api.start_cover_directory_import(
+            {"sessionId": "wizard-1", "selectedPath": r"D:\Covers"}
+        )
+        task = tasks.wait(result["data"]["taskId"], timeout=5)
+
+        assert task.status == "completed"
+        assert task.progress == {"completed": 1, "total": 1}
+        assert task.message == "导入完成：新增 0 张、重复 2 张、无效 1 张。"
+        assert task.result == {
+            "sessionId": "wizard-1",
+            "inspectedCount": 3,
+            "addedCount": 0,
+            "duplicateCount": 2,
+            "invalidCount": 1,
+            "truncated": False,
+        }
+
+        wizard.directory_failure = InvalidCoverDirectory(
+            "无法读取所选封面目录。"
+        )
+        failed_result = api.start_cover_directory_import(
+            {"sessionId": "wizard-1", "selectedPath": r"D:\Missing"}
+        )
+        failed = tasks.wait(failed_result["data"]["taskId"], timeout=5)
+        assert failed.status == "failed"
+        assert failed.error == {
+            "code": "cover_directory_unavailable",
+            "message": "无法读取所选封面目录。",
+        }
+    finally:
+        tasks.close()
+
+
+def test_adopt_request_requires_and_forwards_explicit_game_id(
+    tmp_path: Path,
+) -> None:
+    api, tasks, wizard = _api(tmp_path)
+    try:
+        missing = api.adopt_cover_candidate(
+            {"sessionId": "wizard-1", "candidateId": "candidate-1"}
+        )
+        assert missing["error"]["code"] == "invalid_request"
+
+        adopted = api.adopt_cover_candidate(
+            {
+                "sessionId": "wizard-1",
+                "gameId": "game-1",
+                "candidateId": "candidate-1",
+            }
+        )
+        assert adopted["ok"] is True
+        assert wizard.adopt_call == ("wizard-1", "game-1", "candidate-1")
+    finally:
+        tasks.close()
+
+
 def test_shallow_scan_rejects_missing_boolean_and_out_of_range_depths(
     tmp_path: Path,
 ) -> None:
@@ -334,7 +455,11 @@ def test_stable_wizard_error_codes(tmp_path: Path) -> None:
         wizard.failure = CandidateSourceChangedError("changed")
         assert (
             api.adopt_cover_candidate(
-                {"sessionId": "wizard-1", "candidateId": "candidate-1"}
+                {
+                    "sessionId": "wizard-1",
+                    "gameId": "game-1",
+                    "candidateId": "candidate-1",
+                }
             )["error"]["code"]
             == "cover_candidate_changed"
         )

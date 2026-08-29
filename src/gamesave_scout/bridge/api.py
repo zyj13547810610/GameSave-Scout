@@ -22,6 +22,7 @@ from gamesave_scout.bridge.rule_controller import RuleBridgeController
 from gamesave_scout.bridge.tasks import (
     ActiveTaskConflict,
     TaskContext,
+    TaskFailure,
     TaskRegistry,
     TaskSnapshot,
 )
@@ -30,6 +31,7 @@ from gamesave_scout.covers.candidates import (
     CoverWizardSnapshot,
 )
 from gamesave_scout.covers.image_pipeline import MAX_SOURCE_BYTES, InvalidCoverImage
+from gamesave_scout.covers.local_discovery import InvalidCoverDirectory
 from gamesave_scout.covers.service import CoverService
 from gamesave_scout.covers.wizard_service import (
     ActiveCoverWizardError,
@@ -651,10 +653,12 @@ class BridgeApi:
     def list_cover_candidates(self, request: object) -> ApiResult:
         try:
             payload = _payload(request)
-            _only_keys(payload, {"sessionId", "gameId"})
+            _only_keys(payload, {"sessionId", "gameId", "includeUsed"})
             session_id = _string(payload, "sessionId")
             candidates = self._require_cover_wizard().list_candidates(
-                session_id, _string(payload, "gameId")
+                session_id,
+                _string(payload, "gameId"),
+                _boolean(payload, "includeUsed"),
             )
             return success(
                 [self._cover_candidate_dto(session_id, candidate) for candidate in candidates]
@@ -798,13 +802,28 @@ class BridgeApi:
             wizard = self._require_cover_wizard()
 
             def operation(context: TaskContext) -> dict[str, JSONValue]:
-                summaries = wizard.collect_directory(session_id, directory, context)
+                try:
+                    summary = wizard.collect_directory(session_id, directory, context)
+                except InvalidCoverDirectory as error:
+                    raise TaskFailure(
+                        "cover_directory_unavailable",
+                        str(error),
+                    ) from error
+                added_count = len(summary.candidates)
+                message = (
+                    f"导入完成：新增 {added_count} 张、重复 {summary.duplicates} 张、"
+                    f"无效 {summary.invalid} 张。"
+                )
+                if summary.truncated:
+                    message += " 已达到共享池或检查上限，结果已截断。"
+                context.report(1, 1, message)
                 return {
                     "sessionId": session_id,
-                    "completedCount": sum(
-                        len(summary.candidates) for summary in summaries.values()
-                    ),
-                    "failedCount": sum(summary.skipped for summary in summaries.values()),
+                    "inspectedCount": summary.inspected,
+                    "addedCount": added_count,
+                    "duplicateCount": summary.duplicates,
+                    "invalidCount": summary.invalid,
+                    "truncated": summary.truncated,
                 }
 
             return success({"taskId": self._tasks.submit("cover_directory_import", operation)})
@@ -818,10 +837,14 @@ class BridgeApi:
     def adopt_cover_candidate(self, request: object) -> ApiResult:
         try:
             payload = _payload(request)
-            _only_keys(payload, {"sessionId", "candidateId"})
+            _only_keys(payload, {"sessionId", "gameId", "candidateId"})
             session_id = _string(payload, "sessionId")
             wizard = self._require_cover_wizard()
-            game = wizard.adopt(session_id, _string(payload, "candidateId"))
+            game = wizard.adopt(
+                session_id,
+                _string(payload, "gameId"),
+                _string(payload, "candidateId"),
+            )
             return success(
                 {
                     "game": self._game_dto(game),
@@ -1831,6 +1854,11 @@ class BridgeApi:
             "evidence": list(candidate.evidence),
             "previewUrl": preview_url,
             "vndbId": candidate.vndb_id,
+            "shared": candidate.shared,
+            "usedBy": [
+                {"gameId": usage.game_id, "title": usage.title}
+                for usage in candidate.used_by
+            ],
         }
 
     def _require_config(self) -> ConfigService:
