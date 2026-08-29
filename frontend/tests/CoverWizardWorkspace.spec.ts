@@ -237,8 +237,35 @@ describe('CoverWizardWorkspace', () => {
     await adoptButton.trigger('click')
     await flushPromises()
 
-    expect(adopt).toHaveBeenCalledWith({ sessionId: 'wizard-1', candidateId: 'candidate-1' })
+    expect(adopt).toHaveBeenCalledWith({
+      sessionId: 'wizard-1',
+      gameId: 'game-1',
+      candidateId: 'candidate-1',
+    })
     expect(wrapper.emitted('updated')).toHaveLength(1)
+    wrapper.unmount()
+  })
+
+  it('reloads the current game when used shared candidates are shown', async () => {
+    const list = vi.fn(async () => ok([]))
+    const bridge = createMockBridge({
+      async start_cover_wizard() { return ok(snapshot()) },
+      list_cover_candidates: list,
+    })
+    const wrapper = mount(CoverWizardWorkspace, {
+      props: { bridge, games: [fixtureGame()], settings },
+      global: { plugins: [createPinia()] },
+    })
+    await flushPromises()
+
+    await wrapper.get('[data-test="cover-include-used"]').setValue(true)
+    await flushPromises()
+
+    expect(list).toHaveBeenLastCalledWith({
+      sessionId: 'wizard-1',
+      gameId: 'game-1',
+      includeUsed: true,
+    })
     wrapper.unmount()
   })
 

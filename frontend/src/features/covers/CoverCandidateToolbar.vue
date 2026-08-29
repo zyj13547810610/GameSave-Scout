@@ -7,6 +7,7 @@ const props = defineProps<{
   settings: CoverWizardSettings
   sourceActive: boolean
   task: TaskSnapshot | null
+  includeUsed: boolean
 }>()
 
 const displayedCompleted = computed(() => {
@@ -19,6 +20,16 @@ const displayedCompleted = computed(() => {
 
 const progressMax = computed(() => Math.max(props.task?.progress.total ?? 1, 1))
 
+const taskMessage = computed(() => {
+  const task = props.task
+  if (!task) return ''
+  if (task.message) return task.message
+  if (task.status === 'queued' || task.status === 'running') return '正在收集候选…'
+  if (task.status === 'completed') return '候选收集完成'
+  if (task.status === 'cancelled') return '任务已取消'
+  return task.error?.message ?? '候选收集失败'
+})
+
 defineEmits<{
   vndbCurrent: []
   vndbAll: []
@@ -26,6 +37,7 @@ defineEmits<{
   directory: []
   paste: []
   files: [files: FileList]
+  'update:includeUsed': [value: boolean]
 }>()
 </script>
 
@@ -48,6 +60,15 @@ defineEmits<{
         >
       </label>
     </div>
+    <label class="cover-include-used">
+      <input
+        data-test="cover-include-used"
+        type="checkbox"
+        :checked="includeUsed"
+        @change="$emit('update:includeUsed', ($event.target as HTMLInputElement).checked)"
+      >
+      显示已使用图片
+    </label>
     <p v-if="!settings.coverOnlineEnabled" class="cover-privacy-note">VNDB 默认关闭；开启后只发送游戏标题，不发送版本号、安装路径或本地文件。</p>
     <div
       v-if="task"
@@ -56,7 +77,7 @@ defineEmits<{
       :class="`status-${task.status}`"
     >
       <p class="cover-task-progress" role="status" aria-live="polite">
-        <span>{{ task.message || '正在收集候选…' }}</span>
+        <span>{{ taskMessage }}</span>
         <strong v-if="task.progress.total !== null">
           {{ displayedCompleted }}/{{ task.progress.total }}
         </strong>

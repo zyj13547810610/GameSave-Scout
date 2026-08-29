@@ -260,12 +260,14 @@ defineExpose({ requestClose })
           :settings="localSettings"
           :source-active="Boolean(store.activeTaskId)"
           :task="store.taskSnapshot"
+          :include-used="store.includeUsedDirectoryCandidates"
           @vndb-current="searchCurrent"
           @vndb-all="searchAll"
           @shallow="scanShallow"
           @directory="importDirectory"
           @paste="paste"
           @files="addFiles"
+          @update:include-used="store.setIncludeUsedDirectoryCandidates(props.bridge, $event)"
         />
         <CoverCandidateGallery
           ref="gallery"

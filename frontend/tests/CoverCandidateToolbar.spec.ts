@@ -20,6 +20,7 @@ describe('CoverCandidateToolbar', () => {
         settings,
         sourceActive: true,
         task: task('running', 4, 12, '正在搜索 5/12：RimWorld'),
+        includeUsed: false,
       },
     })
 
@@ -39,6 +40,50 @@ describe('CoverCandidateToolbar', () => {
     })
     expect(wrapper.get('progress').attributes('value')).toBe('12')
     expect(wrapper.get('[role="status"]').text()).toContain('12/12')
+  })
+
+  it('uses status-specific fallback messages for empty task messages', async () => {
+    const wrapper = mount(CoverCandidateToolbar, {
+      props: {
+        game: fixtureGame(),
+        settings,
+        sourceActive: true,
+        task: task('running', 0, null, ''),
+        includeUsed: false,
+      },
+    })
+
+    expect(wrapper.get('[role="status"]').text()).toContain('正在收集候选…')
+    await wrapper.setProps({ task: task('queued', 0, null, '') })
+    expect(wrapper.get('[role="status"]').text()).toContain('正在收集候选…')
+
+    await wrapper.setProps({ task: task('completed', 0, null, '') })
+    expect(wrapper.get('[role="status"]').text()).toContain('候选收集完成')
+    expect(wrapper.get('[role="status"]').text()).not.toContain('正在收集候选')
+
+    await wrapper.setProps({ task: task('cancelled', 0, null, '') })
+    expect(wrapper.get('[role="status"]').text()).toContain('任务已取消')
+
+    const failed = task('failed', 0, null, '')
+    failed.error = { code: 'cover_directory_unavailable', message: '目录不可用' }
+    await wrapper.setProps({ task: failed })
+    expect(wrapper.get('[role="status"]').text()).toContain('目录不可用')
+  })
+
+  it('emits the used-directory-candidate toggle', async () => {
+    const wrapper = mount(CoverCandidateToolbar, {
+      props: {
+        game: fixtureGame(),
+        settings,
+        sourceActive: false,
+        task: null,
+        includeUsed: false,
+      },
+    })
+
+    await wrapper.get('[data-test="cover-include-used"]').setValue(true)
+
+    expect(wrapper.emitted('update:includeUsed')).toEqual([[true]])
   })
 })
 

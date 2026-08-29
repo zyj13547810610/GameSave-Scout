@@ -256,6 +256,8 @@
 .cover-wizard-settings input:not([type="checkbox"]), .cover-wizard-settings select { width: 100%; min-width: 0; }
 .cover-source-toolbar { display: grid; gap: .55rem; border: 1px solid #393641; border-radius: .7rem; padding: .75rem; background: #131119; }
 .cover-source-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.cover-include-used { display: inline-flex; width: fit-content; max-width: 100%; align-items: center; gap: .45rem; margin: 0; color: #c8c1d3; font-size: .82rem; overflow-wrap: anywhere; }
+.cover-include-used input { width: auto; flex: none; }
 .cover-file-button { min-height: 2.75rem; margin: 0; border: 1px solid #51436d; border-radius: .5rem; padding: .7rem .75rem; color: #eceaf2; background: #28242f; cursor: pointer; }
 .cover-file-button.disabled { cursor: not-allowed; opacity: .45; }
 .cover-file-button input { position: absolute; width: 1px; height: 1px; opacity: 0; }
@@ -276,6 +278,7 @@
 .cover-candidate-meta { display: grid; gap: .2rem; min-width: 0; }
 .cover-candidate-meta strong, .cover-candidate-meta small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cover-candidate-meta small { color: #918b9d; font-size: .7rem; }
+.cover-candidate-meta .cover-candidate-used { overflow: visible; color: #cbbcff; text-overflow: clip; white-space: normal; overflow-wrap: anywhere; }
 .cover-gallery-empty { display: grid; min-height: 12rem; place-content: center; gap: .4rem; border: 1px dashed #494451; border-radius: .7rem; color: #918b9d; text-align: center; }
 .cover-source-error { margin: 0; border-radius: .5rem; padding: .6rem; color: #ffb0b0; background: #351d25; }
 .cover-review-actions { position: static; margin-top: 0; border-top: 1px solid #302c38; padding-top: .8rem; background: #17151e; }

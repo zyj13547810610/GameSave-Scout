@@ -54,6 +54,8 @@ defineExpose({ scrollToTop })
             v-if="candidate.previewUrl && !broken.has(candidate.id)"
             :src="candidate.previewUrl"
             :alt="`${gameTitle} · ${candidate.sourceLabel}候选`"
+            loading="lazy"
+            decoding="async"
             @error="markBroken(candidate.id)"
           >
           <span v-else class="cover-candidate-placeholder" aria-label="预览不可用">预览不可用</span>
@@ -62,6 +64,10 @@ defineExpose({ scrollToTop })
           <strong>{{ candidate.sourceLabel }}</strong>
           <small>{{ candidate.displayName }}</small>
           <small>{{ candidate.width }} × {{ candidate.height }} · {{ candidate.evidence.join('；') }}</small>
+          <small
+            v-if="candidate.shared && candidate.usedBy.length > 0"
+            class="cover-candidate-used"
+          >已用于：{{ candidate.usedBy.map((item) => item.title).join('、') }}</small>
         </span>
       </button>
     </div>
