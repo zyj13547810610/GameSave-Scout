@@ -11,12 +11,21 @@ from PIL import Image
 
 from gamesave_scout.bootstrap.paths import AppPaths
 from gamesave_scout.bridge.tasks import TaskCancelled
-from gamesave_scout.covers.candidates import CandidateFileRef, CoverCandidate
-from gamesave_scout.covers.local_discovery import LocalDiscoverySummary
+from gamesave_scout.covers.candidate_images import stage_candidate_file
+from gamesave_scout.covers.candidates import (
+    CandidateFileRef,
+    CoverCandidate,
+    SharedCoverCandidate,
+)
+from gamesave_scout.covers.local_discovery import (
+    DirectoryImportSummary,
+    LocalDiscoverySummary,
+)
 from gamesave_scout.covers.service import CoverService
 from gamesave_scout.covers.wizard_service import (
     ActiveCoverWizardError,
     CandidateSourceChangedError,
+    CoverCandidateNotFoundError,
     CoverWizardBusyError,
     CoverWizardService,
 )
@@ -56,15 +65,25 @@ class _RecordingProgress:
 class _LocalDiscovery:
     def __init__(self) -> None:
         self.shallow: dict[str, LocalDiscoverySummary] = {}
-        self.directory: dict[str, LocalDiscoverySummary] = {}
+        self.directory_summary = DirectoryImportSummary((), 0, 0, 0, False, ())
+        self.directory_failure: Exception | None = None
 
     def scan_game_directory(self, game, install, root, limit, depth, context):
         del install, root, limit, depth, context
         return self.shallow.get(game.id, _summary())
 
-    def match_cover_directory(self, games, directory, root, context):
-        del directory, root, context
-        return {game.id: self.directory.get(game.id, _summary()) for game in games}
+    def import_cover_directory(
+        self,
+        directory,
+        root,
+        known_sha256s,
+        capacity,
+        context,
+    ):
+        del directory, root, known_sha256s, capacity, context
+        if self.directory_failure is not None:
+            raise self.directory_failure
+        return self.directory_summary
 
 
 class _Vndb:
@@ -206,11 +225,11 @@ def test_four_sources_merge_by_hash_without_crossing_games(harness: _Harness) ->
 
     service.collect_vndb(session.id, [harness.alice_id], 5, _Progress())
 
-    alice = service.list_candidates(session.id, harness.alice_id)
+    alice = service.list_candidates(session.id, harness.alice_id, False)
     assert len(alice) == 1
     assert alice[0].source == "vndb"
     assert alice[0].evidence == ("VNDB", "拖放")
-    assert service.list_candidates(session.id, harness.save_only_id) == (other,)
+    assert service.list_candidates(session.id, harness.save_only_id, False) == (other,)
     with pytest.raises(ValueError):
         service.add_candidate_bytes(
             session.id,
@@ -219,6 +238,233 @@ def test_four_sources_merge_by_hash_without_crossing_games(harness: _Harness) ->
             payload=payload,
             source="vndb",  # type: ignore[arg-type]
         )
+
+
+def test_shared_directory_candidates_keep_ids_and_sort_for_each_game(
+    harness: _Harness,
+    tmp_path: Path,
+) -> None:
+    service = harness.service()
+    session = service.start()
+    directory = tmp_path / "screenshots"
+    directory.mkdir()
+    alice_source = directory / "Alice cover.png"
+    hash_source = directory / "86025945_p10.png"
+    alice_source.write_bytes(_png("red"))
+    hash_source.write_bytes(_png("purple"))
+    preview_root = (
+        harness.paths.temp_dir / "cover-wizard" / session.id / "shared-previews"
+    )
+    harness.local.directory_summary = _directory_summary(
+        _shared_candidate("shared-alice", alice_source, preview_root / "alice.webp"),
+        _shared_candidate("shared-hash", hash_source, preview_root / "hash.webp"),
+    )
+
+    service.collect_directory(session.id, directory, _Progress())
+
+    alice = service.list_candidates(session.id, harness.alice_id, False)
+    archive = service.list_candidates(session.id, harness.save_only_id, False)
+    assert [item.id for item in alice] == ["shared-alice", "shared-hash"]
+    assert {item.id for item in archive} == {"shared-alice", "shared-hash"}
+    assert all(item.shared for item in alice)
+    assert {item.preview_path for item in alice} == {
+        item.preview_path for item in archive
+    }
+    snapshot = service.snapshot(session.id)
+    visible = {
+        item.game_id: (item.status, item.candidate_count)
+        for item in snapshot.queue
+    }
+    assert visible[harness.alice_id] == ("ready", 2)
+    assert visible[harness.save_only_id] == ("ready", 2)
+
+
+def test_shared_candidate_hides_after_adoption_and_can_be_reused(
+    harness: _Harness,
+    tmp_path: Path,
+) -> None:
+    external = tmp_path / "screenshots" / "86025945_p10.png"
+    external.parent.mkdir()
+    external.write_bytes(_png("purple"))
+    original_sha256 = hashlib.sha256(external.read_bytes()).hexdigest()
+    service = harness.service()
+    session = service.start(include_existing=True)
+    preview = (
+        harness.paths.temp_dir
+        / "cover-wizard"
+        / session.id
+        / "shared-previews"
+        / "shared-1.webp"
+    )
+    harness.local.directory_summary = _directory_summary(
+        _shared_candidate("shared-1", external, preview)
+    )
+    service.collect_directory(session.id, external.parent, _Progress())
+
+    service.adopt(session.id, harness.alice_id, "shared-1")
+    assert service.list_candidates(session.id, harness.save_only_id, False) == ()
+    visible = service.list_candidates(session.id, harness.save_only_id, True)
+    assert visible[0].used_by[0].game_id == harness.alice_id
+
+    service.adopt(session.id, harness.save_only_id, "shared-1")
+    reused = service.list_candidates(session.id, harness.bob_id, True)[0]
+    assert {item.game_id for item in reused.used_by} == {
+        harness.alice_id,
+        harness.save_only_id,
+    }
+    assert external.exists()
+    assert hashlib.sha256(external.read_bytes()).hexdigest() == original_sha256
+    assert preview.exists()
+
+    service.close(session.id)
+    assert not preview.parent.parent.exists()
+    assert external.exists()
+    assert hashlib.sha256(external.read_bytes()).hexdigest() == original_sha256
+
+
+def test_dedicated_candidate_cannot_be_adopted_for_another_game(
+    harness: _Harness,
+) -> None:
+    service = harness.service()
+    session = service.start()
+    candidate = service.add_candidate_bytes(
+        session.id,
+        harness.alice_id,
+        file_name="candidate.png",
+        payload=_png("red"),
+        source="drop",
+    )
+
+    with pytest.raises(CoverCandidateNotFoundError):
+        service.adopt(session.id, harness.save_only_id, candidate.id)
+
+    assert service.list_candidates(session.id, harness.alice_id, False) == (
+        candidate,
+    )
+
+
+def test_adopting_same_hash_dedicated_candidate_marks_shared_copy_used(
+    harness: _Harness,
+    tmp_path: Path,
+) -> None:
+    external = tmp_path / "screenshots" / "shared.png"
+    external.parent.mkdir()
+    payload = _png("green")
+    external.write_bytes(payload)
+    service = harness.service()
+    session = service.start()
+    preview = (
+        harness.paths.temp_dir
+        / "cover-wizard"
+        / session.id
+        / "shared-previews"
+        / "shared.webp"
+    )
+    shared = _shared_candidate("shared-1", external, preview)
+    harness.local.directory_summary = _directory_summary(shared)
+    service.collect_directory(session.id, external.parent, _Progress())
+    dedicated = service.add_candidate_bytes(
+        session.id,
+        harness.alice_id,
+        file_name="drop.png",
+        payload=payload,
+        source="drop",
+    )
+    assert service.list_candidates(session.id, harness.alice_id, False)[0].id == (
+        dedicated.id
+    )
+
+    service.adopt(session.id, harness.alice_id, dedicated.id)
+
+    assert service.list_candidates(session.id, harness.save_only_id, False) == ()
+    used = service.list_candidates(session.id, harness.save_only_id, True)[0]
+    assert [item.game_id for item in used.used_by] == [harness.alice_id]
+    assert external.exists()
+
+
+def test_directory_imports_merge_atomically_and_cancellation_preserves_pool(
+    harness: _Harness,
+    tmp_path: Path,
+) -> None:
+    directory = tmp_path / "screenshots"
+    directory.mkdir()
+    sources = []
+    for name, color in (("a.png", "red"), ("b.png", "blue"), ("c.png", "green")):
+        source = directory / name
+        source.write_bytes(_png(color))
+        sources.append(source)
+    service = harness.service()
+    session = service.start()
+    preview_root = (
+        harness.paths.temp_dir / "cover-wizard" / session.id / "shared-previews"
+    )
+    first_a = _shared_candidate("a", sources[0], preview_root / "a.webp")
+    first_b = _shared_candidate("b", sources[1], preview_root / "b.webp")
+    harness.local.directory_summary = _directory_summary(first_a, first_b)
+    first = service.collect_directory(session.id, directory, _Progress())
+    assert len(first.candidates) == 2
+
+    duplicate_a = _shared_candidate(
+        "duplicate-a",
+        sources[0],
+        preview_root / "duplicate-a.webp",
+    )
+    second_c = _shared_candidate("c", sources[2], preview_root / "c.webp")
+    harness.local.directory_summary = _directory_summary(duplicate_a, second_c)
+    second = service.collect_directory(session.id, directory, _Progress())
+
+    assert [item.id for item in second.candidates] == ["c"]
+    assert second.duplicates == 1
+    before_cancel = service.list_candidates(session.id, harness.alice_id, False)
+    assert {item.id for item in before_cancel} == {"a", "b", "c"}
+    assert not duplicate_a.preview_path.exists()
+
+    harness.local.directory_failure = TaskCancelled("user")
+    with pytest.raises(TaskCancelled):
+        service.collect_directory(session.id, directory, _Progress())
+
+    after_cancel = service.list_candidates(session.id, harness.alice_id, False)
+    assert {item.id for item in after_cancel} == {"a", "b", "c"}
+    assert all(item.preview_path.exists() for item in after_cancel)
+    assert service.snapshot(session.id).source_operation_active is False
+
+
+def test_failed_shared_import_does_not_record_usage(
+    harness: _Harness,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    external = tmp_path / "shared.png"
+    external.write_bytes(_png("orange"))
+    service = harness.service()
+    session = service.start()
+    preview = (
+        harness.paths.temp_dir
+        / "cover-wizard"
+        / session.id
+        / "shared-previews"
+        / "shared.webp"
+    )
+    shared = _shared_candidate("shared", external, preview)
+    harness.local.directory_summary = _directory_summary(shared)
+    service.collect_directory(session.id, external.parent, _Progress())
+    monkeypatch.setattr(
+        harness.covers,
+        "import_file",
+        lambda *_: (_ for _ in ()).throw(RuntimeError("planned import failure")),
+    )
+
+    with pytest.raises(RuntimeError, match="planned"):
+        service.adopt(session.id, harness.alice_id, shared.id)
+
+    candidate = service.list_candidates(session.id, harness.alice_id, False)[0]
+    assert candidate.used_by == ()
+    item = next(
+        item
+        for item in service.snapshot(session.id).queue
+        if item.game_id == harness.alice_id
+    )
+    assert item.status == "ready"
 
 
 def test_adopt_revalidates_source_and_cleans_only_temporary_files(
@@ -234,7 +480,7 @@ def test_adopt_revalidates_source_and_cleans_only_temporary_files(
         source="clipboard",
     )
 
-    game = service.adopt(session.id, adopted_candidate.id)
+    game = service.adopt(session.id, harness.alice_id, adopted_candidate.id)
 
     assert game.cover_original_relpath is not None
     assert not adopted_candidate.file_ref.path.exists()
@@ -262,9 +508,13 @@ def test_adopt_revalidates_source_and_cleans_only_temporary_files(
     external.write_bytes(_png("purple"))
 
     with pytest.raises(CandidateSourceChangedError):
-        service.adopt(session.id, external_candidate.id)
+        service.adopt(
+            session.id,
+            harness.save_only_id,
+            external_candidate.id,
+        )
     assert external.exists()
-    assert service.list_candidates(session.id, harness.save_only_id)
+    assert service.list_candidates(session.id, harness.save_only_id, False)
 
 
 def test_failed_import_preserves_candidate_and_queue_state(
@@ -286,10 +536,10 @@ def test_failed_import_preserves_candidate_and_queue_state(
     )
 
     with pytest.raises(RuntimeError, match="planned"):
-        service.adopt(session.id, candidate.id)
+        service.adopt(session.id, harness.alice_id, candidate.id)
 
     assert candidate.file_ref.path.exists()
-    assert service.list_candidates(session.id, harness.alice_id) == (candidate,)
+    assert service.list_candidates(session.id, harness.alice_id, False) == (candidate,)
     item = next(
         item
         for item in service.snapshot(session.id).queue
@@ -313,7 +563,7 @@ def test_existing_cover_can_be_replaced_when_explicitly_included(
         source="drop",
     )
 
-    replaced = service.adopt(session.id, candidate.id)
+    replaced = service.adopt(session.id, harness.bob_id, candidate.id)
 
     assert replaced.cover_revision == before.cover_revision + 1
     item = next(
@@ -448,6 +698,41 @@ def _summary(
     candidates: tuple[CoverCandidate, ...] = (),
 ) -> LocalDiscoverySummary:
     return LocalDiscoverySummary(candidates, len(candidates), 0, False, ())
+
+
+def _shared_candidate(
+    candidate_id: str,
+    source_path: Path,
+    preview_path: Path,
+) -> SharedCoverCandidate:
+    staged = stage_candidate_file(source_path, preview_path)
+    return SharedCoverCandidate(
+        id=candidate_id,
+        display_name=source_path.name,
+        width=staged.width,
+        height=staged.height,
+        sha256=staged.sha256,
+        quality_score=35.0,
+        file_ref=staged.file_ref,
+        preview_path=staged.preview_path,
+    )
+
+
+def _directory_summary(
+    *candidates: SharedCoverCandidate,
+    inspected: int | None = None,
+    duplicates: int = 0,
+    invalid: int = 0,
+    truncated: bool = False,
+) -> DirectoryImportSummary:
+    return DirectoryImportSummary(
+        candidates=tuple(candidates),
+        inspected=len(candidates) if inspected is None else inspected,
+        duplicates=duplicates,
+        invalid=invalid,
+        truncated=truncated,
+        warnings=(),
+    )
 
 
 def _candidate(

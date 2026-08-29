@@ -9,7 +9,7 @@ import stat
 from collections.abc import Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, replace
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from threading import RLock
 from typing import Literal, Protocol
 from uuid import uuid4
@@ -17,15 +17,24 @@ from uuid import uuid4
 from gamesave_scout.bootstrap.paths import AppPaths
 from gamesave_scout.covers.candidate_images import stage_candidate_bytes
 from gamesave_scout.covers.candidates import (
+    MATCH_PRIORITY,
     CoverCandidate,
+    CoverCandidateUsage,
+    CoverMatchKind,
     CoverProgress,
     CoverProgressDetail,
     CoverWizardQueueItem,
     CoverWizardQueueStatus,
     CoverWizardSnapshot,
+    SharedCoverCandidate,
+    match_cover_title,
     merge_and_sort_candidates,
 )
-from gamesave_scout.covers.local_discovery import LocalDiscoverySummary
+from gamesave_scout.covers.local_discovery import (
+    MAX_SHARED_DIRECTORY_CANDIDATES,
+    DirectoryImportSummary,
+    LocalDiscoverySummary,
+)
 from gamesave_scout.covers.vndb import VndbError
 from gamesave_scout.library.models import Game
 
@@ -75,13 +84,14 @@ class _LocalDiscovery(Protocol):
         context: CoverProgress,
     ) -> LocalDiscoverySummary: ...
 
-    def match_cover_directory(
+    def import_cover_directory(
         self,
-        games: Sequence[Game],
         directory: Path,
         session_root: Path,
+        known_sha256s: frozenset[str],
+        capacity: int,
         context: CoverProgress,
-    ) -> Mapping[str, LocalDiscoverySummary]: ...
+    ) -> DirectoryImportSummary: ...
 
 
 class _Vndb(Protocol):
@@ -136,6 +146,8 @@ class _Session:
     root: Path
     items: list[CoverWizardQueueItem]
     candidates: dict[str, tuple[CoverCandidate, ...]]
+    shared_candidates: dict[str, SharedCoverCandidate]
+    shared_by_sha256: dict[str, str]
     include_existing: bool
     current_game_id: str | None
     source_operation_active: bool = False
@@ -187,6 +199,8 @@ class CoverWizardService:
                 root=root,
                 items=items,
                 candidates={item.game_id: () for item in items},
+                shared_candidates={},
+                shared_by_sha256={},
                 include_existing=include_existing,
                 current_game_id=visible[0].game_id if visible else None,
             )
@@ -211,12 +225,17 @@ class CoverWizardService:
             return self._snapshot(session)
 
     def list_candidates(
-        self, session_id: str, game_id: str
+        self,
+        session_id: str,
+        game_id: str,
+        include_used: bool,
     ) -> tuple[CoverCandidate, ...]:
+        if not isinstance(include_used, bool):
+            raise ValueError("显示已使用共享候选必须是布尔值。")
         with self._lock:
             session = self._require_session(session_id)
             self._require_item(session, game_id)
-            return session.candidates[game_id]
+            return self._project_candidates(session, game_id, include_used)
 
     def add_candidate_bytes(
         self,
@@ -297,23 +316,61 @@ class CoverWizardService:
         session_id: str,
         directory: Path,
         context: CoverProgress,
-    ) -> Mapping[str, LocalDiscoverySummary]:
+    ) -> DirectoryImportSummary:
         session = self._begin_source(session_id)
+        summary: DirectoryImportSummary | None = None
+        retained: list[SharedCoverCandidate] = []
         try:
             with self._lock:
-                games = tuple(
-                    game
-                    for item in self._visible_items(session)
-                    if (game := self._library.get_game(item.game_id)) is not None
+                known_sha256s = frozenset(session.shared_by_sha256)
+                capacity = max(
+                    0,
+                    MAX_SHARED_DIRECTORY_CANDIDATES
+                    - len(session.shared_candidates),
                 )
-            results = self._local.match_cover_directory(
-                games, directory, session.root, context
+            summary = self._local.import_cover_directory(
+                directory,
+                session.root,
+                known_sha256s,
+                capacity,
+                context,
             )
+            duplicate_count = summary.duplicates
+            truncated = summary.truncated
             with self._lock:
                 current = self._require_session(session_id)
-                for game_id, summary in results.items():
-                    self._merge(current, game_id, summary.candidates)
-            return results
+                for candidate in summary.candidates:
+                    if candidate.sha256 in current.shared_by_sha256:
+                        duplicate_count += 1
+                        _cleanup_shared_candidates((candidate,))
+                        continue
+                    if (
+                        len(current.shared_candidates)
+                        >= MAX_SHARED_DIRECTORY_CANDIDATES
+                    ):
+                        truncated = True
+                        _cleanup_shared_candidates((candidate,))
+                        continue
+                    current.shared_candidates[candidate.id] = candidate
+                    current.shared_by_sha256[candidate.sha256] = candidate.id
+                    retained.append(candidate)
+            return replace(
+                summary,
+                candidates=tuple(retained),
+                duplicates=duplicate_count,
+                truncated=truncated,
+            )
+        except BaseException:
+            if summary is not None:
+                published = {candidate.id for candidate in retained}
+                _cleanup_shared_candidates(
+                    tuple(
+                        candidate
+                        for candidate in summary.candidates
+                        if candidate.id not in published
+                    )
+                )
+            raise
         finally:
             self._end_source(session_id)
 
@@ -370,25 +427,29 @@ class CoverWizardService:
         finally:
             self._end_source(session_id)
 
-    def adopt(self, session_id: str, candidate_id: str) -> Game:
+    def adopt(self, session_id: str, game_id: str, candidate_id: str) -> Game:
         with self._lock:
             session = self._require_session(session_id)
-            candidate = self._find_candidate(session, candidate_id)
+            self._require_item(session, game_id)
+            candidate = self._find_adoption_candidate(
+                session,
+                game_id,
+                candidate_id,
+            )
             _verify_candidate_source(candidate)
-            self._covers.import_file(candidate.game_id, candidate.file_ref.path)
-            game = self._require_game(candidate.game_id)
-            discarded = session.candidates[candidate.game_id]
-            session.candidates[candidate.game_id] = ()
+            self._covers.import_file(game_id, candidate.file_ref.path)
+            game = self._require_game(game_id)
+            discarded = session.candidates[game_id]
+            session.candidates[game_id] = ()
+            self._mark_shared_used(session, candidate.sha256, game_id)
             self._update_item(
                 session,
-                candidate.game_id,
+                game_id,
                 status="adopted",
                 candidate_count=0,
                 error=None,
             )
-            session.current_game_id = self._next_game_id(
-                session, candidate.game_id
-            )
+            session.current_game_id = self._next_game_id(session, game_id)
             _cleanup_candidates(discarded)
             return game
 
@@ -404,7 +465,13 @@ class CoverWizardService:
         with self._lock:
             try:
                 session = self._require_session(session_id)
-                return self._find_candidate(session, candidate_id).preview_path
+                shared = session.shared_candidates.get(candidate_id)
+                if shared is not None:
+                    return shared.preview_path
+                return self._find_dedicated_candidate(
+                    session,
+                    candidate_id,
+                ).preview_path
             except (CoverWizardNotFoundError, CoverCandidateNotFoundError):
                 return None
 
@@ -425,11 +492,69 @@ class CoverWizardService:
     def _snapshot(self, session: _Session) -> CoverWizardSnapshot:
         return CoverWizardSnapshot(
             id=session.id,
-            queue=tuple(self._visible_items(session)),
+            queue=tuple(
+                self._project_queue_item(session, item)
+                for item in self._visible_items(session)
+            ),
             current_game_id=session.current_game_id,
             include_existing=session.include_existing,
             source_operation_active=session.source_operation_active,
         )
+
+    def _project_queue_item(
+        self,
+        session: _Session,
+        item: CoverWizardQueueItem,
+    ) -> CoverWizardQueueItem:
+        if item.status in {"adopted", "skipped"}:
+            return item
+        candidate_count = len(
+            self._project_candidates(session, item.game_id, include_used=False)
+        )
+        if candidate_count:
+            return replace(
+                item,
+                status="ready",
+                candidate_count=candidate_count,
+                error=None,
+            )
+        if item.status == "failed":
+            return replace(item, candidate_count=0)
+        return replace(
+            item,
+            status="pending",
+            candidate_count=0,
+            error=None,
+        )
+
+    def _project_candidates(
+        self,
+        session: _Session,
+        game_id: str,
+        include_used: bool,
+    ) -> tuple[CoverCandidate, ...]:
+        game = self._require_game(game_id)
+        shared = (
+            _project_shared_candidate(session, game, candidate)
+            for candidate in session.shared_candidates.values()
+            if include_used or not candidate.used_by_game_ids
+        )
+        merged = merge_and_sort_candidates(
+            (*session.candidates[game_id], *shared)
+        )
+        if not include_used:
+            return merged
+        unused = tuple(
+            candidate
+            for candidate in merged
+            if not (candidate.shared and candidate.used_by)
+        )
+        used = tuple(
+            candidate
+            for candidate in merged
+            if candidate.shared and candidate.used_by
+        )
+        return (*unused, *used)
 
     def _visible_items(self, session: _Session) -> list[CoverWizardQueueItem]:
         return [
@@ -531,12 +656,57 @@ class CoverWizardService:
             )
 
     @staticmethod
-    def _find_candidate(session: _Session, candidate_id: str) -> CoverCandidate:
+    def _find_dedicated_candidate(
+        session: _Session,
+        candidate_id: str,
+    ) -> CoverCandidate:
         for candidates in session.candidates.values():
             for candidate in candidates:
                 if candidate.id == candidate_id:
                     return candidate
         raise CoverCandidateNotFoundError(candidate_id)
+
+    def _find_adoption_candidate(
+        self,
+        session: _Session,
+        game_id: str,
+        candidate_id: str,
+    ) -> CoverCandidate:
+        dedicated = next(
+            (
+                candidate
+                for candidate in session.candidates[game_id]
+                if candidate.id == candidate_id
+            ),
+            None,
+        )
+        if dedicated is not None:
+            return dedicated
+        shared = session.shared_candidates.get(candidate_id)
+        if shared is None:
+            raise CoverCandidateNotFoundError(candidate_id)
+        return _project_shared_candidate(
+            session,
+            self._require_game(game_id),
+            shared,
+        )
+
+    @staticmethod
+    def _mark_shared_used(
+        session: _Session,
+        sha256: str,
+        game_id: str,
+    ) -> None:
+        shared_id = session.shared_by_sha256.get(sha256)
+        if shared_id is None:
+            return
+        candidate = session.shared_candidates[shared_id]
+        if game_id in candidate.used_by_game_ids:
+            return
+        session.shared_candidates[shared_id] = replace(
+            candidate,
+            used_by_game_ids=(*candidate.used_by_game_ids, game_id),
+        )
 
     def _next_game_id(self, session: _Session, current_game_id: str) -> str | None:
         visible = self._visible_items(session)
@@ -569,6 +739,60 @@ def _game_display_name(game: Game) -> str:
     return game.title
 
 
+def _project_shared_candidate(
+    session: _Session,
+    game: Game,
+    shared: SharedCoverCandidate,
+) -> CoverCandidate:
+    match_kind, title_score, matched = _match_shared_candidate(
+        shared.display_name,
+        game,
+    )
+    titles = {item.game_id: item.title for item in session.items}
+    used_by = tuple(
+        CoverCandidateUsage(game_id, titles[game_id])
+        for game_id in shared.used_by_game_ids
+        if game_id in titles
+    )
+    return CoverCandidate(
+        id=shared.id,
+        game_id=game.id,
+        source="cover_directory",
+        source_label="导入目录",
+        display_name=shared.display_name,
+        width=shared.width,
+        height=shared.height,
+        sha256=shared.sha256,
+        match_kind=match_kind,
+        score=round(title_score * 0.65 + shared.quality_score, 3),
+        evidence=("导入目录", f"文件名匹配：{matched or shared.display_name}"),
+        file_ref=shared.file_ref,
+        preview_path=shared.preview_path,
+        shared=True,
+        used_by=used_by,
+    )
+
+
+def _match_shared_candidate(
+    filename: str,
+    game: Game,
+) -> tuple[CoverMatchKind, float, str]:
+    aliases = [game.title]
+    if game.relative_dir:
+        leaf = PurePosixPath(game.relative_dir.replace("\\", "/")).name
+        if leaf and leaf.casefold() != game.title.casefold():
+            aliases.append(leaf)
+    matches = [match_cover_title(alias, (filename,)) for alias in aliases]
+    return min(
+        matches,
+        key=lambda item: (
+            MATCH_PRIORITY[item[0]],
+            -item[1],
+            item[2].casefold(),
+        ),
+    )
+
+
 def _verify_candidate_source(candidate: CoverCandidate) -> None:
     path = candidate.file_ref.path
     try:
@@ -596,6 +820,14 @@ def _cleanup_candidates(candidates: Sequence[CoverCandidate]) -> None:
         if candidate.file_ref.temporary:
             with suppress(OSError):
                 candidate.file_ref.path.unlink(missing_ok=True)
+
+
+def _cleanup_shared_candidates(
+    candidates: Sequence[SharedCoverCandidate],
+) -> None:
+    for candidate in candidates:
+        with suppress(OSError):
+            candidate.preview_path.unlink(missing_ok=True)
 
 
 def _is_reparse_metadata(metadata: os.stat_result) -> bool:
