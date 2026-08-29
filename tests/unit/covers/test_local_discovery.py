@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from io import BytesIO
 from pathlib import Path
 
 import pytest
 from PIL import Image
 
+from gamesave_scout.bridge.tasks import TaskCancelled
 from gamesave_scout.covers import local_discovery
-from gamesave_scout.covers.local_discovery import LocalCoverDiscovery
+from gamesave_scout.covers.local_discovery import (
+    InvalidCoverDirectory,
+    LocalCoverDiscovery,
+)
 from gamesave_scout.library.models import Game
 
 
@@ -33,6 +36,12 @@ class _Progress:
 
     def raise_if_cancelled(self) -> None:
         self.checks += 1
+
+
+class _CancelOnFirstReport(_Progress):
+    def report(self, *args: object, **kwargs: object) -> None:
+        super().report(*args, **kwargs)
+        raise TaskCancelled("user")
 
 
 def _game(
@@ -137,39 +146,142 @@ def test_shallow_scan_ranks_title_portrait_before_unrelated_landscape(
     assert result.truncated is True
 
 
-def test_cover_directory_is_nonrecursive_and_matches_title_or_install_leaf(
+def test_cover_directory_import_keeps_unmatched_hash_names_and_is_nonrecursive(
     tmp_path: Path,
 ) -> None:
     directory = tmp_path / "covers"
-    _write_image(directory / "Alice 封面.png")
-    _write_image(directory / "Expedition 33 poster.jpg")
-    _write_image(directory / "House in Fata Morgana.png")
-    _write_image(directory / "unrelated.png")
-    _write_image(directory / "nested" / "Alice.png")
-    games = (
-        _game("alice", title="Alice", relative_dir="AliceGame"),
-        _game("expedition", title="33号远征队", relative_dir="Expedition 33"),
-        _game("house", title="The House in Fata Morgana", relative_dir="Fata"),
+    _write_image(directory / "Alice cover.png", (400, 600))
+    _write_image(directory / "86025945_p10.jpg", (410, 610))
+    _write_image(directory / "nested" / "ignored.png", (420, 620))
+    progress = _Progress(messages=[])
+
+    result = LocalCoverDiscovery().import_cover_directory(
+        directory,
+        tmp_path / "session",
+        frozenset(),
+        1000,
+        progress,
     )
 
-    results = LocalCoverDiscovery().match_cover_directory(
-        games, directory, tmp_path / "session", _Progress()
+    assert [item.display_name for item in result.candidates] == [
+        "86025945_p10.jpg",
+        "Alice cover.png",
+    ]
+    assert result.inspected == 2
+    assert result.duplicates == 0
+    assert result.invalid == 0
+    assert result.truncated is False
+    assert all(item.file_ref.temporary is False for item in result.candidates)
+    assert all(0 <= item.quality_score <= 35 for item in result.candidates)
+    assert progress.messages == [
+        "正在导入 86025945_p10.jpg",
+        "正在导入 Alice cover.png",
+    ]
+
+
+def test_cover_directory_import_deduplicates_content_and_isolates_bad_images(
+    tmp_path: Path,
+) -> None:
+    directory = tmp_path / "covers"
+    _write_image(directory / "first.png", (400, 600))
+    (directory / "copy.png").write_bytes((directory / "first.png").read_bytes())
+    directory.joinpath("broken.png").write_bytes(b"broken")
+
+    result = LocalCoverDiscovery().import_cover_directory(
+        directory,
+        tmp_path / "session",
+        frozenset(),
+        1000,
+        _Progress(),
     )
 
-    assert [item.display_name for item in results["alice"].candidates] == [
-        "Alice 封面.png"
-    ]
-    assert [item.display_name for item in results["expedition"].candidates] == [
-        "Expedition 33 poster.jpg"
-    ]
-    assert [item.display_name for item in results["house"].candidates] == [
-        "House in Fata Morgana.png"
-    ]
-    assert all(
-        item.source == "cover_directory"
-        for summary in results.values()
-        for item in summary.candidates
+    assert len(result.candidates) == 1
+    assert result.inspected == 3
+    assert result.duplicates == 1
+    assert result.invalid == 1
+    assert result.warnings == ("无法读取图片：broken.png",)
+
+
+def test_cover_directory_import_respects_remaining_shared_capacity(
+    tmp_path: Path,
+) -> None:
+    directory = tmp_path / "covers"
+    _write_image(directory / "a.png", (400, 600))
+    _write_image(directory / "b.png", (401, 601))
+
+    result = LocalCoverDiscovery().import_cover_directory(
+        directory,
+        tmp_path / "session",
+        frozenset(),
+        1,
+        _Progress(),
     )
+
+    assert len(result.candidates) == 1
+    assert result.inspected == 2
+    assert result.truncated is True
+
+def test_cover_directory_import_stops_at_the_global_image_limit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    directory = tmp_path / "covers"
+    for index, size in enumerate(((400, 600), (401, 601), (402, 602))):
+        _write_image(directory / f"{index}.png", size)
+    monkeypatch.setattr(local_discovery, "MAX_DISCOVERY_FILES", 2)
+
+    result = LocalCoverDiscovery().import_cover_directory(
+        directory,
+        tmp_path / "session",
+        frozenset(),
+        1000,
+        _Progress(),
+    )
+
+    assert result.inspected == 2
+    assert len(result.candidates) == 2
+    assert result.truncated is True
+
+
+@pytest.mark.parametrize("directory_kind", ["missing", "file"])
+def test_cover_directory_import_rejects_invalid_roots(
+    tmp_path: Path,
+    directory_kind: str,
+) -> None:
+    directory = tmp_path / "covers"
+    if directory_kind == "file":
+        directory.write_text("not a directory", encoding="utf-8")
+
+    with pytest.raises(
+        InvalidCoverDirectory,
+        match="所选封面目录不存在或不是目录。",
+    ):
+        LocalCoverDiscovery().import_cover_directory(
+            directory,
+            tmp_path / "session",
+            frozenset(),
+            1000,
+            _Progress(),
+        )
+
+
+def test_cover_directory_import_removes_batch_previews_when_cancelled(
+    tmp_path: Path,
+) -> None:
+    directory = tmp_path / "covers"
+    _write_image(directory / "a.png")
+    preview_root = tmp_path / "session" / "shared-previews"
+
+    with pytest.raises(TaskCancelled):
+        LocalCoverDiscovery().import_cover_directory(
+            directory,
+            tmp_path / "session",
+            frozenset(),
+            1000,
+            _CancelOnFirstReport(),
+        )
+
+    assert not list(preview_root.glob("*.webp"))
 
 
 def test_one_damaged_image_isolated_from_later_valid_image(tmp_path: Path) -> None:
@@ -202,22 +314,4 @@ def test_shallow_scan_stops_at_the_global_image_limit(
     )
 
     assert result.inspected == 2
-    assert result.truncated is True
-
-
-def test_candidate_limit_is_bounded_to_one_hundred_for_cover_directory(
-    tmp_path: Path,
-) -> None:
-    directory = tmp_path / "covers"
-    payload = BytesIO()
-    Image.new("RGB", (2, 3)).save(payload, "PNG")
-    directory.mkdir()
-    for index in range(101):
-        (directory / f"Alice {index}.png").write_bytes(payload.getvalue())
-
-    result = LocalCoverDiscovery().match_cover_directory(
-        (_game(),), directory, tmp_path / "session", _Progress()
-    )["game-1"]
-
-    assert len(result.candidates) == 100
     assert result.truncated is True

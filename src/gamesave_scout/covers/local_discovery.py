@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Mapping, Sequence
+import stat
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Literal
 from uuid import uuid4
 
 from gamesave_scout.covers.candidate_images import StagedCandidateImage, stage_candidate_file
@@ -15,14 +15,14 @@ from gamesave_scout.covers.candidates import (
     CoverCandidate,
     CoverMatchKind,
     CoverProgress,
+    SharedCoverCandidate,
     match_cover_title,
 )
 from gamesave_scout.covers.image_pipeline import InvalidCoverImage
 from gamesave_scout.library.models import Game
 
 MAX_DISCOVERY_FILES = 5_000
-MAX_DIRECTORY_CANDIDATES_PER_GAME = 100
-DIRECTORY_MATCH_THRESHOLD = 80.0
+MAX_SHARED_DIRECTORY_CANDIDATES = 1_000
 _IMAGE_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".webp", ".bmp"})
 _REPARSE_POINT = 0x400
 
@@ -32,6 +32,20 @@ class LocalDiscoverySummary:
     candidates: tuple[CoverCandidate, ...]
     inspected: int
     skipped: int
+    truncated: bool
+    warnings: tuple[str, ...]
+
+
+class InvalidCoverDirectory(ValueError):
+    """Raised when the explicitly selected cover directory cannot be read."""
+
+
+@dataclass(frozen=True)
+class DirectoryImportSummary:
+    candidates: tuple[SharedCoverCandidate, ...]
+    inspected: int
+    duplicates: int
+    invalid: int
     truncated: bool
     warnings: tuple[str, ...]
 
@@ -67,7 +81,6 @@ class LocalCoverDiscovery:
                     game,
                     path,
                     session_root,
-                    source="shallow_scan",
                 )
             except InvalidCoverImage:
                 skipped += 1
@@ -86,73 +99,111 @@ class LocalCoverDiscovery:
             warnings=tuple(warnings),
         )
 
-    def match_cover_directory(
+    def import_cover_directory(
         self,
-        games: Sequence[Game],
         directory: Path,
         session_root: Path,
+        known_sha256s: frozenset[str],
+        capacity: int,
         context: CoverProgress,
-    ) -> Mapping[str, LocalDiscoverySummary]:
-        paths, enumeration_truncated = _enumerate_images(
-            directory,
-            max_depth=0,
-            context=context,
-        )
-        assigned: dict[str, list[tuple[Path, CoverMatchKind, float, str]]] = {
-            game.id: [] for game in games
-        }
-        for path in paths:
-            context.raise_if_cancelled()
-            match = _best_game_match(path.stem, games)
-            if match is None:
-                continue
-            game, kind, score, matched = match
-            assigned[game.id].append((path, kind, score, matched))
-
-        results: dict[str, LocalDiscoverySummary] = {}
-        for game in games:
-            matches = sorted(
-                assigned[game.id],
-                key=lambda item: (
-                    MATCH_PRIORITY[item[1]],
-                    -item[2],
-                    item[0].name.casefold(),
-                ),
-            )
-            game_truncated = len(matches) > MAX_DIRECTORY_CANDIDATES_PER_GAME
-            candidates: list[CoverCandidate] = []
-            warnings: list[str] = []
-            skipped = 0
-            selected = matches[:MAX_DIRECTORY_CANDIDATES_PER_GAME]
-            for index, (path, kind, score, matched) in enumerate(selected, start=1):
+    ) -> DirectoryImportSummary:
+        if type(capacity) is not int or capacity < 0:
+            raise ValueError("共享封面候选剩余容量必须是非负整数。")
+        _validate_cover_directory(directory)
+        paths, enumeration_truncated = _enumerate_cover_directory(directory, context)
+        candidates: list[SharedCoverCandidate] = []
+        warnings: list[str] = []
+        encountered_sha256s = set(known_sha256s)
+        inspected = 0
+        duplicates = 0
+        invalid = 0
+        truncated = enumeration_truncated
+        try:
+            for index, path in enumerate(paths, start=1):
                 context.raise_if_cancelled()
+                inspected += 1
+                candidate_id = uuid4().hex
+                preview = session_root / "shared-previews" / f"{candidate_id}.webp"
                 try:
-                    candidate = _stage_local_candidate(
-                        game,
-                        path,
-                        session_root,
-                        source="cover_directory",
-                        known_match=(kind, score, matched),
-                    )
+                    staged = stage_candidate_file(path, preview)
                 except InvalidCoverImage:
-                    skipped += 1
+                    invalid += 1
                     warnings.append(f"无法读取图片：{path.name}")
                 else:
-                    candidates.append(candidate)
-                context.report(
-                    index,
-                    len(selected),
-                    f"正在匹配 {game.title} 的封面",
-                    details={"gameId": game.id},
-                )
-            results[game.id] = LocalDiscoverySummary(
-                candidates=tuple(sorted(candidates, key=_local_sort_key)),
-                inspected=len(selected),
-                skipped=skipped,
-                truncated=enumeration_truncated or game_truncated,
-                warnings=tuple(warnings),
-            )
-        return results
+                    if staged.sha256 in encountered_sha256s:
+                        duplicates += 1
+                        with suppress(OSError):
+                            staged.preview_path.unlink(missing_ok=True)
+                    elif len(candidates) >= capacity:
+                        encountered_sha256s.add(staged.sha256)
+                        truncated = True
+                        with suppress(OSError):
+                            staged.preview_path.unlink(missing_ok=True)
+                    else:
+                        encountered_sha256s.add(staged.sha256)
+                        candidates.append(
+                            SharedCoverCandidate(
+                                id=candidate_id,
+                                display_name=path.name,
+                                width=staged.width,
+                                height=staged.height,
+                                sha256=staged.sha256,
+                                quality_score=_image_quality_score(staged, path),
+                                file_ref=staged.file_ref,
+                                preview_path=staged.preview_path,
+                            )
+                        )
+                context.report(index, len(paths), f"正在导入 {path.name}")
+        except BaseException:
+            for candidate in candidates:
+                with suppress(OSError):
+                    candidate.preview_path.unlink(missing_ok=True)
+            raise
+
+        return DirectoryImportSummary(
+            candidates=tuple(candidates),
+            inspected=inspected,
+            duplicates=duplicates,
+            invalid=invalid,
+            truncated=truncated,
+            warnings=tuple(warnings),
+        )
+
+
+def _validate_cover_directory(directory: Path) -> None:
+    try:
+        metadata = directory.lstat()
+    except OSError as error:
+        raise InvalidCoverDirectory(
+            "所选封面目录不存在或不是目录。"
+        ) from error
+    attributes = getattr(metadata, "st_file_attributes", 0)
+    if (
+        not stat.S_ISDIR(metadata.st_mode)
+        or directory.is_symlink()
+        or bool(attributes & _REPARSE_POINT)
+    ):
+        raise InvalidCoverDirectory("所选封面目录不存在或不是目录。")
+
+
+def _enumerate_cover_directory(
+    directory: Path,
+    context: CoverProgress,
+) -> tuple[list[Path], bool]:
+    context.raise_if_cancelled()
+    try:
+        with os.scandir(directory) as iterator:
+            entries = sorted(iterator, key=lambda item: item.name.casefold())
+    except OSError as error:
+        raise InvalidCoverDirectory("无法读取所选封面目录。") from error
+    paths: list[Path] = []
+    for entry in entries:
+        context.raise_if_cancelled()
+        if _is_regular_image(entry):
+            paths.append(Path(entry.path))
+            if len(paths) >= MAX_DISCOVERY_FILES:
+                return paths, True
+    return paths, False
 
 
 def _enumerate_images(
@@ -219,16 +270,13 @@ def _stage_local_candidate(
     game: Game,
     path: Path,
     session_root: Path,
-    *,
-    source: Literal["shallow_scan", "cover_directory"],
-    known_match: tuple[CoverMatchKind, float, str] | None = None,
 ) -> CoverCandidate:
-    kind, title_score, matched = known_match or _match_game(path.stem, game)
+    kind, title_score, matched = _match_game(path.stem, game)
     candidate_id = uuid4().hex
     preview = session_root / "previews" / game.id / f"{candidate_id}.webp"
     staged = stage_candidate_file(path, preview)
     score = _image_score(staged, path, title_score)
-    source_label = "游戏目录浅层扫描" if source == "shallow_scan" else "现成封面目录"
+    source_label = "游戏目录浅层扫描"
     match_label = {
         "exact": "精确匹配",
         "normalized": "规范化匹配",
@@ -238,7 +286,7 @@ def _stage_local_candidate(
     return CoverCandidate(
         id=candidate_id,
         game_id=game.id,
-        source=source,
+        source="shallow_scan",
         source_label=source_label,
         display_name=path.name,
         width=staged.width,
@@ -250,26 +298,6 @@ def _stage_local_candidate(
         file_ref=staged.file_ref,
         preview_path=staged.preview_path,
     )
-
-
-def _best_game_match(
-    filename: str, games: Sequence[Game]
-) -> tuple[Game, CoverMatchKind, float, str] | None:
-    matches = [(*_match_game(filename, game), game) for game in games]
-    if not matches:
-        return None
-    kind, score, matched, game = min(
-        matches,
-        key=lambda item: (
-            MATCH_PRIORITY[item[0]],
-            -item[1],
-            item[3].title.casefold(),
-            item[3].id,
-        ),
-    )
-    if kind == "fuzzy" and score < DIRECTORY_MATCH_THRESHOLD:
-        return None
-    return game, kind, score, matched
 
 
 def _match_game(filename: str, game: Game) -> tuple[CoverMatchKind, float, str]:
@@ -286,6 +314,10 @@ def _match_game(filename: str, game: Game) -> tuple[CoverMatchKind, float, str]:
 
 
 def _image_score(staged: StagedCandidateImage, path: Path, title_score: float) -> float:
+    return round(title_score * 0.65 + _image_quality_score(staged, path), 3)
+
+
+def _image_quality_score(staged: StagedCandidateImage, path: Path) -> float:
     ratio = staged.width / staged.height
     aspect_score = max(0.0, 1.0 - abs(ratio - (2 / 3)) / (2 / 3)) * 15
     resolution_score = min((staged.width * staged.height) / 1_440_000, 1.0) * 15
@@ -294,7 +326,7 @@ def _image_score(staged: StagedCandidateImage, path: Path, title_score: float) -
     except OSError:
         file_size = 0
     size_score = min(file_size / (2 * 1024 * 1024), 1.0) * 5
-    return round(title_score * 0.65 + aspect_score + resolution_score + size_score, 3)
+    return round(aspect_score + resolution_score + size_score, 3)
 
 
 def _local_sort_key(candidate: CoverCandidate) -> tuple[int, float, str, str]:

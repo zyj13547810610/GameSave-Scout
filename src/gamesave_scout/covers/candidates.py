@@ -63,6 +63,25 @@ class CandidateFileRef:
 
 
 @dataclass(frozen=True)
+class CoverCandidateUsage:
+    game_id: str
+    title: str
+
+
+@dataclass(frozen=True)
+class SharedCoverCandidate:
+    id: str
+    display_name: str
+    width: int
+    height: int
+    sha256: str
+    quality_score: float
+    file_ref: CandidateFileRef
+    preview_path: Path
+    used_by_game_ids: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class CoverCandidate:
     id: str
     game_id: str
@@ -78,6 +97,8 @@ class CoverCandidate:
     file_ref: CandidateFileRef
     preview_path: Path
     vndb_id: str | None = None
+    shared: bool = False
+    used_by: tuple[CoverCandidateUsage, ...] = ()
 
 
 @dataclass(frozen=True)
