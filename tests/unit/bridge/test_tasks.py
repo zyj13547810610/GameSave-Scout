@@ -6,6 +6,7 @@ import pytest
 from gamesave_scout.bridge.tasks import (
     ActiveTaskConflict,
     TaskCancelled,
+    TaskFailure,
     TaskRegistry,
 )
 
@@ -68,6 +69,29 @@ def test_task_failure_isolated_as_user_safe_snapshot() -> None:
     }
     assert "secret" not in str(snapshot)
     registry.close()
+
+
+def test_explicit_task_failure_exposes_only_approved_message() -> None:
+    registry = TaskRegistry(max_workers=1)
+
+    def fail(_context: object) -> None:
+        raise TaskFailure(
+            "cover_directory_unavailable",
+            "无法读取所选封面目录。",
+        )
+
+    snapshot = registry.wait(
+        registry.submit("cover_directory_import", fail),
+        timeout=2,
+    )
+    registry.close()
+
+    assert snapshot.status == "failed"
+    assert snapshot.message == "无法读取所选封面目录。"
+    assert snapshot.error == {
+        "code": "cover_directory_unavailable",
+        "message": "无法读取所选封面目录。",
+    }
 
 
 def test_task_failure_logs_internal_exception(caplog) -> None:

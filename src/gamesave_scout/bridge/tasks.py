@@ -25,6 +25,17 @@ class TaskCancelled(RuntimeError):
         self.reason = reason
 
 
+class TaskFailure(RuntimeError):
+    """A deliberately user-safe background-task failure."""
+
+    def __init__(self, code: str, message: str) -> None:
+        if not code.strip() or not message.strip():
+            raise ValueError("任务失败代码和消息不能为空。")
+        super().__init__(message)
+        self.code = code
+        self.message = message
+
+
 class ActiveTaskConflict(RuntimeError):
     """Raised when an active task owns an incompatible resource group."""
 
@@ -220,6 +231,20 @@ class TaskRegistry:
             context.raise_if_cancelled()
         except TaskCancelled:
             self._update(task_id, status="cancelled", message="任务已取消。")
+        except TaskFailure as error:
+            self._logger.warning(
+                "Background task %s (%s) reported %s: %s",
+                task_id,
+                self._snapshots[task_id].kind,
+                error.code,
+                error.message,
+            )
+            self._update(
+                task_id,
+                status="failed",
+                message=error.message,
+                error={"code": error.code, "message": error.message},
+            )
         except Exception:
             self._logger.exception(
                 "Background task %s (%s) failed",
