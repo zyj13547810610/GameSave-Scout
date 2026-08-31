@@ -52,6 +52,50 @@ def test_release_entrypoint_rejects_relative_bootstrapper_before_cleanup(
     assert dist_marker.read_text(encoding="utf-8") == "keep dist"
 
 
+def test_release_entrypoint_full_mode_does_not_require_bootstrapper(
+    tmp_path: Path,
+) -> None:
+    repository = _copy_entrypoint(tmp_path)
+    build_marker, dist_marker = _write_keep_markers(repository)
+
+    result = _run_entrypoint_arguments(
+        repository,
+        "-PackageMode",
+        "Full",
+        "-WebView2Archive",
+        "relative-runtime.cab",
+    )
+
+    assert result.returncode != 0
+    assert "WebView2Archive must be an absolute path" in (
+        f"{result.stdout}\n{result.stderr}"
+    )
+    assert build_marker.read_text(encoding="utf-8") == "keep build"
+    assert dist_marker.read_text(encoding="utf-8") == "keep dist"
+
+
+def test_release_entrypoint_lite_mode_does_not_require_archive(
+    tmp_path: Path,
+) -> None:
+    repository = _copy_entrypoint(tmp_path)
+    build_marker, dist_marker = _write_keep_markers(repository)
+
+    result = _run_entrypoint_arguments(
+        repository,
+        "-PackageMode",
+        "Lite",
+        "-WebView2Bootstrapper",
+        "relative-bootstrapper.exe",
+    )
+
+    assert result.returncode != 0
+    assert "WebView2Bootstrapper must be an absolute path" in (
+        f"{result.stdout}\n{result.stderr}"
+    )
+    assert build_marker.read_text(encoding="utf-8") == "keep build"
+    assert dist_marker.read_text(encoding="utf-8") == "keep dist"
+
+
 def test_release_entrypoint_has_no_skip_or_download_bypass_parameters(
     tmp_path: Path,
 ) -> None:
@@ -112,6 +156,20 @@ def _run_entrypoint(
     bootstrapper: str,
     *extra: str,
 ) -> subprocess.CompletedProcess[str]:
+    return _run_entrypoint_arguments(
+        repository,
+        "-WebView2Archive",
+        archive,
+        "-WebView2Bootstrapper",
+        bootstrapper,
+        *extra,
+    )
+
+
+def _run_entrypoint_arguments(
+    repository: Path,
+    *arguments: str,
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [
             str(POWERSHELL),
@@ -122,11 +180,7 @@ def _run_entrypoint(
             "Bypass",
             "-File",
             str(repository / "scripts" / "build_release.ps1"),
-            "-WebView2Archive",
-            archive,
-            "-WebView2Bootstrapper",
-            bootstrapper,
-            *extra,
+            *arguments,
         ],
         capture_output=True,
         text=True,

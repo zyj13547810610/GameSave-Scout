@@ -781,13 +781,13 @@ def publish_releases(
     staged_releases: Sequence[StagedRelease],
     versions: ReleaseVersions,
 ) -> tuple[Path, ...]:
-    """Atomically replace all six outputs for both runtime modes."""
+    """Atomically replace the three outputs for each selected runtime mode."""
 
-    if len(staged_releases) != len(ReleaseMode):
-        raise ReleaseToolError("发布事务必须恰好包含完整版和轻量版。")
+    if not staged_releases:
+        raise ReleaseToolError("发布事务必须至少包含一个运行时模式。")
     by_mode = {staged.mode: staged for staged in staged_releases}
-    if set(by_mode) != set(ReleaseMode) or len(by_mode) != len(staged_releases):
-        raise ReleaseToolError("发布事务必须各包含一份 fixed 和 evergreen。")
+    if len(by_mode) != len(staged_releases):
+        raise ReleaseToolError("发布事务不能包含重复的运行时模式。")
 
     root = repository_root.resolve(strict=True)
     managed_root = validate_managed_target(
@@ -798,7 +798,7 @@ def publish_releases(
     if not managed_root.is_dir():
         raise ReleaseToolError("发布暂存根 build/release 不存在。")
 
-    ordered = tuple(by_mode[mode] for mode in ReleaseMode)
+    ordered = tuple(by_mode[mode] for mode in ReleaseMode if mode in by_mode)
     staged_paths: list[Path] = []
     final_paths: list[Path] = []
     for staged in ordered:
@@ -1322,8 +1322,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     subparsers = parser.add_subparsers(dest="command", required=True)
     verify = subparsers.add_parser("verify-context")
     verify.add_argument("--repository-root", type=Path, default=REPOSITORY_ROOT)
-    verify.add_argument("--webview-archive", type=Path, required=True)
-    verify.add_argument("--webview-bootstrapper", type=Path, required=True)
+    verify.add_argument(
+        "--package-mode",
+        choices=("both", *tuple(mode.value for mode in ReleaseMode)),
+        default="both",
+    )
+    verify.add_argument("--webview-archive", type=Path)
+    verify.add_argument("--webview-bootstrapper", type=Path)
     prepare = subparsers.add_parser("prepare-build-root")
     prepare.add_argument("--repository-root", type=Path, default=REPOSITORY_ROOT)
     extract = subparsers.add_parser("extract-runtime")
@@ -1362,20 +1367,31 @@ def main(argv: Sequence[str] | None = None) -> int:
     publish.add_argument("--repository-root", type=Path, default=REPOSITORY_ROOT)
     for mode in ReleaseMode:
         prefix = f"--{mode.value}"
-        publish.add_argument(f"{prefix}-release-directory", type=Path, required=True)
-        publish.add_argument(f"{prefix}-archive", type=Path, required=True)
-        publish.add_argument(f"{prefix}-checksum", type=Path, required=True)
+        publish.add_argument(f"{prefix}-release-directory", type=Path)
+        publish.add_argument(f"{prefix}-archive", type=Path)
+        publish.add_argument(f"{prefix}-checksum", type=Path)
     arguments = parser.parse_args(argv)
     root = arguments.repository_root.resolve(strict=True)
     versions = ReleaseVersions.load(root)
     if arguments.command == "verify-context":
         config = _controlled_webview_config(root)
         bootstrapper_config = _controlled_bootstrapper_config(root)
-        validate_webview_archive(arguments.webview_archive, config)
-        validate_webview_bootstrapper(
-            arguments.webview_bootstrapper,
-            bootstrapper_config,
+        selected_modes = (
+            set(ReleaseMode)
+            if arguments.package_mode == "both"
+            else {ReleaseMode(arguments.package_mode)}
         )
+        if ReleaseMode.FIXED in selected_modes:
+            if arguments.webview_archive is None:
+                raise ReleaseToolError("完整版构建缺少 WebView2 Fixed Runtime CAB。")
+            validate_webview_archive(arguments.webview_archive, config)
+        if ReleaseMode.EVERGREEN in selected_modes:
+            if arguments.webview_bootstrapper is None:
+                raise ReleaseToolError("轻量版构建缺少 WebView2 Bootstrapper。")
+            validate_webview_bootstrapper(
+                arguments.webview_bootstrapper,
+                bootstrapper_config,
+            )
         print(
             json.dumps(
                 {
@@ -1462,18 +1478,36 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(arguments.archive)
         return 0
     if arguments.command == "publish":
-        staged_releases = tuple(
-            StagedRelease(
-                mode=mode,
-                directory=getattr(arguments, f"{mode.value}_release_directory"),
-                archive=getattr(arguments, f"{mode.value}_archive"),
-                checksum=getattr(arguments, f"{mode.value}_checksum"),
+        staged: list[StagedRelease] = []
+        for mode in ReleaseMode:
+            values = (
+                getattr(arguments, f"{mode.value}_release_directory"),
+                getattr(arguments, f"{mode.value}_archive"),
+                getattr(arguments, f"{mode.value}_checksum"),
             )
-            for mode in ReleaseMode
-        )
+            if all(value is None for value in values):
+                continue
+            if any(value is None for value in values):
+                raise ReleaseToolError(
+                    f"{mode.value} 发布参数必须同时包含目录、ZIP 和 SHA-256。"
+                )
+            directory, archive_path, checksum = values
+            if not all(
+                isinstance(value, Path)
+                for value in (directory, archive_path, checksum)
+            ):
+                raise ReleaseToolError(f"{mode.value} 发布参数类型无效。")
+            staged.append(
+                StagedRelease(
+                    mode=mode,
+                    directory=cast(Path, directory),
+                    archive=cast(Path, archive_path),
+                    checksum=cast(Path, checksum),
+                )
+            )
         published = publish_releases(
             root,
-            staged_releases,
+            tuple(staged),
             versions,
         )
         print(json.dumps([str(path) for path in published], ensure_ascii=False))

@@ -690,6 +690,55 @@ def test_publish_releases_replaces_both_modes_as_one_transaction(
     assert not list((tmp_path / "dist").glob(".*.backup-*"))
 
 
+@pytest.mark.parametrize("mode", tuple(ReleaseMode))
+def test_publish_releases_accepts_one_selected_mode(
+    tmp_path: Path,
+    mode: ReleaseMode,
+) -> None:
+    versions = ReleaseVersions("0.1.0")
+    staged = (_staged_release(tmp_path, versions, mode),)
+
+    published = publish_releases(tmp_path, staged, versions)
+
+    release_name = versions.name_for(mode)
+    final = tmp_path / "dist" / release_name
+    archive = tmp_path / "dist" / f"{release_name}.zip"
+    checksum = tmp_path / "dist" / f"{release_name}.zip.sha256"
+    assert published == (final, archive, checksum)
+    verify_release_tree(final, versions, mode)
+    verify_release_zip(archive, versions, mode)
+    verify_zip_sha256(archive, checksum)
+
+
+def test_publish_releases_preserves_unselected_mode_outputs(tmp_path: Path) -> None:
+    versions = ReleaseVersions("0.1.0")
+    old_markers = _write_six_old_outputs(tmp_path, versions)
+    evergreen_name = versions.name_for(ReleaseMode.EVERGREEN)
+    preserved = {
+        path: payload
+        for path, payload in old_markers.items()
+        if evergreen_name in str(path)
+    }
+    staged = (_staged_release(tmp_path, versions, ReleaseMode.FIXED),)
+
+    publish_releases(tmp_path, staged, versions)
+
+    assert all(path.read_bytes() == payload for path, payload in preserved.items())
+    assert not list((tmp_path / "dist").glob(".*.backup-*"))
+
+
+def test_publish_releases_rejects_empty_or_duplicate_mode_selection(
+    tmp_path: Path,
+) -> None:
+    versions = ReleaseVersions("0.1.0")
+    fixed = _staged_release(tmp_path, versions, ReleaseMode.FIXED)
+
+    with pytest.raises(ReleaseToolError, match="至少包含一个"):
+        publish_releases(tmp_path, (), versions)
+    with pytest.raises(ReleaseToolError, match="重复"):
+        publish_releases(tmp_path, (fixed, fixed), versions)
+
+
 def test_publish_releases_rolls_back_all_six_outputs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -27,10 +27,10 @@ GameSave Scout 不需要账号或云服务。游戏库、配置、封面、日�
 
 ## 版本更新记录
 
-以下记录按源码开发里程碑整理；`V0.1.0`、`V0.1.4`、`V0.2.1` 和 `V0.3.2` 已生成本地双版本便携候选包。V0.3.6 是当前源码版本，便携构建后置。详细设计、实现边界和验证记录以[固定设计文档](docs/superpowers/plans)为准。
+以下记录按源码开发里程碑整理；`V0.1.0`、`V0.1.4`、`V0.2.1`、`V0.3.2`、`V0.3.4` 和 `V0.3.6` 已生成本地双版本便携候选包。V0.3.6 是当前源码版本。详细设计、实现边界和验证记录以[固定设计文档](docs/superpowers/plans)为准。
 
 <details open>
-<summary><strong>V0.3.6 — 2026-08-28（最新源码，便携包待构建）</strong></summary>
+<summary><strong>V0.3.6 — 2026-08-28（最新源码）</strong></summary>
 
 - 启动工作目录按“明确人工设置 > 手动主程序所在目录 > 自动推荐主程序的游戏根目录”派生；清空明确设置后恢复派生规则，进程创建失败返回稳定中文错误；
 - 增加默认开启的全局封面自动优化：横图和竖图统一限制最长边 1920 像素，不裁剪、不拉伸、不放大小图；无透明通道保存 JPEG 90，透明图片保存优化 PNG，关闭后保留原尺寸与解码格式；
@@ -38,24 +38,25 @@ GameSave Scout 不需要账号或云服务。游戏库、配置、封面、日�
 - 批量封面右侧操作区可直接启动当前已安装游戏；入口位于“候选设置”左侧且等高，启动成功或失败均不改变队列、候选、当前选择和滚动位置；
 - “导入封面目录”改为短生命周期共享候选池：通过安全校验的 hash、UUID、截图编号和低匹配文件名图片都可供每个游戏人工挑选；采用后默认隐藏，可开启“显示已使用图片”查看并复用，多次导入按 SHA-256 合并，外部原图始终只读；
 - 目录导入新增“新增/重复/无效/截断”完成摘要，零新增也明确完成，不再回退显示“正在收集候选…”；配置仍为版本 6，SQLite schema 仍为 4；
-- 当前自动门禁为 Python 1360 项通过、1 项平台条件跳过，前端 58 个测试文件共 274 项通过，并通过 Ruff、mypy、Vue 类型检查、141 模块生产构建和隔离 schema 4 源码 smoke。用户已确认真实窗口中的共享候选池、采用隐藏、显示复用和重复导入反馈均符合预期；便携包待构建。
+- 当前自动门禁为 Python 1366 项通过、1 项平台条件跳过，前端 58 个测试文件共 274 项通过，并通过 Ruff、mypy、Vue 类型检查、141 模块生产构建和隔离 schema 4 源码 smoke。已确认真实窗口中的共享候选池、采用隐藏、显示复用和重复导入反馈均符合预期。
+- 已生成完整离线版与轻量联网版六个本地产物，目录/ZIP 为 751.39/326.18 MiB 与 92.11/35.26 MiB，目录、ZIP、模式隔离和 SHA-256 独立复核通过；构建清单基线为 `9de82a0`，因构建时 README 已修改而如实记录 `gitDirty: true`。
 
 </details>
 
 <details>
-<summary><strong>V0.3.5 — 2026-08-27（源码里程碑，未构建便携包）</strong></summary>
+<summary><strong>V0.3.5 — 2026-08-27</strong></summary>
 
 - 为全部 80 条声明式引擎规则和 23 个代码型引擎结果补充“通用 / 主流游戏”或“视觉小说 / 同人游戏”生态元数据；分类只用于规则维护，不改变检测分数、优先级、存档匹配或数据库结构；
 - 规则管理的引擎表单新增“适用生态”下拉框；新建规则必须主动选择，旧的未分类用户规则保持兼容并可继续编辑，不执行迁移；
 - 新增 GameMaker、CRYENGINE、RE Engine、MT Framework、Defold、Suika2 六条声明式规则；
 - 新增 Source、Source 2、MonoGame、FNA、Microsoft XNA、LÖVE、Construct 2、Construct 3 八个有界代码检测结果；Construct 2/3 与 MT Framework 暂保持实验状态；
 - 内置声明式规则增至 80 条（71 条正式、9 条实验），代码型结果增至 23 个；Naninovel 与 UTAGE 等 Unity 上层框架等待后续支持“主引擎 + 上层框架”层级后再加入；
-- 当前源码通过 Python 1327 项（另 1 项平台条件跳过）、前端 57 个文件共 250 项，以及 Ruff、mypy、Vue 类型检查、141 模块生产构建和隔离 schema 4 smoke；用户已确认分类显示、新旧规则编辑、五档缩放和当前可用游戏重新检测均符合预期。2026-08-28 又以两个真实目录确认 Artemis `pf8 + iarsys.dll` 和 RPG Maker MV 外层启动器 `data/www` 布局均可正确识别。
+- 当前源码通过 Python 1327 项（另 1 项平台条件跳过）、前端 57 个文件共 250 项，以及 Ruff、mypy、Vue 类型检查、141 模块生产构建和隔离 schema 4 smoke；已确认分类显示、新旧规则编辑、五档缩放和当前可用游戏重新检测均符合预期。2026-08-28 又以两个真实目录确认 Artemis `pf8 + iarsys.dll` 和 RPG Maker MV 外层启动器 `data/www` 布局均可正确识别。
 
 </details>
 
 <details>
-<summary><strong>V0.3.4 — 2026-08-26（源码功能收口）</strong></summary>
+<summary><strong>V0.3.4 — 2026-08-26</strong></summary>
 
 - 修复启动时只能快速核验一个游戏根目录的回归，多个游戏库扫描恢复共享并发，批量存档扫描继续保持磁盘互斥；
 - 游戏库、批量存档、批量封面和规则管理统一为顶部四个一级入口，品牌区与游戏目录保持固定宽度；
@@ -65,7 +66,7 @@ GameSave Scout 不需要账号或云服务。游戏库、配置、封面、日�
 </details>
 
 <details>
-<summary><strong>V0.3.3 — 2026-08-25（源码技术改名里程碑，无正式便携包）</strong></summary>
+<summary><strong>V0.3.3 — 2026-08-25</strong></summary>
 
 - 产品技术身份统一为 GameSave Scout，不保留旧 Python 包、命令或开发环境变量兼容入口；
 - Python 包、前端桥接、日志、PyInstaller spec、EXE 和发布前缀已同步改名，程序旁 `data` 与 schema 4 不变；
@@ -75,7 +76,7 @@ GameSave Scout 不需要账号或云服务。游戏库、配置、封面、日�
 </details>
 
 <details>
-<summary><strong>V0.3.2 — 2026-08-25（历史便携候选）</strong></summary>
+<summary><strong>V0.3.2 — 2026-08-25</strong></summary>
 
 - 逐项复核固定 GARbro 提交的 228 个 ArcFormats 顶层格式族，从 123 个引擎/系统相关族中筛出并实现 45 条强特征正式规则和 7 条短签名/加密头实验规则；现有安全证据操作无法可靠表达的候选继续留在开发台账；
 - 内置引擎规则增至 74 条（66 条正式、8 条实验），新增规则具有资料驱动的正反、近似魔数、截断、复合证据和跨格式碰撞夹具；缺少商业游戏样本的真实矩阵继续后置；
@@ -196,7 +197,7 @@ GameSave Scout 不需要账号或云服务。游戏库、配置、封面、日�
 
 ## 当前状态
 
-V0.1.x、V0.2.0、V0.2.1 和 V0.3.2 已完成既定源码与本地候选收口。当前 V0.3.6 在 V0.3.5 引擎生态分类和第三批规则基础上，完成启动工作目录派生、封面自动优化、详情/批量设置同步、批量封面直接启动、1～3 层图片扫描和导入目录共享候选池；配置版本为 6，schema 保持 4，完整自动门禁与真实窗口人工验收均已通过，便携构建后置。缺少样本的真实游戏规则矩阵仍保留为后续工作。完整目标 Windows 10/11 设备、SmartScreen、UNC/只读目录和特殊运行时故障矩阵没有全部执行，作为后续可选兼容性复核。
+V0.1.x、V0.2.0、V0.2.1 和 V0.3.2 已完成既定源码与本地候选收口。当前 V0.3.6 在 V0.3.5 引擎生态分类和第三批规则基础上，完成启动工作目录派生、封面自动优化、详情/批量设置同步、批量封面直接启动、1～3 层图片扫描和导入目录共享候选池；配置版本为 6，schema 保持 4，完整自动门禁、真实窗口人工验收及双版本本地便携候选复核均已完成。缺少样本的真实游戏规则矩阵仍保留为后续工作。完整目标 Windows 10/11 设备、SmartScreen、UNC/只读目录和特殊运行时故障矩阵没有全部执行，作为后续可选兼容性复核。
 
 V0.2 批量存档发现展示已安装、失效、未关联及已记录存档位置，而不只显示“孤立”结果；候选始终由用户审核，不自动确认归属。存档备份、恢复、同步和版本管理继续后置，目前尚未实现。
 
@@ -232,7 +233,7 @@ V0.2 批量存档发现展示已安装、失效、未关联及已记录存档位
 
 ## 便携版选择与使用
 
-V0.3.6 将继续生成两个 Windows x64 便携包，但本轮尚未构建；下表是目标产物名称。需要现成候选时，使用已经发布并由发布者校验过的历史版本。
+V0.3.6 已生成两个 Windows x64 本地便携候选包；下表是产物名称。正式使用前应从 GitHub Release 下载并核对发布者提供的 SHA-256。
 
 | 版本 | 目录/ZIP 名称 | WebView2 | 适用场景 |
 | --- | --- | --- | --- |
@@ -303,12 +304,12 @@ python -m gamesave_scout --smoke-test
 
 ## 构建 Windows x64 便携包
 
-正式构建需要两个微软官方输入文件：
+完整构建与轻量构建分别使用以下微软官方输入文件：
 
 - WebView2 Fixed Version Runtime 151.0.4129.86 x64 CAB，用于完整离线版；
 - Evergreen WebView2 Bootstrapper，用于轻量联网版缺少系统 Runtime 时的手动安装引导。
 
-构建脚本要求两个参数都是绝对路径，并会按照 `release/webview2-runtime.json` 和 `release/webview2-bootstrapper.json` 校验文件名、版本、SHA-256 与 Microsoft Authenticode 签名。脚本不会联网下载输入，也不会自动运行安装器。仓库约定把本地输入放在被 Git 忽略的 `webview安装包` 目录：
+构建脚本通过 `-PackageMode Both|Full|Lite` 选择产物，默认是 `Both`。只要求所选模式对应的输入参数；输入必须是绝对路径，并会按照 `release/webview2-runtime.json` 或 `release/webview2-bootstrapper.json` 校验文件名、版本、SHA-256 与 Microsoft Authenticode 签名。脚本不会联网下载输入，也不会自动运行安装器。仓库约定把本地输入放在被 Git 忽略的 `webview安装包` 目录：
 
 ```text
 webview安装包/
@@ -323,11 +324,28 @@ $webView2Archive = (Resolve-Path ".\webview安装包\Microsoft.WebView2.FixedVer
 $webView2Bootstrapper = (Resolve-Path ".\webview安装包\MicrosoftEdgeWebview2Setup.exe").Path
 
 .\scripts\build_release.ps1 `
+  -PackageMode Both `
   -WebView2Archive $webView2Archive `
   -WebView2Bootstrapper $webView2Bootstrapper
 ```
 
-脚本会执行 Python 与前端完整门禁、生产 UI 构建、源码 smoke、单次 PyInstaller onedir 冻结、两种 WebView2 布局派生、两版冻结 smoke、发布清单与 ZIP 复核。只有六个目标全部成功后，才会原子替换 `dist` 中的当前版本：
+只构建完整离线版时不需要 Bootstrapper：
+
+```powershell
+.\scripts\build_release.ps1 `
+  -PackageMode Full `
+  -WebView2Archive $webView2Archive
+```
+
+只构建轻量联网版时不需要 Fixed Runtime CAB；构建机必须已安装 Evergreen WebView2，供冻结 smoke 使用：
+
+```powershell
+.\scripts\build_release.ps1 `
+  -PackageMode Lite `
+  -WebView2Bootstrapper $webView2Bootstrapper
+```
+
+每次调用都会执行 Python 与前端完整门禁、生产 UI 构建、源码 smoke 和一次 PyInstaller onedir 冻结，然后只派生、冒烟、复核并原子替换所选模式的三个产物。`Both` 从同一冻结核心派生两种布局，并在六个目标全部成功后一起替换：
 
 ```text
 dist/
@@ -349,12 +367,12 @@ Get-FileHash .\dist\GameSave-Scout-0.3.6-win-x64-lite.zip -Algorithm SHA256
 Get-Content .\dist\GameSave-Scout-0.3.6-win-x64-lite.zip.sha256
 ```
 
-V0.3.6 尚未生成 ZIP，因此当前没有可发布的 V0.3.6 SHA-256。历史 V0.3.2 候选包的 ZIP SHA-256 为：
+当前 V0.3.6 本地候选包的 ZIP SHA-256 为：
 
-- 完整离线版：`af4c7b50236a25ed0f3529e6466078904b8b20a910d93af26ee39ee40491e252`
-- 轻量联网版：`181dbb7156b97778a7739dac59baa3107d99decaa94cced7bb8d387d628880bb`
+- 完整离线版：`6a703c8e50ef754a0de83c75860e112f237b0f08e2e3ba0135d7f528c45c506a`
+- 轻量联网版：`e75f70850c7bc5168726122da4ee8ca34fba7fcac70e166d47fe406b787fc517`
 
-构建失败时，脚本不会用不完整的新结果覆盖上一组六个正式产物。`build/`、`dist/` 与 `webview安装包/` 都是本地内容，不应提交到 Git。
+构建失败时，脚本不会用不完整的新结果覆盖本次所选模式的上一组正式产物；未选择模式在 `dist` 中的现有产物保持不变。`build/`、`dist/` 与 `webview安装包/` 都是本地内容，不应提交到 Git。
 
 ## 源码启动与调试
 

@@ -1,13 +1,13 @@
 # GameSave Scout 便携版打包与发布
 
-> 文档性质：固定模块设计与发布基准；适用版本：V0.1 及后续版本；最后更新：2026-08-26；状态：V0.3.3 已完成 GameSave Scout 技术身份与双版本发布链迁移，但不保留正式 V0.3.3 便携包；V0.3.4 已完成源码与远端收口，正式双版本便携包尚未构建。历史 V0.1 的本机真实窗口、路径与 Windows Sandbox 人工验收结论继续作为兼容性证据。完整发布负载绝对路径达到或超过 260 字符仍不受支持。完整目标 Windows 10/11、Evergreen 断网、安装器失败、特殊路径故障和 SmartScreen 实机矩阵保留为后续可选兼容性复核。
+> 文档性质：固定模块设计与发布基准；适用版本：V0.1 及后续版本；最后更新：2026-08-31；状态：V0.3.6 已生成完整离线版与轻量联网版本地候选并通过目录、ZIP、模式隔离和 SHA-256 独立复核；构建入口支持选择 `Both`、`Full` 或 `Lite`，一次调用仍只执行一次质量门和 PyInstaller 冻结。当前 V0.3.6 清单基线为 `9de82a0`，因构建时 README 已修改而如实记录 `gitDirty: true`。历史 V0.1 的本机真实窗口、路径与 Windows Sandbox 人工验收结论继续作为兼容性证据。完整发布负载绝对路径达到或超过 260 字符仍不受支持。完整目标 Windows 10/11、Evergreen 断网、安装器失败、特殊路径故障和 SmartScreen 实机矩阵保留为后续可选兼容性复核。
 
 ## 1. 发布目标与已确认边界
 
 当前版本目标产出两个基于同一份 PyInstaller onedir 核心的 Windows 10/11 x64 便携包：
 
-- `GameSave-Scout-0.3.4-win-x64` 是完整离线版，自带 Microsoft Fixed Version WebView2 Runtime x64，可在没有系统 WebView2、没有网络的电脑上运行。
-- `GameSave-Scout-0.3.4-win-x64-lite` 是轻量联网版，优先使用系统 Evergreen WebView2 Runtime；系统缺失时，经用户明确同意后打开 `prerequisites` 文件夹并选中微软官方 Bootstrapper，GameSave Scout 随即正常退出。用户手动双击安装，完成后重新启动 GameSave Scout。
+- `GameSave-Scout-0.3.6-win-x64` 是完整离线版，自带 Microsoft Fixed Version WebView2 Runtime x64，可在没有系统 WebView2、没有网络的电脑上运行。
+- `GameSave-Scout-0.3.6-win-x64-lite` 是轻量联网版，优先使用系统 Evergreen WebView2 Runtime；系统缺失时，经用户明确同意后打开 `prerequisites` 文件夹并选中微软官方 Bootstrapper，GameSave Scout 随即正常退出。用户手动双击安装，完成后重新启动 GameSave Scout。
 - 两个版本都不要求用户安装 Python、Node.js、Visual Studio 或项目开发依赖。
 - 配置、数据库、封面、用户规则、活动 Ludusavi 快照、日志和 WebView 用户数据都位于 `GameSaveScout.exe` 旁的 `data`。
 - 整个程序目录在退出 GameSave Scout 后可以复制到其他本地磁盘位置继续使用。
@@ -19,21 +19,21 @@
 - 每个目录各生成一个 zip。
 - 每个 zip 旁各生成一个记录其 SHA-256 的文本文件。
 
-当前仍不制作 onefile、GameSave Scout 安装器、自动更新器和精简开发包，构建脚本不上传产物，也不自动创建公开 Release。轻量版中的 WebView2 Bootstrapper 只是缺失系统运行时的受控先决条件安装器，不改变 GameSave Scout 本身的便携形态。V0.3.4 目标发布包携带 `0001`～`0004` 四个新库初始化结构并使用 schema 4；开发阶段不提供 schema 1/2/3 到 schema 4 的迁移，检测到旧库时在写入前拒绝启动并提示用户自行移走或删除数据库。
+当前仍不制作 onefile、GameSave Scout 安装器、自动更新器和精简开发包，构建脚本不上传产物，也不自动创建公开 Release。轻量版中的 WebView2 Bootstrapper 只是缺失系统运行时的受控先决条件安装器，不改变 GameSave Scout 本身的便携形态。V0.3.6 发布包携带 `0001`～`0004` 四个新库初始化结构并使用 schema 4；开发阶段不提供 schema 1/2/3 到 schema 4 的迁移，检测到旧库时在写入前拒绝启动并提示用户自行移走或删除数据库。
 
-### 1.1 V0.3.3 发布链改名与 V0.3.4 目标身份
+### 1.1 V0.3.3 发布链改名与当前发布身份
 
-V0.3.3 已把发布链迁移到统一的 GameSave Scout 技术身份，但该版本不保留正式便携包、标签或 Release。V0.3.4 继承这套发布链，不复用 V0.3.2 文件名或校验记录；以下能力已经实现，0.3.4 正式本地候选尚未构建：
+V0.3.3 已把发布链迁移到统一的 GameSave Scout 技术身份，但该版本不保留正式便携包、标签或 Release。后续版本继承这套发布链，不复用 V0.3.2 文件名或校验记录；当前 V0.3.6 已完成以下发布闭环：
 
 - PyInstaller 配置为 `GameSaveScout.spec`，冻结核心目录和可执行文件为 `GameSaveScout` / `GameSaveScout.exe`。
-- 完整版与轻量版目录分别为 `GameSave-Scout-0.3.4-win-x64` 和 `GameSave-Scout-0.3.4-win-x64-lite`，ZIP 与 `.sha256` 使用同一前缀。
+- 完整版与轻量版目录分别为 `GameSave-Scout-0.3.6-win-x64` 和 `GameSave-Scout-0.3.6-win-x64-lite`，ZIP 与 `.sha256` 使用同一前缀。
 - 发布清单、冻结 smoke、两份随包 README、LICENSE、第三方声明及构建错误信息统一使用新身份。
 - `data` 继续位于 `GameSaveScout.exe` 旁，发布树仍不得预置或携带开发机 `data`。
-- 正式构建必须从同一冻结核心派生两版，验证模式隔离、规则树、schema 4、无 `data`、ZIP 和 SHA-256；构建脚本仍不自动上传 Release。
+- `Both` 必须从同一冻结核心派生两版；`Full` 或 `Lite` 只派生所选模式。每个被选择的模式都必须验证模式隔离、规则树、schema 4、无 `data`、ZIP 和 SHA-256；构建脚本仍不自动上传 Release。
 
 V0.3.2 及更早实际生成的 `GameShelf-*`、`GameShelf.exe`、提交号和 SHA-256 均保持历史事实，不以新名称改写。
 
-2026-08-26 完成的多根目录并发扫描修复、顶部全局导航、固定游戏目录、仅存档卡片回退与删除，以及批量封面已有封面标识统一归入 V0.3.4。V0.3.4 便携包尚未构建；后续需要发布时再从干净源码生成并记录真实清单、大小与 SHA-256。V0.3.3 不作为正式便携版本保留。
+2026-08-26 完成的多根目录并发扫描修复、顶部全局导航、固定游戏目录、仅存档卡片回退与删除，以及批量封面已有封面标识统一归入 V0.3.4。V0.3.3 不作为正式便携版本保留。V0.3.6 在上述发布身份上完成当前源码功能与本地双版本候选收口。
 
 ## 2. 当前实现状态与后续兼容性复核
 
@@ -43,7 +43,7 @@ V0.3.2 及更早实际生成的 `GameShelf-*`、`GameShelf.exe`、提交号和 S
 - 固定版 WebView2 的受控 CAB 校验、安全解包、`runtime` 放置、运行时选择及 Windows 10 ACL 准备。
 - 无控制台 PyInstaller onedir、从当前项目 Conda 前缀确定性收集原生依赖，以及 pywebview WinForms/WebView2 后端资源收集。
 - 单一 PowerShell 构建入口、受控暂存/发布边界、发布清单、ZIP 复核和 SHA-256。
-- 格式版本 2 的双模式发布清单、两种严格布局、双 ZIP 复核和六产物原子发布；质量门和 PyInstaller 核心在一次正式构建中只执行一次。
+- 格式版本 2 的双模式发布清单、两种严格布局和按选择模式复核；单模式原子替换三个产物，`Both` 原子替换六个产物，未选择模式在 `dist` 中保持不变；质量门和 PyInstaller 核心在一次正式构建中只执行一次。
 - `fixed`、`evergreen` 与源码三种明确运行时模式，以及轻量版的官方 API Evergreen 检测。轻量版缺失 Runtime 时先验证 Bootstrapper，再经用户确认调用系统 Explorer 选中文件并正常退出；生产代码不执行或等待安装器，也不自动重新启动。用户取消和成功打开位置不写崩溃日志，真实校验或 Explorer 故障继续使用冻结错误报告器。
 - 源码与冻结版 JSON smoke；smoke 同时导入 `ssl`、`sqlite3`、pywebview 和 Edge 后端，冻结版数据与 WebView 用户数据仍位于程序旁 `data`。
 - MIT 许可证、按实际候选包核对的第三方声明和 WebView2 原始许可证材料保留。
@@ -65,7 +65,7 @@ V0.1 按当前自动、本机与 Windows Sandbox 证据完成收尾。以下场�
 
 ```text
 dist/
-├─ GameSave-Scout-0.3.4-win-x64/
+├─ GameSave-Scout-0.3.6-win-x64/
 │  ├─ GameSaveScout.exe
 │  ├─ _internal/
 │  │  └─ resources/              # UI、内置规则、schema 与随包 Ludusavi 快照等只读资源
@@ -74,9 +74,9 @@ dist/
 │  ├─ LICENSE
 │  ├─ THIRD_PARTY_NOTICES.md
 │  └─ release-manifest.json
-├─ GameSave-Scout-0.3.4-win-x64.zip
-├─ GameSave-Scout-0.3.4-win-x64.zip.sha256
-├─ GameSave-Scout-0.3.4-win-x64-lite/
+├─ GameSave-Scout-0.3.6-win-x64.zip
+├─ GameSave-Scout-0.3.6-win-x64.zip.sha256
+├─ GameSave-Scout-0.3.6-win-x64-lite/
 │  ├─ GameSaveScout.exe
 │  ├─ _internal/
 │  │  └─ resources/
@@ -86,11 +86,11 @@ dist/
 │  ├─ LICENSE
 │  ├─ THIRD_PARTY_NOTICES.md
 │  └─ release-manifest.json
-├─ GameSave-Scout-0.3.4-win-x64-lite.zip
-└─ GameSave-Scout-0.3.4-win-x64-lite.zip.sha256
+├─ GameSave-Scout-0.3.6-win-x64-lite.zip
+└─ GameSave-Scout-0.3.6-win-x64-lite.zip.sha256
 ```
 
-两个发布目录都不包含 `data`。首次正常启动时，程序才在 `GameSaveScout.exe` 旁创建 `data`。构建和压缩过程不得把开发机上的数据库、配置、封面、游戏、存档或其他本地用户数据带入发布物。V0.3.4 尚未产生可记录的目录、ZIP 大小或 SHA-256；V0.3.2 历史候选实测轻量版目录/ZIP 为 92.07/35.23 MiB，完整离线版为 751.35/326.15 MiB。
+两个发布目录都不包含 `data`。首次正常启动时，程序才在 `GameSaveScout.exe` 旁创建 `data`。构建和压缩过程不得把开发机上的数据库、配置、封面、游戏、存档或其他本地用户数据带入发布物。V0.3.6 本地候选实测完整离线版目录/ZIP 为 751.39/326.18 MiB，轻量联网版为 92.11/35.26 MiB。
 
 ## 4. 资源与运行时定位
 
@@ -149,19 +149,22 @@ _internal/resources/rules/
 ```powershell
 $repoPath = (Get-Location).Path
 & .\scripts\build_release.ps1 `
+  -PackageMode Both `
   -WebView2Archive (Join-Path $repoPath 'webview安装包\Microsoft.WebView2.FixedVersionRuntime.151.0.4129.86.x64.cab') `
   -WebView2Bootstrapper (Join-Path $repoPath 'webview安装包\MicrosoftEdgeWebview2Setup.exe')
 ```
 
+`-PackageMode` 接受 `Both`、`Full` 和 `Lite`，默认值为 `Both`。`Full` 只要求 `-WebView2Archive`，`Lite` 只要求 `-WebView2Bootstrapper`；无关模式的输入不参与本次校验或派生。`Both` 继续要求两个输入，并从同一个冻结核心生成完整六产物。
+
 仓库内的受版本控制发布配置分别记录唯一允许的 Fixed Runtime 版本、CAB SHA-256，以及 Bootstrapper 文件版本、SHA-256、官方来源。构建脚本必须：
 
-1. 验证两个输入文件存在、是本地普通文件且名称符合受控配置。
-2. 分别计算 SHA-256 并与固定值比较，失败立即停止。
-3. 验证 CAB 内部主程序和 Bootstrapper 的 Authenticode 签名均有效且签名者为 Microsoft Corporation。
-4. 使用 Windows 本机可用方式解压到构建暂存区。
+1. 验证所选模式要求的输入文件存在、是本地普通文件且名称符合受控配置。
+2. 计算所选输入的 SHA-256 并与固定值比较，失败立即停止。
+3. 验证所选输入及 CAB 内部主程序的 Authenticode 签名有效且签名者为 Microsoft Corporation。
+4. 仅在选择完整离线版时使用 Windows 本机可用方式把 CAB 解压到构建暂存区。
 5. 将归档内部目录规范化为发布目录的 `runtime`，并验证其根部存在 `msedgewebview2.exe`。
 6. 保留运行时归档中随附的许可证材料。
-7. 只把 Bootstrapper 复制到轻量版的 `prerequisites`，不得放入完整离线版。
+7. 只在选择轻量版时把 Bootstrapper 复制到 `prerequisites`，不得放入完整离线版。
 
 脚本不自动联网下载、不维护下载缓存、不实现多版本管理，也不把 `webview安装包` 中的两个外部二进制提交进 Git。受控输入升级通过人工下载官方文件、核验来源并更新版本和哈希完成。轻量版只有在目标电脑缺失 Evergreen 且用户手动运行安装器时，Bootstrapper 才会联网。
 
@@ -169,19 +172,19 @@ $repoPath = (Get-Location).Path
 
 ## 6. 单一构建入口与流水线
 
-当前发布只提供一个用户入口 `scripts/build_release.ps1`，配合一个 `GameSaveScout.spec`。为避免在 PowerShell 中重复实现易错的版本、路径、哈希和 JSON 逻辑，使用 `scripts/release_tools.py` 维护受控发布原语，但不拆分出更多用户入口脚本。全部质量门禁和 PyInstaller 核心只执行一次，再从同一核心派生两个版本。
+当前发布只提供一个用户入口 `scripts/build_release.ps1`，配合一个 `GameSaveScout.spec`。为避免在 PowerShell 中重复实现易错的版本、路径、哈希和 JSON 逻辑，使用 `scripts/release_tools.py` 维护受控发布原语，但不拆分出更多用户入口脚本。`-PackageMode Both|Full|Lite` 决定派生模式；每次调用的全部质量门禁和 PyInstaller 核心只执行一次。
 
 构建脚本按以下顺序执行：
 
-1. 验证当前系统为 Windows x64，Python 为 3.12 x64，Node 为 24，并检查 npm、锁文件、仓库根目录、两个 WebView2 输入和构建机系统 Evergreen 可用性。
+1. 验证当前系统为 Windows x64，Python 为 3.12 x64，Node 为 24，并检查 npm、锁文件、仓库根目录和所选 WebView2 输入；选择轻量版时，冻结 smoke 还要求构建机系统 Evergreen 可用。
 2. 验证 `pyproject.toml`、`src/gamesave_scout/__init__.py` 和 `frontend/package.json` 中的应用版本完全一致。
 3. 运行现有全部 Python 和前端质量门禁，并生成最新 UI 生产资源。
 4. 使用 `GameSaveScout.spec` 在 `build/release` 暂存区生成无控制台 onedir 产物。
-5. 从同一核心建立两个暂存目录：完整版校验并解压 Fixed Runtime，轻量版只复制已校验的 Bootstrapper。
-6. 为两个包分别写入对应说明的 `README.txt`、共同的 `LICENSE` 和 `THIRD_PARTY_NOTICES.md`，以及各自的 `release-manifest.json`。
-7. 分别把两个暂存产物复制到独立临时目录执行冻结版结构化冒烟；构建期间不得弹出安装确认或运行 Bootstrapper。轻量版 smoke 使用构建机已安装的 Evergreen，安装分支由自动测试和干净虚拟机覆盖。
-8. 分别验证两个目录、两个 zip 和两个 SHA-256；原始待压缩目录不得被首次运行产生的 `data` 污染。
-9. 只有六个产物全部成功后，才以一个发布事务替换 `dist` 中当前版本的两组产物，不能出现一组新、一组旧。
+5. 只为选择的模式建立暂存目录：完整版校验并解压 Fixed Runtime，轻量版只复制已校验的 Bootstrapper。
+6. 为所选包写入对应说明的 `README.txt`、共同的 `LICENSE` 和 `THIRD_PARTY_NOTICES.md`，以及各自的 `release-manifest.json`。
+7. 把每个所选暂存产物复制到独立临时目录执行冻结版结构化冒烟；构建期间不得弹出安装确认或运行 Bootstrapper。轻量版 smoke 使用构建机已安装的 Evergreen，安装分支由自动测试和干净虚拟机覆盖。
+8. 分别验证所选目录、ZIP 和 SHA-256；原始待压缩目录不得被首次运行产生的 `data` 污染。
+9. 单模式的三个产物全部成功后，以一个事务替换该模式在 `dist` 中的三件套并保留另一模式现有产物；`Both` 只有六个产物全部成功后才一起替换，不能出现一组新、一组旧。
 
 构建失败时保留 `build/release` 中有助于诊断的暂存结果，并保留 `dist` 中上一次成功产物。构建脚本不得上传、暂存或提交 Git 内容，也不得改写 Git 历史。
 
@@ -235,11 +238,11 @@ GameSaveScout.exe --smoke-test --json-output <绝对临时文件路径>
 }
 ```
 
-轻量版报告 `runtimeMode: "evergreen"`、`webviewRuntime: null`，并记录系统 Evergreen 检测和 Bootstrapper 结构校验结果。构建脚本在两个发布目录副本中运行该命令，校验退出码、JSON 可解析性、版本、冻结状态、模式、路径和所有关键结果。`desktopDependencies` 必须实际导入 `ssl`、`sqlite3`、`webview` 和 `webview.platforms.edgechromium`，使 OpenSSL 错配及 pywebview Loader 缺失在发布前直接导致 smoke 失败。smoke 不得运行安装器或修改构建机系统状态；测试产生的 `data` 和 JSON 输出只存在于临时副本，验证后删除，不污染原始发布目录。
+轻量版报告 `runtimeMode: "evergreen"`、`webviewRuntime: null`，并记录系统 Evergreen 检测和 Bootstrapper 结构校验结果。构建脚本在每个所选发布目录的独立副本中运行该命令，校验退出码、JSON 可解析性、版本、冻结状态、模式、路径和所有关键结果。`desktopDependencies` 必须实际导入 `ssl`、`sqlite3`、`webview` 和 `webview.platforms.edgechromium`，使 OpenSSL 错配及 pywebview Loader 缺失在发布前直接导致 smoke 失败。smoke 不得运行安装器或修改构建机系统状态；测试产生的 `data` 和 JSON 输出只存在于临时副本，验证后删除，不污染原始发布目录。
 
 ## 9. 发布清单、版本与哈希
 
-双版本发布后，`release-manifest.json` 使用 `formatVersion: 2`，至少记录：
+每个发布模式的 `release-manifest.json` 使用 `formatVersion: 2`，至少记录：
 
 - GameSave Scout 版本、UTC 构建时间、Git 提交号和 `gitDirty`。
 - 目标平台 `windows-x64`。
@@ -252,7 +255,7 @@ GameSaveScout.exe --smoke-test --json-output <绝对临时文件路径>
 
 V0.3.2 发布工具与冻结 smoke 已确认内置引擎/存档规则、两个 schema、Ludusavi YAML/元数据/SQLite/许可证均来自 `_internal/resources/rules`，随包快照可以完成只读状态与冷查询检查，首次启动只在临时发布副本旁生成空的用户规则目录，不复制开发机规则或旧 manifest 目录；完整离线版和轻量联网版冻结 smoke 均已实际执行并通过。
 
-两个 zip 的 SHA-256 分别写在各自旁边的 `.sha256` 文件中，不写回 zip 内的发布清单，避免循环依赖。生成 zip 后必须分别重新打开归档验证模式对应的关键文件存在，再独立重算一次 SHA-256 并与 `.sha256` 内容比较。
+每个 ZIP 的 SHA-256 写在其旁边的 `.sha256` 文件中，不写回 ZIP 内的发布清单，避免循环依赖。生成 ZIP 后必须重新打开归档验证模式对应的关键文件存在，再独立重算一次 SHA-256 并与 `.sha256` 内容比较。
 
 版本必须由以下三个受版本控制位置共同校验，不允许静默选取其中一个覆盖其他位置：
 
@@ -280,7 +283,7 @@ Copyright (c) 2026 GameSave Scout Contributors
 
 - 仓库内固定的 `build/release`。
 - `dist` 内与当前应用版本完全匹配的完整版和 `-lite` 目录。
-- `dist` 内与当前应用版本完全匹配的两个 zip 和两个 `.sha256`。
+- `dist` 内与当前应用版本完全匹配的完整版或轻量版 ZIP 和 `.sha256`。
 
 执行删除或替换前必须验证目标为绝对路径、父目录正确、仍位于预期仓库目录内，并拒绝重解析点、未经解析的变量、通配符和过宽目标。不得递归清理仓库根目录、用户目录、程序 `data`、外部 WebView2 归档或其他用户指定目录。
 
@@ -292,12 +295,12 @@ Copyright (c) 2026 GameSave Scout Contributors
 
 发布实现至少覆盖以下层次：
 
-1. 单元测试：`ResourcePaths` 的源码/冻结/缺失资源，UNC 拒绝，`fixed`/`evergreen` 模式选择，Fixed Runtime 缺失，Evergreen 已安装，用户同意或取消，Bootstrapper 缺失或哈希不一致，Explorer 成功打开或启动失败，版本不一致，两个输入哈希不一致，危险清理目标拒绝和两种发布清单生成。
+1. 单元测试：`ResourcePaths` 的源码/冻结/缺失资源，UNC 拒绝，`fixed`/`evergreen` 模式选择，Fixed Runtime 缺失，Evergreen 已安装，用户同意或取消，Bootstrapper 缺失或哈希不一致，Explorer 成功打开或启动失败，版本不一致，所选输入哈希不一致，危险清理目标拒绝和两种发布清单生成。
 2. 全部现有质量门禁：Python 测试、Ruff、mypy、前端单元测试、TypeScript 类型检查、Vite 生产构建和源码冒烟。
 3. 运行时安装安全：程序在提示前验证 Bootstrapper，并且只有用户明确同意后才打开其所在文件夹并选中文件；自动测试必须证明 GameSave Scout 不执行安装器、不等待外部进程、不创建主窗口，正常引导与取消不写错误堆栈，Explorer 或完整性真实失败写启动日志。
 4. 真实 PyInstaller 构建：从同一核心生成两个独立副本并执行冻结版 JSON 冒烟，覆盖桌面原生依赖和 Edge 后端导入，并确认所有写入仅发生在副本的 `data`。
-5. 发布物完整性：两个正式目录都没有 `data`；完整版只含 `runtime`，轻量版只含 `prerequisites`；两个 zip 可重新打开，关键文件齐全，独立重算哈希与各自 `.sha256` 一致。
-6. 原子发布：在任一目录、清单、ZIP、SHA-256 或 smoke 失败时保留上一组完整的六个产物，不允许只替换其中一版。
+5. 发布物完整性：每个所选正式目录都没有 `data`；完整版只含 `runtime`，轻量版只含 `prerequisites`；所选 ZIP 可重新打开，关键文件齐全，独立重算哈希与各自 `.sha256` 一致。
+6. 原子发布：在任一目录、清单、ZIP、SHA-256 或 smoke 失败时保留所选模式的上一组三个产物；`Both` 仍以六产物为单一事务，不能只替换其中一版。未选择模式不进入事务且保持不变。
 
 本机开发与构建默认使用项目内 Conda prefix（`.venv`）提供的 Python 3.12 和 Node.js 24；正式构建入口仍必须显式校验 Node 主版本为 24，不能依赖 Codex 或某台开发机的私有 Node 路径。
 
@@ -351,11 +354,18 @@ Fixed Runtime 主程序与轻量版 Bootstrapper 的 Authenticode 状态均为 `
 - 完整离线版：`af4c7b50236a25ed0f3529e6466078904b8b20a910d93af26ee39ee40491e252`
 - 轻量联网版：`181dbb7156b97778a7739dac59baa3107d99decaa94cced7bb8d387d628880bb`
 
-V0.3.4 当前只完成源码与发布链收口，尚未运行正式双版本构建。本节不得提前记录 V0.3.4 提交号、目录/ZIP 大小或 SHA-256；这些数据必须在后续从干净提交完成构建和独立复核后补充。
+V0.3.4 源码与发布链收口时尚未运行正式双版本构建；后续已生成本地双版本候选，但本文没有保留可复核的 V0.3.4 构建提交号、目录/ZIP 大小或 SHA-256，因此不补写推测数据。
+
+2026-08-31 从提交 `9de82a0443c59c42603202d4027bbeb7199e9a19` 所在工作区生成 V0.3.6 完整离线版和轻量联网版六个本地产物。构建时 README 已有未提交修改，因此两份清单按设计记录 `gitDirty: true`，不将其描述为干净提交构建；运行时代码基线仍为上述提交。独立复核确认两份目录、ZIP、模式隔离、无 `data` 和 `.sha256` 一致：完整版目录/ZIP 为 751.39/326.18 MiB，轻量版为 92.11/35.26 MiB。V0.3.6 ZIP SHA-256 为：
+
+- 完整离线版：`6a703c8e50ef754a0de83c75860e112f237b0f08e2e3ba0135d7f528c45c506a`
+- 轻量联网版：`e75f70850c7bc5168726122da4ee8ca34fba7fcac70e166d47fe406b787fc517`
 
 ### 12.2 人工验收结论
 
 V0.3.4 本轮源码质量门禁已通过：Python 1281 项通过、1 项跳过，前端 57 个测试文件共 248 项通过，并通过 Ruff、mypy、Vue 类型检查、141 模块生产构建和 schema 4 源码 smoke。本轮不执行冻结 smoke 或本机构建产物独立复核；下列历史兼容性证据继续保留，未执行场景不记为本轮新通过。
+
+V0.3.6 本地双版本构建完成了两版冻结 smoke 和独立完整性复核，但没有在额外的干净 Windows 10/11 目标设备上重复历史兼容性矩阵；下列未执行场景继续不记为本轮新通过。
 
 2026-08-16 已在本机和 Windows Sandbox 完成 V0.1 当前范围验收：轻量版手动安装与重新启动主闭环、用户取消、Bootstrapper 缺失与 SHA-256 不匹配、完整版在无系统 WebView2 且断网时启动、中文/日文/空格与常规长路径、首次与重复启动、便携数据落点、游戏库主流程，以及模块 06 的真实游戏、资源占用、多缩放和启动器脱离降级。完整发布负载绝对路径达到或超过 260 字符明确不受支持，跨盘复制按范围决定不执行。
 
@@ -371,10 +381,11 @@ V0.3.4 本轮源码质量门禁已通过：Python 1281 项通过、1 项跳过�
 
 1. 以测试驱动方式把轻量版的 Bootstrapper 执行、等待和同进程继续逻辑替换为手动安装引导：先验证文件，再由用户确认，只打开 Explorer 并正常退出。
 2. 将发布清单升级为格式版本 2，增加双包命名、受控 Bootstrapper 配置、两种布局验证和六产物原子发布模型。
-3. 扩展 `scripts/build_release.ps1`：两个输入只校验一次，质量门和 PyInstaller 只运行一次，从同一核心派生完整离线版与轻量联网版。
+3. 扩展 `scripts/build_release.ps1`：所选输入只校验一次，质量门和 PyInstaller 只运行一次，从同一核心派生完整离线版与轻量联网版。
 4. 扩展冻结 smoke、README、许可证/第三方声明和完整性验证，确保 smoke 不运行安装器或修改构建机系统状态。
 5. 运行全部自动门禁，生成两个真实候选包并核对体积、原生依赖、清单、ZIP 和 SHA-256。
 6. 记录本机与 Windows Sandbox 的 V0.1 验收结论；额外目标设备和特殊故障矩阵保留为后续可选兼容性复核。
+7. V0.3.6 增加 `Both`、`Full`、`Lite` 构建选择；单模式原子替换三个产物并保留未选择模式，`Both` 继续以六产物为一个事务。
 
 一次性详细实施计划放入 `docs/历史归档`；后续缺陷修复和需求变化继续直接维护本文，不为每个小改动新建固定设计文档。
 
@@ -409,4 +420,6 @@ V0.3.4 本轮源码质量门禁已通过：Python 1281 项通过、1 项跳过�
 | 2026-08-25 | V0.3.2 首次正式构建在 PyInstaller 核心完成后由发布清单校验发现两份随包 README 仍写 0.2.1；未原子发布错误产物，新增直接构建真实发布模板的版本一致性回归并更新说明为 0.3.2。 |
 | 2026-08-25 | 从干净提交 `55d8024768ff50c5722a9ff85816c7d382d93855` 完成 V0.3.2 双版本正式构建与独立复核；Python 1276 项通过、1 项跳过，前端 241 项及完整门禁、两版冻结 smoke、格式 2 清单、schema 4、规则版本 `2026.08.25-1`、模式隔离、无 `data`、ZIP 与微软签名均通过。完整版/轻量版目录为 751.35/92.07 MiB，ZIP 为 326.15/35.23 MiB，SHA-256 为 `af4c7b50236a25ed0f3529e6466078904b8b20a910d93af26ee39ee40491e252` / `181dbb7156b97778a7739dac59baa3107d99decaa94cced7bb8d387d628880bb`。 |
 | 2026-08-25 | 完成 GameSave Scout 单一产品技术身份与发布链源码迁移；旧 V0.3.2 产物与校验记录保持原样，后续构建不自动上传 Release。 |
-| 2026-08-26 | 确认当天新增功能统一归入 V0.3.4；V0.3.4 便携包、清单与 SHA-256 待源码和文档收口后重新生成，V0.3.3 不作为正式便携版本保留。 |
+| 2026-08-26 | 确认当天新增功能统一归入 V0.3.4；源码收口阶段便携包、清单与 SHA-256 待后续生成，V0.3.3 不作为正式便携版本保留。V0.3.4 后续已生成本地双版本候选，但本文不补写未留存的构建明细。 |
+| 2026-08-31 | V0.3.6 完整离线版与轻量联网版本地候选已生成并完成目录、ZIP、模式隔离和 SHA-256 独立复核；清单基线为 `9de82a0` 且如实记录 `gitDirty: true`。构建入口新增 `Both`、`Full`、`Lite` 选择，单模式只要求对应 WebView2 输入并原子替换所选三产物。 |
+| 2026-08-31 | 构建选择改造后的完整门禁为 Python 1366 项通过、1 项跳过，前端 58 个文件共 274 项通过；Ruff、mypy（131 个源码文件）、Vue 类型检查、141 模块生产构建和隔离 schema 4 源码 smoke 全部通过。 |

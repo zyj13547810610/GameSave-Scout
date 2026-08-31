@@ -1,11 +1,10 @@
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)]
-    [ValidateNotNullOrEmpty()]
+    [ValidateSet('Both', 'Full', 'Lite')]
+    [string]$PackageMode = 'Both',
+
     [string]$WebView2Archive,
 
-    [Parameter(Mandatory = $true)]
-    [ValidateNotNullOrEmpty()]
     [string]$WebView2Bootstrapper
 )
 
@@ -136,26 +135,51 @@ function Invoke-FrozenSmoke {
 }
 
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-if ($WebView2Archive -notmatch '^[A-Za-z]:[\\/]') {
-    throw 'WebView2Archive must be an absolute path.'
+$buildFixed = $PackageMode -in @('Both', 'Full')
+$buildEvergreen = $PackageMode -in @('Both', 'Lite')
+$releaseModeArgument = switch ($PackageMode) {
+    'Full' { 'fixed' }
+    'Lite' { 'evergreen' }
+    default { 'both' }
 }
-$archivePath = [IO.Path]::GetFullPath($WebView2Archive)
-if (-not (Test-Path -LiteralPath $archivePath -PathType Leaf)) {
-    throw "WebView2Archive does not exist or is not a file: $archivePath"
+
+$archivePath = $null
+if ($buildFixed) {
+    if ([string]::IsNullOrWhiteSpace($WebView2Archive)) {
+        throw 'WebView2Archive is required for Full and Both package modes.'
+    }
+    if ($WebView2Archive -notmatch '^[A-Za-z]:[\\/]') {
+        throw 'WebView2Archive must be an absolute path.'
+    }
+    $archivePath = [IO.Path]::GetFullPath($WebView2Archive)
+    if (-not (Test-Path -LiteralPath $archivePath -PathType Leaf)) {
+        throw "WebView2Archive does not exist or is not a file: $archivePath"
+    }
 }
-if ($WebView2Bootstrapper -notmatch '^[A-Za-z]:[\\/]') {
-    throw 'WebView2Bootstrapper must be an absolute path.'
-}
-$bootstrapperPath = [IO.Path]::GetFullPath($WebView2Bootstrapper)
-if (-not (Test-Path -LiteralPath $bootstrapperPath -PathType Leaf)) {
-    throw "WebView2Bootstrapper does not exist or is not a file: $bootstrapperPath"
+
+$bootstrapperPath = $null
+if ($buildEvergreen) {
+    if ([string]::IsNullOrWhiteSpace($WebView2Bootstrapper)) {
+        throw 'WebView2Bootstrapper is required for Lite and Both package modes.'
+    }
+    if ($WebView2Bootstrapper -notmatch '^[A-Za-z]:[\\/]') {
+        throw 'WebView2Bootstrapper must be an absolute path.'
+    }
+    $bootstrapperPath = [IO.Path]::GetFullPath($WebView2Bootstrapper)
+    if (-not (Test-Path -LiteralPath $bootstrapperPath -PathType Leaf)) {
+        throw "WebView2Bootstrapper does not exist or is not a file: $bootstrapperPath"
+    }
 }
 if (-not [Environment]::Is64BitOperatingSystem -or -not [Environment]::Is64BitProcess) {
     throw 'GameSave Scout release builds require 64-bit Windows and a 64-bit process.'
 }
 
-Assert-MicrosoftSignature -Path $archivePath -Label 'WebView2 Fixed Runtime CAB'
-Assert-MicrosoftSignature -Path $bootstrapperPath -Label 'WebView2 Bootstrapper'
+if ($buildFixed) {
+    Assert-MicrosoftSignature -Path $archivePath -Label 'WebView2 Fixed Runtime CAB'
+}
+if ($buildEvergreen) {
+    Assert-MicrosoftSignature -Path $bootstrapperPath -Label 'WebView2 Bootstrapper'
+}
 
 $expectedPrefix = [IO.Path]::GetFullPath((Join-Path $repositoryRoot '.venv'))
 $expectedPython = [IO.Path]::GetFullPath((Join-Path $expectedPrefix 'python.exe'))
@@ -204,13 +228,19 @@ if (-not (Test-Path -LiteralPath (Join-Path $repositoryRoot 'frontend\package-lo
 }
 
 $releaseTools = Join-Path $repositoryRoot 'scripts\release_tools.py'
-$contextJson = Get-NativeOutput $expectedPython @(
+$contextArguments = @(
     $releaseTools,
     'verify-context',
     '--repository-root', $repositoryRoot,
-    '--webview-archive', $archivePath,
-    '--webview-bootstrapper', $bootstrapperPath
+    '--package-mode', $releaseModeArgument
 )
+if ($buildFixed) {
+    $contextArguments += @('--webview-archive', $archivePath)
+}
+if ($buildEvergreen) {
+    $contextArguments += @('--webview-bootstrapper', $bootstrapperPath)
+}
+$contextJson = Get-NativeOutput $expectedPython $contextArguments
 $releaseContext = $contextJson | ConvertFrom-Json
 $fixedReleaseName = [string]$releaseContext.fixedReleaseName
 $evergreenReleaseName = [string]$releaseContext.evergreenReleaseName
@@ -258,36 +288,54 @@ if (-not (Test-Path -LiteralPath (Join-Path $frozenDirectory 'GameSaveScout.exe'
     throw 'PyInstaller did not produce GameSaveScout.exe.'
 }
 
-$extractedDirectory = Join-Path $buildRoot 'webview2-extracted'
-$runtimeRoot = Get-NativeOutput $expectedPython @(
-    $releaseTools,
-    'extract-runtime',
-    '--repository-root', $repositoryRoot,
-    '--webview-archive', $archivePath,
-    '--destination', $extractedDirectory
-)
-$runtimeRoot = [IO.Path]::GetFullPath($runtimeRoot)
-Assert-MicrosoftSignature `
-    -Path (Join-Path $runtimeRoot 'msedgewebview2.exe') `
-    -Label 'WebView2 Fixed Runtime executable'
-
 $stagingRoot = Join-Path $buildRoot 'staging'
 New-Item -ItemType Directory -Path $stagingRoot | Out-Null
-$fixedDirectory = Join-Path $stagingRoot $fixedReleaseName
-$evergreenDirectory = Join-Path $stagingRoot $evergreenReleaseName
-Copy-Item -LiteralPath $frozenDirectory -Destination $fixedDirectory -Recurse
-Copy-Item -LiteralPath $frozenDirectory -Destination $evergreenDirectory -Recurse
-Copy-Item -LiteralPath $runtimeRoot -Destination (Join-Path $fixedDirectory 'runtime') -Recurse
-$prerequisites = Join-Path $evergreenDirectory 'prerequisites'
-New-Item -ItemType Directory -Path $prerequisites | Out-Null
-Copy-Item `
-    -LiteralPath $bootstrapperPath `
-    -Destination (Join-Path $prerequisites 'MicrosoftEdgeWebview2Setup.exe')
+$releasePlans = @()
+if ($buildFixed) {
+    $extractedDirectory = Join-Path $buildRoot 'webview2-extracted'
+    $runtimeRoot = Get-NativeOutput $expectedPython @(
+        $releaseTools,
+        'extract-runtime',
+        '--repository-root', $repositoryRoot,
+        '--webview-archive', $archivePath,
+        '--destination', $extractedDirectory
+    )
+    $runtimeRoot = [IO.Path]::GetFullPath($runtimeRoot)
+    Assert-MicrosoftSignature `
+        -Path (Join-Path $runtimeRoot 'msedgewebview2.exe') `
+        -Label 'WebView2 Fixed Runtime executable'
 
-foreach ($release in @(
-    @{ Directory = $fixedDirectory; Readme = 'README.txt' },
-    @{ Directory = $evergreenDirectory; Readme = 'README-lite.txt' }
-)) {
+    $fixedDirectory = Join-Path $stagingRoot $fixedReleaseName
+    Copy-Item -LiteralPath $frozenDirectory -Destination $fixedDirectory -Recurse
+    Copy-Item -LiteralPath $runtimeRoot -Destination (Join-Path $fixedDirectory 'runtime') -Recurse
+    $releasePlans += [PSCustomObject]@{
+        Directory = $fixedDirectory
+        Readme = 'README.txt'
+        Mode = 'fixed'
+        ReleaseName = $fixedReleaseName
+        Archive = $null
+        Checksum = $null
+    }
+}
+if ($buildEvergreen) {
+    $evergreenDirectory = Join-Path $stagingRoot $evergreenReleaseName
+    Copy-Item -LiteralPath $frozenDirectory -Destination $evergreenDirectory -Recurse
+    $prerequisites = Join-Path $evergreenDirectory 'prerequisites'
+    New-Item -ItemType Directory -Path $prerequisites | Out-Null
+    Copy-Item `
+        -LiteralPath $bootstrapperPath `
+        -Destination (Join-Path $prerequisites 'MicrosoftEdgeWebview2Setup.exe')
+    $releasePlans += [PSCustomObject]@{
+        Directory = $evergreenDirectory
+        Readme = 'README-lite.txt'
+        Mode = 'evergreen'
+        ReleaseName = $evergreenReleaseName
+        Archive = $null
+        Checksum = $null
+    }
+}
+
+foreach ($release in $releasePlans) {
     Copy-Item `
         -LiteralPath (Join-Path $repositoryRoot "release\$($release.Readme)") `
         -Destination (Join-Path $release.Directory 'README.txt')
@@ -296,18 +344,18 @@ foreach ($release in @(
     if (Test-Path -LiteralPath (Join-Path $release.Directory 'data')) {
         throw 'A staged release directory must not contain data.'
     }
-}
-if (Test-Path -LiteralPath (Join-Path $fixedDirectory 'prerequisites')) {
-    throw 'The fixed release must not contain prerequisites.'
-}
-if (Test-Path -LiteralPath (Join-Path $evergreenDirectory 'runtime')) {
-    throw 'The evergreen release must not contain a fixed runtime.'
-}
-
-foreach ($release in @(
-    @{ Directory = $fixedDirectory; Mode = 'fixed' },
-    @{ Directory = $evergreenDirectory; Mode = 'evergreen' }
-)) {
+    if (
+        $release.Mode -eq 'fixed' -and
+        (Test-Path -LiteralPath (Join-Path $release.Directory 'prerequisites'))
+    ) {
+        throw 'The fixed release must not contain prerequisites.'
+    }
+    if (
+        $release.Mode -eq 'evergreen' -and
+        (Test-Path -LiteralPath (Join-Path $release.Directory 'runtime'))
+    ) {
+        throw 'The evergreen release must not contain a fixed runtime.'
+    }
     Invoke-Native $expectedPython @(
         $releaseTools,
         'write-manifest',
@@ -317,25 +365,15 @@ foreach ($release in @(
     )
 }
 
-Invoke-FrozenSmoke `
-    -ReleaseDirectory $fixedDirectory `
-    -RuntimeMode 'fixed' `
-    -BuildRoot $buildRoot `
-    -ExpectedVersion $releaseContext.version
-Invoke-FrozenSmoke `
-    -ReleaseDirectory $evergreenDirectory `
-    -RuntimeMode 'evergreen' `
-    -BuildRoot $buildRoot `
-    -ExpectedVersion $releaseContext.version
+foreach ($release in $releasePlans) {
+    Invoke-FrozenSmoke `
+        -ReleaseDirectory $release.Directory `
+        -RuntimeMode $release.Mode `
+        -BuildRoot $buildRoot `
+        -ExpectedVersion $releaseContext.version
 
-$fixedArchive = Join-Path $stagingRoot "$fixedReleaseName.zip"
-$fixedChecksum = Join-Path $stagingRoot "$fixedReleaseName.zip.sha256"
-$evergreenArchive = Join-Path $stagingRoot "$evergreenReleaseName.zip"
-$evergreenChecksum = Join-Path $stagingRoot "$evergreenReleaseName.zip.sha256"
-foreach ($release in @(
-    @{ Directory = $fixedDirectory; Archive = $fixedArchive; Checksum = $fixedChecksum; Mode = 'fixed' },
-    @{ Directory = $evergreenDirectory; Archive = $evergreenArchive; Checksum = $evergreenChecksum; Mode = 'evergreen' }
-)) {
+    $release.Archive = Join-Path $stagingRoot "$($release.ReleaseName).zip"
+    $release.Checksum = Join-Path $stagingRoot "$($release.ReleaseName).zip.sha256"
     Invoke-Native $expectedPython @(
         $releaseTools,
         'verify-release',
@@ -354,16 +392,20 @@ foreach ($release in @(
     )
 }
 
-Invoke-Native $expectedPython @(
+$publishArguments = @(
     $releaseTools,
     'publish',
-    '--repository-root', $repositoryRoot,
-    '--fixed-release-directory', $fixedDirectory,
-    '--fixed-archive', $fixedArchive,
-    '--fixed-checksum', $fixedChecksum,
-    '--evergreen-release-directory', $evergreenDirectory,
-    '--evergreen-archive', $evergreenArchive,
-    '--evergreen-checksum', $evergreenChecksum
+    '--repository-root', $repositoryRoot
 )
+foreach ($release in $releasePlans) {
+    $prefix = "--$($release.Mode)"
+    $publishArguments += @(
+        "$prefix-release-directory", $release.Directory,
+        "$prefix-archive", $release.Archive,
+        "$prefix-checksum", $release.Checksum
+    )
+}
+Invoke-Native $expectedPython $publishArguments
 
-Write-Host "GameSave Scout release candidates created: dist\$fixedReleaseName and dist\$evergreenReleaseName"
+$createdNames = $releasePlans | ForEach-Object { "dist\$($_.ReleaseName)" }
+Write-Host "GameSave Scout release candidates created: $($createdNames -join ' and ')"
