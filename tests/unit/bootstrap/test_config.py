@@ -33,8 +33,12 @@ def test_missing_config_creates_version_six_portable_defaults(tmp_path: Path) ->
         cover_optimize_enabled=True,
         cover_local_scan_depth=2,
         batch_save_custom_roots=(),
+        window_width=1180,
+        window_height=760,
     )
-    assert json.loads(path.read_text(encoding="utf-8"))["uiScale"] == 1.0
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert saved["uiScale"] == 1.0
+    assert (saved["windowWidth"], saved["windowHeight"]) == (1180, 760)
 
 
 def test_config_store_round_trips_utf8_and_camel_case_json(tmp_path: Path) -> None:
@@ -75,7 +79,107 @@ def test_config_store_round_trips_utf8_and_camel_case_json(tmp_path: Path) -> No
                 "maxDepth": 6,
             }
         ],
+        "windowWidth": 1180,
+        "windowHeight": 760,
     }
+
+
+def test_existing_version_six_config_gains_default_window_size(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "data" / "config.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        json.dumps({"version": 6, "uiScale": 1.2}),
+        encoding="utf-8",
+    )
+
+    config = JsonConfigStore(path).load()
+
+    assert config.version == 6
+    assert config.ui_scale == 1.2
+    assert (config.window_width, config.window_height) == (1180, 760)
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert (saved["windowWidth"], saved["windowHeight"]) == (1180, 760)
+
+
+def test_invalid_window_dimensions_fall_back_independently(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    path = tmp_path / "data" / "config.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        json.dumps(
+            {
+                "version": 6,
+                "windowWidth": 959,
+                "windowHeight": 900,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    config = JsonConfigStore(path).load()
+
+    assert (config.window_width, config.window_height) == (1180, 900)
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert (saved["windowWidth"], saved["windowHeight"]) == (1180, 900)
+    assert "windowWidth" in caplog.text
+    assert "windowHeight" not in caplog.text
+
+
+def test_config_service_saves_valid_window_size(tmp_path: Path) -> None:
+    path = tmp_path / "data" / "config.json"
+    service = ConfigService(JsonConfigStore(path))
+
+    updated = service.set_window_size(1440, 900)
+
+    assert (updated.window_width, updated.window_height) == (1440, 900)
+    assert (service.current.window_width, service.current.window_height) == (1440, 900)
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert (saved["windowWidth"], saved["windowHeight"]) == (1440, 900)
+
+
+@pytest.mark.parametrize(
+    ("width", "height"),
+    [
+        (959, 760),
+        (1180, 639),
+        (16385, 760),
+        (1180, 16385),
+        (True, 760),
+        (1180.0, 760),
+        ("1180", 760),
+    ],
+)
+def test_config_service_rejects_unsafe_window_sizes(
+    tmp_path: Path,
+    width: object,
+    height: object,
+) -> None:
+    service = ConfigService(JsonConfigStore(tmp_path / "config.json"))
+
+    with pytest.raises(ValueError):
+        service.set_window_size(width, height)
+
+
+def test_failed_window_size_write_keeps_previous_runtime_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = JsonConfigStore(tmp_path / "config.json")
+    service = ConfigService(store)
+
+    def fail_save(config: AppConfig) -> None:
+        raise OSError("read only")
+
+    monkeypatch.setattr(store, "save", fail_save)
+
+    with pytest.raises(OSError, match="read only"):
+        service.set_window_size(1440, 900)
+
+    assert (service.current.window_width, service.current.window_height) == (1180, 760)
 
 
 def test_version_one_config_is_migrated_without_losing_existing_values(

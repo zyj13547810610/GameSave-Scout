@@ -21,6 +21,10 @@ from gamesave_scout.bootstrap.webview_bootstrapper import (
     WebViewManualInstallRequired,
 )
 from gamesave_scout.bootstrap.webview_runtime import WebViewRuntime
+from gamesave_scout.bootstrap.window_size import (
+    fit_window_to_primary_work_area,
+    read_restored_window_size,
+)
 from gamesave_scout.db.migrator import LATEST_SCHEMA_VERSION
 from gamesave_scout.platform.windows.startup_reporter import FrozenStartupReporter
 
@@ -228,12 +232,22 @@ def _run_desktop(
     dev_url = os.environ.get("GAMESAVE_SCOUT_DEV_SERVER_URL")
     is_frozen = bool(getattr(sys, "frozen", False))
     url = dev_url if dev_url and not is_frozen else application.asset_address.ui_url
+    try:
+        screens = module.screens
+    except Exception:
+        screens = ()
+    config = application.config.current
+    window_size = fit_window_to_primary_work_area(
+        config.window_width,
+        config.window_height,
+        screens,
+    )
     window = module.create_window(
         "GameSave Scout",
         url,
         js_api=application.api,
-        width=1180,
-        height=760,
+        width=window_size.width,
+        height=window_size.height,
         min_size=(960, 640),
     )
     if window is None:
@@ -241,7 +255,7 @@ def _run_desktop(
         raise RuntimeError("无法创建 GameSave Scout 桌面窗口。")
     application.api.attach_window(window)
     application.guided_saves.set_exit_callback(window.destroy)
-    window.events.closing += lambda: _allow_window_close(application)
+    window.events.closing += lambda: _handle_window_closing(application, window)
     window.events.closed += application.close
     try:
         module.start(
@@ -257,6 +271,20 @@ def _run_desktop(
 
 def _allow_window_close(application: Application) -> bool:
     return application.guided_saves.request_close()
+
+
+def _handle_window_closing(application: Application, window: object) -> bool:
+    if not _allow_window_close(application):
+        return False
+    try:
+        size = read_restored_window_size(window)
+        application.config.set_window_size(size.width, size.height)
+    except Exception:
+        application.logger.warning(
+            "无法保存窗口尺寸，下次启动将继续使用上次保存的尺寸。",
+            exc_info=True,
+        )
+    return True
 
 
 if __name__ == "__main__":

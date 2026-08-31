@@ -9,7 +9,7 @@ import os
 from dataclasses import dataclass, replace
 from pathlib import Path
 from threading import Lock
-from typing import Any
+from typing import Any, TypeGuard
 from uuid import uuid4
 
 from gamesave_scout.scanning.path_keys import windows_path_key
@@ -22,6 +22,11 @@ COVER_LOCAL_DEPTH_RANGE = range(1, 4)
 SCAN_CONCURRENCY_RANGE = range(1, 5)
 BATCH_SAVE_DEPTH_RANGE = range(1, 13)
 MAX_BATCH_SAVE_CUSTOM_ROOTS = 32
+DEFAULT_WINDOW_WIDTH = 1180
+DEFAULT_WINDOW_HEIGHT = 760
+MIN_WINDOW_WIDTH = 960
+MIN_WINDOW_HEIGHT = 640
+MAX_WINDOW_DIMENSION = 16384
 
 
 class InvalidConfigError(ValueError):
@@ -42,6 +47,10 @@ class InvalidLibraryScanSettingsError(ValueError):
 
 class InvalidBatchSaveSettingsError(ValueError):
     """Raised when batch save discovery roots are invalid."""
+
+
+class InvalidWindowSizeError(ValueError):
+    """Raised when a requested desktop window size is unsafe."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,6 +75,8 @@ class AppConfig:
     cover_optimize_enabled: bool = True
     cover_local_scan_depth: int = 2
     batch_save_custom_roots: tuple[BatchSaveCustomRoot, ...] = ()
+    window_width: int = DEFAULT_WINDOW_WIDTH
+    window_height: int = DEFAULT_WINDOW_HEIGHT
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -89,6 +100,8 @@ class AppConfig:
                 }
                 for root in self.batch_save_custom_roots
             ],
+            "windowWidth": self.window_width,
+            "windowHeight": self.window_height,
         }
 
 
@@ -108,6 +121,8 @@ class JsonConfigStore:
         "coverOptimizeEnabled",
         "coverLocalScanDepth",
         "batchSaveCustomRoots",
+        "windowWidth",
+        "windowHeight",
     }
 
     def __init__(self, path: Path) -> None:
@@ -166,6 +181,8 @@ class JsonConfigStore:
         batch_save_custom_roots = _parse_batch_save_custom_roots(
             raw.get("batchSaveCustomRoots", [])
         )
+        window_width = raw.get("windowWidth", DEFAULT_WINDOW_WIDTH)
+        window_height = raw.get("windowHeight", DEFAULT_WINDOW_HEIGHT)
 
         if type(version) is not int or version not in {1, 2, 3, 4, 5, 6}:
             raise InvalidConfigError("配置文件无效：不支持的版本。")
@@ -229,6 +246,26 @@ class JsonConfigStore:
         if not valid_local_depth:
             logger.warning("配置中的 coverLocalScanDepth 无效，已回退为 2。")
 
+        valid_window_width = _is_window_dimension(
+            window_width,
+            minimum=MIN_WINDOW_WIDTH,
+        )
+        normalized_window_width = (
+            window_width if valid_window_width else DEFAULT_WINDOW_WIDTH
+        )
+        if not valid_window_width:
+            logger.warning("配置中的 windowWidth 无效，已回退为 1180。")
+
+        valid_window_height = _is_window_dimension(
+            window_height,
+            minimum=MIN_WINDOW_HEIGHT,
+        )
+        normalized_window_height = (
+            window_height if valid_window_height else DEFAULT_WINDOW_HEIGHT
+        )
+        if not valid_window_height:
+            logger.warning("配置中的 windowHeight 无效，已回退为 760。")
+
         config = AppConfig(
             version=6,
             language=language,
@@ -242,6 +279,8 @@ class JsonConfigStore:
             cover_optimize_enabled=normalized_optimize_enabled,
             cover_local_scan_depth=normalized_local_depth,
             batch_save_custom_roots=batch_save_custom_roots,
+            window_width=normalized_window_width,
+            window_height=normalized_window_height,
         )
         needs_save = (
             version != 6
@@ -254,6 +293,8 @@ class JsonConfigStore:
             or raw.get("coverLocalScanDepth") != normalized_local_depth
             or raw.get("batchSaveCustomRoots")
             != config.to_json()["batchSaveCustomRoots"]
+            or raw.get("windowWidth") != normalized_window_width
+            or raw.get("windowHeight") != normalized_window_height
         )
         return config, needs_save
 
@@ -286,6 +327,25 @@ class ConfigService:
             raise InvalidUiScaleError("界面缩放必须是 80%、90%、100%、110% 或 120%。")
         with self._lock:
             updated = replace(self._current, ui_scale=float(value))
+            self._store.save(updated)
+            self._current = updated
+            return updated
+
+    def set_window_size(self, width: object, height: object) -> AppConfig:
+        if not _is_window_dimension(width, minimum=MIN_WINDOW_WIDTH):
+            raise InvalidWindowSizeError(
+                f"窗口宽度必须是 {MIN_WINDOW_WIDTH} 到 {MAX_WINDOW_DIMENSION} 的整数。"
+            )
+        if not _is_window_dimension(height, minimum=MIN_WINDOW_HEIGHT):
+            raise InvalidWindowSizeError(
+                f"窗口高度必须是 {MIN_WINDOW_HEIGHT} 到 {MAX_WINDOW_DIMENSION} 的整数。"
+            )
+        with self._lock:
+            updated = replace(
+                self._current,
+                window_width=width,
+                window_height=height,
+            )
             self._store.save(updated)
             self._current = updated
             return updated
@@ -471,6 +531,13 @@ def _parse_batch_save_custom_roots(raw: object) -> tuple[BatchSaveCustomRoot, ..
         path_keys.add(path_key)
         roots.append(root)
     return tuple(roots)
+
+
+def _is_window_dimension(value: object, *, minimum: int) -> TypeGuard[int]:
+    return (
+        type(value) is int
+        and minimum <= value <= MAX_WINDOW_DIMENSION
+    )
 
 
 def _normalize_batch_save_custom_root(
